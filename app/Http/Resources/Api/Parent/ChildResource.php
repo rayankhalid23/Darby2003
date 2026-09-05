@@ -17,7 +17,6 @@ class ChildResource extends JsonResource
         $rawPhoto = (!empty($this->photo_url) && !empty(trim($this->photo_url))) ? trim($this->photo_url) : null;
         return [
             'id'                  => $this->id,
-            'parent_id'           => $this->parent_id,
             'school_id'           => $this->school_id,
             'address_id'          => $this->address_id,
             

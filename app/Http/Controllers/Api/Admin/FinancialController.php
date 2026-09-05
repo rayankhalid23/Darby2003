@@ -193,7 +193,6 @@ class FinancialController extends Controller
             'success' => true,
             'data'    => [
                 'id'               => $recharge->id,
-                'parent_id'        => $recharge->parent_id,
                 'parent_name'      => $recharge->parent?->full_name,
                 'parent_phone'     => $recharge->parent?->phone_number,
                 'amount'           => (float) $recharge->amount,

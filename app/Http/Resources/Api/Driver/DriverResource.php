@@ -39,7 +39,7 @@ class DriverResource extends JsonResource
                 'user_id'           => (int) ($user?->id ?? $driver?->user_id ?? 0), // معرف المستخدم (User ID)
                 'role_id'           => $user->role_id ?? null,
                 'full_name'            => $user?->full_name ?? '',
-                'gender'               => $driver?->gender ?? '',
+                'gender'               => $user?->gender ?? $driver?->gender ?? '',
                 'phone_number'         => $user?->phone_number ?? '',
                 'alternative_phone'    => $user?->alternative_phone ?? null,
                 'email'                => $user?->email ?? '', 

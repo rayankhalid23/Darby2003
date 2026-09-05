@@ -462,9 +462,8 @@ class EmergencyBreakdownService
             return;
         }
 
-        $parentUserIds = Child::whereIn('children.id', $strandedChildIds)
-            ->join('parents', 'children.parent_id', '=', 'parents.id')
-            ->pluck('parents.user_id')
+        $parentUserIds = Child::whereIn('id', $strandedChildIds)
+            ->pluck('parent_id')
             ->unique();
 
         $users = User::whereIn('id', $parentUserIds)->get();
@@ -538,9 +537,8 @@ class EmergencyBreakdownService
         // 2. إشعار أولياء الأمور بموقع الأطفال ورابط الخريطة
         $strandedChildIds = $dispatch->stranded_children_ids ?? [];
         if (!empty($strandedChildIds)) {
-            $parentUserIds = Child::whereIn('children.id', $strandedChildIds)
-                ->join('parents', 'children.parent_id', '=', 'parents.id')
-                ->pluck('parents.user_id')
+            $parentUserIds = Child::whereIn('id', $strandedChildIds)
+                ->pluck('parent_id')
                 ->unique();
 
             $users = User::whereIn('id', $parentUserIds)->get();

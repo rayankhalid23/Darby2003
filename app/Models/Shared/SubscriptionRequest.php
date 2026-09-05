@@ -126,7 +126,7 @@ class SubscriptionRequest extends Model
 
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(ParentModel::class, 'parent_id');
+        return $this->belongsTo(\App\Models\User::class, 'parent_id');
     }
 
     public function activeSubscriptions(): HasMany

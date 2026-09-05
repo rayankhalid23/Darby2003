@@ -30,7 +30,7 @@ class StoreAddressRequest extends FormRequest
                 // وكان تقييدها بالحروف العربية وحدها يرفض عناوين مشروعة تماماً.
                 'regex:/^[\p{Arabic}\p{N}\s\-\/]+$/u',
                 Rule::unique('addresses', 'label')->where(function ($query) use ($parentId) {
-                    return $query->where('parent_id', $parentId)->whereNull('deleted_at');
+                    return $query->where('user_id', $parentId)->whereNull('deleted_at');
                 })
             ],
 
@@ -40,7 +40,7 @@ class StoreAddressRequest extends FormRequest
                 'numeric',
                 'between:-90,90',
                 Rule::unique('addresses', 'lat')->where(function ($query) use ($parentId) {
-                    return $query->where('parent_id', $parentId)->where('lng', $this->lng);
+                    return $query->where('user_id', $parentId)->where('lng', $this->lng);
                 })
             ],
 
@@ -49,6 +49,13 @@ class StoreAddressRequest extends FormRequest
                 'required',
                 'numeric',
                 'between:-180,180'
+            ],
+
+            // المنطقة الجغرافية التابع لها العنوان (اختياري)
+            'zone_id' => [
+                'nullable',
+                'integer',
+                'exists:zones,id'
             ],
         ];
     }
@@ -74,6 +81,10 @@ class StoreAddressRequest extends FormRequest
             'lng.required' => 'إحداثيات خط الطول مطلوبة.',
             'lng.numeric'  => 'إحداثيات خط الطول يجب أن تكون رقماً.',
             'lng.between'  => 'إحداثيات خط الطول غير صالحة جغرافياً.',
+
+            // المنطقة الجغرافية (Zone)
+            'zone_id.integer' => 'معرف المنطقة يجب أن يكون رقماً صحيحاً.',
+            'zone_id.exists'  => 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.',
         ];
     }
 

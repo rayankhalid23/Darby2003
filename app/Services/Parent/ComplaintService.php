@@ -203,11 +203,7 @@ class ComplaintService
     public function getDriverTripsForParent(int $parentUserId, int $driverId)
     {
         try {
-            $parent = \Illuminate\Support\Facades\DB::table('parents')
-                ->where('user_id', $parentUserId)
-                ->first();
-
-            $parentId = $parent ? $parent->id : null;
+            $parentId = $parentUserId;
 
             // تحديد معرّفات السائق (سواء مرر كـ driver_id أو كـ user_id)
             $driver = \Illuminate\Support\Facades\DB::table('drivers')
@@ -239,10 +235,6 @@ class ComplaintService
 
     private function getParentRecordId(int $userId): int
     {
-        $parent = \App\Models\Parent\ParentModel::where('user_id', $userId)->first();
-        if ($parent) {
-            return $parent->id;
-        }
         return $userId;
     }
 }

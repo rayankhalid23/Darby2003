@@ -70,16 +70,13 @@ class AdminService
                 'full_name'          => $data['full_name'],
                 'email'              => $data['email'],
                 'phone_number'       => $data['phone_number'],
+                'password'           => Hash::make($generatedPassword),
                 'password_hash'      => Hash::make($generatedPassword),
                 'role_id'            => $data['role_id'] ?? 2,
                 'custom_permissions' => $data['custom_permissions'] ?? null,
                 'is_active'          => $data['is_active'] ?? 1,
+                'created_by'         => $data['created_by'] ?? auth()->id() ?? 1,
                 'avatar_url'         => $avatarUrl,
-            ]);
-
-            $admin = Admin::create([
-                'user_id'    => $user->id,
-                'created_by' => $data['created_by'] ?? auth()->id() ?? 1,
             ]);
 
             $this->emailService->sendAdminCredentials(
@@ -89,7 +86,7 @@ class AdminService
                 $generatedPassword
             );
 
-            return $admin->load(['user.role', 'creator']);
+            return Admin::find($user->id)->load(['user.role', 'creator']);
         });
     }
 

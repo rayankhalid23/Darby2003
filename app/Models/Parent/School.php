@@ -12,8 +12,7 @@ class School extends Model
     // تحديد اسم الجدول الفعلي
     protected $table = 'schools'; 
 
-    // إيقاف الطوابع الزمنية تماماً بناءً على طلبك
-    public $timestamps = false;
+    public $timestamps = true;
 
     /**
      * الحقول القابلة للتعبئة (Mass Assignable)

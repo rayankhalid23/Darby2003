@@ -34,9 +34,11 @@ class SchoolService
         }
     
         // 2. التحقق من عدم تكرار الإحداثيات
-        if (isset($data['latitude'], $data['longitude'])) {
-            $coordsExist = School::where('latitude', $data['latitude'])
-                ->where('longitude', $data['longitude'])
+        $lat = $data['lat'] ?? $data['latitude'] ?? null;
+        $lng = $data['lng'] ?? $data['longitude'] ?? null;
+        if ($lat !== null && $lng !== null) {
+            $coordsExist = School::where('lat', $lat)
+                ->where('lng', $lng)
                 ->exists();
     
             if ($coordsExist) {
@@ -44,7 +46,11 @@ class SchoolService
             }
         }
     
-        $data['status'] = $data['status'] ?? 'active';
+        $status = $data['status'] ?? 'Approved';
+        if (strtolower($status) === 'active') {
+            $status = 'Approved';
+        }
+        $data['status'] = $status;
         $school = School::create($data);
     
         return $school->load('zone.subMunicipality.municipality');
@@ -85,7 +91,11 @@ class SchoolService
             }
         }
     
-        $data['status'] = $data['status'] ?? $school->status ?? 'active';
+        $status = $data['status'] ?? $school->status ?? 'Approved';
+        if (strtolower($status) === 'active') {
+            $status = 'Approved';
+        }
+        $data['status'] = $status;
         $school->update($data);
     
         // شحن البيانات الجغرافية المحدثة لضمان رجوع الـ Resource كامل للفرونت إند

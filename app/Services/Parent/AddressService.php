@@ -13,7 +13,9 @@ class AddressService
      */
     public function getParentAddresses(int $parentId)
     {
-        return Address::where('parent_id', $parentId)->get();
+        return Address::where('user_id', $parentId)
+            ->with('zone')
+            ->get();
     }
 
     /**
@@ -21,12 +23,15 @@ class AddressService
      */
     public function createAddress(int $parentId, array $data): Address
     {
-        return Address::create([
-            'parent_id' => $parentId,
-            'label'     => $data['label'],
-            'lat'       => $data['lat'],
-            'lng'       => $data['lng'],
+        $address = Address::create([
+            'user_id' => $parentId,
+            'zone_id' => $data['zone_id'] ?? null,
+            'label'   => $data['label'],
+            'lat'     => $data['lat'],
+            'lng'     => $data['lng'],
         ]);
+
+        return $address->load('zone');
     }
 
    /**
@@ -36,7 +41,7 @@ class AddressService
     {
         // 1. فحص تكرار الاسم (Label) فقط إذا تم إرساله وكان مختلفاً عن الاسم الحالي
         if (array_key_exists('label', $data) && $data['label'] !== $address->label) {
-            $labelExists = Address::where('parent_id', $parentId)
+            $labelExists = Address::where('user_id', $parentId)
                 ->where('label', $data['label'])
                 ->where('id', '!=', $address->id)
                 ->exists();
@@ -53,7 +58,7 @@ class AddressService
         if ((array_key_exists('lat', $data) || array_key_exists('lng', $data)) && 
             ($newLat != $address->lat || $newLng != $address->lng)) {
             
-            $locationExists = Address::where('parent_id', $parentId)
+            $locationExists = Address::where('user_id', $parentId)
                 ->where('lat', $newLat)
                 ->where('lng', $newLng)
                 ->where('id', '!=', $address->id)
@@ -69,7 +74,7 @@ class AddressService
         // 3. تنفيذ التعديل الجزئي
         $address->update($data);
         
-        return Address::withTrashed()->findOrFail($addressId);
+        return Address::with('zone')->withTrashed()->findOrFail($addressId);
     }
 
     /**

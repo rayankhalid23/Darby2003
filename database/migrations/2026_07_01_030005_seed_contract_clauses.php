@@ -10,6 +10,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!\Illuminate\Support\Facades\Schema::hasTable('clauses')) {
+            return;
+        }
+
         // حذف الشروط القديمة وإعادة الإنشاء بنسخة محسّنة
         DB::table('clauses')->truncate();
 

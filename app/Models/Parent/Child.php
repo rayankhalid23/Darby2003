@@ -3,18 +3,20 @@
 namespace App\Models\Parent;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Str;
-use App\Models\parent\ParentModel;
-use App\Models\Parent\ChildLogistics;
+use App\Models\User;
 use App\Enums\Shared\SchoolStage;
 
 class Child extends Model
 {
+    use SoftDeletes;
+
     protected $table = 'children';
 
-    // يفضل تفعيل timestamps إذا كانت موجودة في الـ Migration، 
-    // وإلا اتركها false كما هي في كودك القديم
+    public $timestamps = true;
+
     protected $fillable = [
         'parent_id',
         'school_id',
@@ -27,10 +29,20 @@ class Child extends Model
         'medical_notes',
         'notification_radius',
         'qr_code_token',
+        // الحقول المدمجة من child_logistics
+        'preferred_time_slot',
+        'pickup_time',
+        'dropoff_time',
+        'trip_direction',
+        'subscription_type',
+        'is_active',
     ];
 
     protected $casts = [
-        'birth_date' => 'date',
+        'birth_date'          => 'date',
+        'is_active'           => 'boolean',
+        'grade'               => 'integer',
+        'notification_radius' => 'integer',
     ];
 
     /**
@@ -41,52 +53,19 @@ class Child extends Model
         parent::booted();
 
         static::creating(function ($child) {
-            // يُولَّد فقط عند غيابه؛ الدهس غير المشروط كان يمنع استيراد/استعادة
-            // أي طفل بكوده الأصلي ويُبطل أي كود مطبوع مسبقاً.
             if (empty($child->qr_code_token)) {
                 $child->qr_code_token = 'CHLD-' . Str::upper(Str::random(6)) . '-' . time();
             }
         });
     }
-    /**
- * العلاقة مع عنوان البيك أب (Pickup Address)
- */
-public function pickupAddress()
-{
-    // استبدل Address::class باسم موديل العنوان لديك، وحقل الربط إن لم يكن pickup_address_id
-    return $this->belongsTo(Address::class, 'pickup_address_id');
-}
-/**
- * العلاقة مع عنوان النزول (Dropoff Address)
- */
-public function dropoffAddress()
-{
-    // استبدل Address::class بموديل العناوين لديك، وحقل الربط إن كان مختلفاً
-    return $this->belongsTo(Address::class, 'dropoff_address_id');
-}
 
     /**
-     * =========================================
      * العلاقات (Relationships)
-     * =========================================
      */
-
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(ParentModel::class, 'parent_id');
+        return $this->belongsTo(User::class, 'parent_id');
     }
-    public function logistics()
-    {
-        // هنا نستخدم الاسم الصحيح للكلاس الذي أضفناه في الـ use
-        return $this->hasOne(ChildLogistics::class, 'child_id');
-    }
-    // داخل كلاس Child
-public function subscription()
-{
-    // افترضت هنا أن اسم الموديل المرتبط هو Logistics
-    // تأكد من تغيير 'Logistics' إلى اسم الموديل الفعلي لديك إذا كان مختلفاً
-    return $this->hasOne(\App\Models\Logistics::class, 'child_id'); 
-}
 
     public function school(): BelongsTo
     {
@@ -98,9 +77,32 @@ public function subscription()
         return $this->belongsTo(\App\Models\Parent\Address::class, 'address_id');
     }
 
+    public function pickupAddress(): BelongsTo
+    {
+        return $this->address();
+    }
+
+    public function dropoffAddress(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Parent\School::class, 'school_id');
+    }
+
+    /**
+     * دعم التوافقية العكسية للكود الذي يشحن علاقة logistics
+     */
+    public function logistics(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(self::class, 'id', 'id');
+    }
+
     /**
      * الملحقات (Attributes)
      */
+    public function getNameAttribute(): string
+    {
+        return (string) ($this->full_name ?? '');
+    }
+
     public function getAgeAttribute(): int
     {
         return $this->birth_date ? $this->birth_date->age : 0;

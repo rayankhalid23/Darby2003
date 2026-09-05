@@ -64,9 +64,9 @@ class FinancialLedgerService
      * المعيار المعتمد: مُعرّف مالك المحفظة نفسه (ParentModel::id / Driver::id)
      * لأنه ما تُربط به محفظة bavix فعلياً عبر holder_id.
      */
-    public static function parentAccount(ParentModel|int $parent): string
+    public static function parentAccount(ParentModel|\App\Models\User|int $parent): string
     {
-        $id = $parent instanceof ParentModel ? $parent->id : $parent;
+        $id = is_int($parent) ? $parent : $parent->id;
 
         return "parent_wallet_{$id}";
     }

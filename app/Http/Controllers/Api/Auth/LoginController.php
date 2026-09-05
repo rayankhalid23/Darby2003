@@ -92,6 +92,7 @@ class LoginController extends Controller
             $userResourceData = match ((int) $user->role_id) {
                 3 => new ParentResource($user), 
                 4 => new DriverResource($user),
+                1, 2, 5, 6, 7, 8 => new \App\Http\Resources\Api\Admin\AdminResource($user),
                 default => new UserResource($user), 
             };
 

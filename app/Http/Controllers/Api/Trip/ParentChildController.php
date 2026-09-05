@@ -28,24 +28,16 @@ class ParentChildController extends Controller
 
     private function resolveParentId(): int
     {
-        $user = Auth::user();
-        $parent = DB::table('parents')->where('user_id', $user->id)->first();
-        return $parent ? (int) $parent->id : (int) $user->id;
+        return (int) Auth::id();
     }
 
     private function checkChildBelongsToParent(int $childId): void
     {
-        $user = Auth::user();
-        $parent = DB::table('parents')->where('user_id', $user->id)->first();
-        $parentId = $parent ? $parent->id : null;
+        $userId = Auth::id();
 
         $child = \App\Models\Parent\Child::where('id', $childId)
-            ->where(function ($q) use ($user, $parentId) {
-                $q->where('parent_id', $user->id);
-                if ($parentId) {
-                    $q->orWhere('parent_id', $parentId);
-                }
-            })->first();
+            ->where('parent_id', $userId)
+            ->first();
 
         if (!$child) {
             throw new Exception("عذراً، هذا الطفل غير موجود أو لا يتبع لحسابك.");

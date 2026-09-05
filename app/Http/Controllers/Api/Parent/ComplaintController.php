@@ -190,8 +190,7 @@ public function update(UpdateComplaintRequest $request, int $id): JsonResponse
             // 2. نظام التشخيص الذكي: إذا رجعت البيانات فارغة وكان وضع التطوير مفعلاً
             if (($trips === null || (is_countable($trips) && count($trips) === 0)) && config('app.debug')) {
                 
-                // أ. التحقق من وجود حساب ولي الأمر في جدول parents
-                $parent = DB::table('parents')->where('user_id', auth()->id())->first();
+                $parentId = auth()->id();
                 
                 // ب. التحقق من السائق: هل هو ممرر كـ user_id أم كـ driver_id؟
                 $driverById = DB::table('drivers')->where('id', $driverId)->first();
@@ -206,9 +205,9 @@ public function update(UpdateComplaintRequest $request, int $id): JsonResponse
 
                 // ج. التحقق من وجود اشتراك يربط الطرفين
                 $subscription = null;
-                if ($parent && $realDriverId) {
+                if ($parentId && $realDriverId) {
                     $subscription = DB::table('active_subscriptions')
-                        ->where('parent_id', $parent->id)
+                        ->where('parent_id', $parentId)
                         ->where('driver_id', $realDriverId)
                         ->first();
                 }

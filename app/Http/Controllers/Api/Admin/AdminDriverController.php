@@ -144,7 +144,7 @@ class AdminDriverController extends Controller
     public function review(DriverReviewRequest $request, int $id): JsonResponse
     {
         try {
-            $adminId = auth()->user()->admin->id ?? 1; 
+            $adminId = auth()->id() ?? 1; 
 
             try { $data = $request->validated(); } catch (\Throwable $e) { $data = $request->all(); }
             $driver = $this->adminDriverService->reviewDriverRequest($id, $data, $adminId);

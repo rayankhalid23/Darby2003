@@ -279,9 +279,8 @@ class DailyTripGenerationService
                 return;
             }
 
-            $parentUserIds = Child::whereIn('children.id', $pendingChildIds)
-                ->join('parents', 'children.parent_id', '=', 'parents.id')
-                ->pluck('parents.user_id')
+            $parentUserIds = Child::whereIn('id', $pendingChildIds)
+                ->pluck('parent_id')
                 ->unique();
 
             $users = User::whereIn('id', $parentUserIds)->get();

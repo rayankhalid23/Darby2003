@@ -44,7 +44,6 @@ class ParentResource extends JsonResource
         // 3. بناء المصفوفة مع وضع قيم بديلة (Fallbacks) ذكية لكل حقل لتفادي أي خطأ
         return [
             'id_user'              => (int) ($user?->id ?? $parentProfile?->user_id ?? 0),
-            'parent_id'            => $parentProfile?->id ? (int) $parentProfile->id : null,
             'full_name'            => $user?->full_name ?? $parentProfile?->full_name ?? $this->full_name ?? '',
             'email'                => $user?->email ?? $parentProfile?->email ?? $this->email ?? '',
             'phone_number'         => $user?->phone_number ?? $parentProfile?->phone_number ?? $this->phone_number ?? '',
@@ -52,8 +51,8 @@ class ParentResource extends JsonResource
             'role'                 => 'parent',
             'is_active'            => (bool) ($user?->is_active ?? $parentProfile?->is_active ?? $this->is_active ?? false),
             
-            // جلب حالة الحساب الموثوق
-            'is_trusted'           => (bool) ($parentProfile?->is_trusted ?? false),
+            // جلب حالة الحساب الموثوق من جدول users المطبع
+            'is_trusted'           => (bool) ($user?->is_trusted ?? $parentProfile?->is_trusted ?? true),
             
             // الحل الجذري لعرض رابط الصورة الصحيح أو null للفرونت إند لمنع التشوه
             'avatar_url'           => $rawAvatar ? asset($rawAvatar) : null,

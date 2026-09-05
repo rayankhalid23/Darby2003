@@ -17,7 +17,7 @@ class DriverMatchingService
 {
     private function resolveChildren(array $childIds, int $parentId): Collection
     {
-        $query = Child::with(['school.zone.subMunicipality', 'address', 'logistics'])
+        $query = Child::with(['school.zone.subMunicipality', 'address.zone'])
             ->where('parent_id', $parentId);
 
         if (!empty($childIds)) {
@@ -32,15 +32,12 @@ class DriverMatchingService
         // 1. استرجاع بيانات الأطفال المحددين بناءً على child_ids
         $children = $this->resolveChildren($filters['child_ids'] ?? [], $parentId);
 
-        // 2. الاستعلام الأساسي واستثناء السائقين غير القابلين للبحث أو ذوي الوثائق المنتهية
+        // 2. الاستعلام الأساسي: السائق معتمد وموثوق ورخصته سارية
         $query = Driver::query()
             ->select('drivers.*')
             ->whereIn('drivers.status', ['Approved', 'Active'])
-            ->where('drivers.is_searchable', true)
-            ->whereDoesntHave('documents', function ($q) {
-                $q->whereIn('doc_type', ['LICENSE', 'INSURANCE', 'STAMP', 'TECHNICAL_INSPECTION'])
-                  ->where('status', 'Expired');
-            })
+            ->whereHas('user', fn($u) => $u->where('is_trusted', true))
+            ->where('drivers.license_expiry', '>=', now()->toDateString())
             ->with(['user', 'vehicles', 'zones', 'seatSlots']);
 
         // 3. التحقق من وجود بحث بالاسم أو رقم الهاتف
@@ -51,7 +48,7 @@ class DriverMatchingService
         }
 
         if (!empty($filters['driver_gender'])) {
-            $query->where('drivers.gender', $filters['driver_gender']);
+            $query->whereHas('user', fn($u) => $u->where('gender', $filters['driver_gender']));
         }
 
         if (isset($filters['has_ac']) && $filters['has_ac'] !== null && $filters['has_ac'] !== '') {
@@ -69,7 +66,7 @@ class DriverMatchingService
         // 5. الترتيب والتصفح
         $drivers = $query
             ->orderByDesc('rating_avg')
-            ->orderByDesc('completed_trips_count')
+            ->orderByDesc('id')
             ->paginate(15);
 
         // 6. حساب مسافات الأطفال والتسعير الفعلي لكل سائق
@@ -98,7 +95,7 @@ class DriverMatchingService
                 return $driver;
             });
         } else {
-            $settings     = PricingSetting::first();
+            $settings     = rescue(fn() => PricingSetting::first(), null, false);
             $priceKmAc    = (float) ($settings->price_per_km_ac ?? 2.50);
             $priceKmNonAc = (float) ($settings->price_per_km_non_ac ?? 2.00);
 
@@ -185,16 +182,39 @@ class DriverMatchingService
         }
     }
 
+    /**
+     * الفلترة الجغرافية الذكية بالمناطق (Dual-Zone Matching):
+     * تطابق مناطق مدارس الأطفال (School Zones) ومناطق سكنهم (Home Zones) مع نطاق تغطية السائق (Driver Zones).
+     */
     private function applyZoneFilter($query, Collection $children): void
     {
-        $zoneIds = $children->map(fn($c) => optional($c->school)->zone_id)->filter()->unique()->values()->toArray();
-        if (empty($zoneIds)) {
-            return;
+        // 1. استخراج مناطق المدارس
+        $schoolZoneIds = $children->map(fn($c) => optional($c->school)->zone_id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // 2. استخراج مناطق السكن (عناوين منازل الأطفال)
+        $homeZoneIds = $children->map(fn($c) => optional($c->address)->zone_id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // يجب أن يغطي السائق منطقة المدرسة
+        if (!empty($schoolZoneIds)) {
+            $query->whereHas('zones', function ($q) use ($schoolZoneIds) {
+                $q->whereIn('zones.id', $schoolZoneIds);
+            });
         }
 
-        $query->whereHas('zones', function ($q) use ($zoneIds) {
-            $q->whereIn('zones.id', $zoneIds);
-        });
+        // يجب أن يغطي السائق أيضاً منطقة سكن الطالب (Dual-Zone)
+        if (!empty($homeZoneIds)) {
+            $query->whereHas('zones', function ($q) use ($homeZoneIds) {
+                $q->whereIn('zones.id', $homeZoneIds);
+            });
+        }
     }
 
     /**
@@ -203,7 +223,7 @@ class DriverMatchingService
     private function calculatePricingForDriver(Driver $driver, Collection $children, array $childrenDistances = []): array
     {
         // 1. جلب إعدادات الأسعار من قاعدة البيانات
-        $settings = PricingSetting::first();
+        $settings = rescue(fn() => PricingSetting::first(), null, false);
         $priceKmAc         = $settings->price_per_km_ac ?? 2.50;
         $priceKmNonAc      = $settings->price_per_km_non_ac ?? 2.00;
         $discountOne       = $settings->discount_one_child ?? 0.00;

@@ -40,7 +40,7 @@ class SchoolController extends Controller
     public function store(StoreSchoolRequest $request): JsonResponse
     {
         try { $validated = $request->validated(); } catch (\Throwable $e) { $validated = $request->all(); }
-        $data = array_merge($validated ?? $request->all(), ['status' => 'active']);
+        $data = array_merge($validated ?? $request->all(), ['status' => 'Approved']);
         $school = $this->schoolService->createSchool($data);
 
         return response()->json([
@@ -149,13 +149,15 @@ class SchoolController extends Controller
         // عن عمود محذوف — الاستعلام القديم كان يُسقط الطلب بخطأ 500.
         $hasRequests = \Illuminate\Support\Facades\DB::table('children')
             ->where('school_id', $schoolModel->id)
+            ->whereNull('deleted_at')
             ->exists();
         $hasRouteStops = \Illuminate\Support\Facades\DB::table('route_stops')
             ->where('school_id', $schoolModel->id)
             ->exists();
-        $hasTripStops = \Illuminate\Support\Facades\DB::table('trip_stops')
-            ->where('school_id', $schoolModel->id)
-            ->exists();
+        $hasTripStops = \Illuminate\Support\Facades\Schema::hasTable('trip_stops')
+            && \Illuminate\Support\Facades\DB::table('trip_stops')
+                ->where('school_id', $schoolModel->id)
+                ->exists();
 
         if ($hasRequests || $hasRouteStops || $hasTripStops) {
             return response()->json([

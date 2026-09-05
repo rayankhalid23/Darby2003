@@ -2,33 +2,49 @@
 
 namespace App\Models\Admin;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Admin extends Model
+/**
+ * نموذج المشرف/الأدمن المتوافق مع التطبيع V2.
+ *
+ * لم يعد المشرف جدولاً منفصلاً (1:1)، بل هو مستخدم مسجل في جدول users بأحد الأدوار الإدارية (staff).
+ * وحقل created_by صار مفتاحاً ذاتياً أصيلاً داخل جدول users.
+ * هذا الكلاس يعمل كـ Proxy / Subclass فوق جدول users للحفاظ على توافق كل الخدمات والـ Controllers السابقة.
+ */
+class Admin extends User
 {
-    protected $table = 'admins';
+    protected $table = 'users';
 
-    // جدول admins يحتوي على (id, user_id, created_by) فقط بدون أعمدة تواريخ
-    public $timestamps = false;
-
-    protected $fillable = [
-        'user_id',
-        'created_by'
-    ];
-
-    /**
-     * علاقة المشرف بحسابه الأساسي في جدول المستخدمين
-     */
-    public function user(): BelongsTo
+    protected static function booted(): void
     {
-        return $this->belongsTo(User::class, 'user_id');
+        static::addGlobalScope('staff_role', function (Builder $builder) {
+            $builder->where(function ($query) {
+                $query->whereIn('role_id', [1, 2, 5, 6, 7, 8])
+                      ->orWhereHas('role', fn ($q) => $q->where('kind', 'staff'));
+            });
+        });
     }
 
     /**
-     * علاقة المشرف بالشخص الذي قام بإنشائه
-     * العمود created_by مرتبط بمفتاح أجنبي على users.id وليس على admins.id
+     * للتوافق التام: إذا استدعى الكود $admin->user، نعيد نفس السجل
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'id');
+    }
+
+    /**
+     * للتوافق التام: استرجاع user_id يعيد المعرف الأساسي للمستخدم
+     */
+    public function getUserIdAttribute(): int
+    {
+        return (int) $this->id;
+    }
+
+    /**
+     * علاقة المشرف بالشخص الذي قام بإنشائه (مرجع ذاتي في users.created_by)
      */
     public function creator(): BelongsTo
     {

@@ -60,7 +60,7 @@ class ParentSubscriptionController extends Controller
     {
         $user = $request->user();
         
-        $parentId = DB::table('parents')->where('user_id', $user->id)->value('id') ?? $user->id;
+        $parentId = (int) $user->id;
 
         $requests = SubscriptionRequest::query()
             ->with([
@@ -102,7 +102,7 @@ class ParentSubscriptionController extends Controller
     public function show(Request $request, $id)
     {
         $user = $request->user();
-        $parentId = DB::table('parents')->where('user_id', $user->id)->value('id') ?? $user->id;
+        $parentId = (int) $user->id;
 
         $subscriptionRequest = SubscriptionRequest::query()
             ->with([
@@ -217,7 +217,7 @@ class ParentSubscriptionController extends Controller
     {
         try {
             $user = $request->user();
-            $parentId = DB::table('parents')->where('user_id', $user->id)->value('id') ?? $user->id;
+            $parentId = (int) $user->id;
 
             // 1. البحث برقم اشتراك الطفل المحدد من جدول active_subscriptions
             $activeSub = \App\Models\Shared\ActiveSubscription::query()
@@ -407,8 +407,7 @@ class ParentSubscriptionController extends Controller
         try {
             $user = $request->user();
 
-            $parentRecord = DB::table('parents')->where('user_id', $user->id)->first();
-            $parentId = $parentRecord ? $parentRecord->id : $user->id;
+            $parentId = (int) $user->id;
 
             $query = DB::table('active_subscriptions')
                 ->where(function ($q) use ($parentId, $user) {
@@ -466,12 +465,7 @@ class ParentSubscriptionController extends Controller
                 'children.pickupAddress',
                 'children.dropoffAddress'
             ])
-            ->where(function($query) use ($userId) {
-                $query->where('parent_id', $userId)
-                      ->orWhereHas('parent', function($q) use ($userId) {
-                          $q->where('user_id', $userId);
-                      });
-            })
+            ->where('parent_id', $userId)
             ->where('id', $id)
             ->first();
 

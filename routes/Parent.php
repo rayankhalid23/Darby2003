@@ -103,7 +103,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('addresses')->group(function () {
         Route::get('/', [AddressController::class, 'index']);
         Route::post('/', [AddressController::class, 'store']);
-        Route::post('/{address}', [AddressController::class, 'update'])->withTrashed(); 
+        Route::match(['post', 'put', 'patch'], '/{address}', [AddressController::class, 'update'])->withTrashed(); 
         Route::delete('/{address}', [AddressController::class, 'destroy'])->withTrashed(); 
     });
     

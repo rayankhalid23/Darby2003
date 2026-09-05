@@ -337,6 +337,7 @@ class DriverSubscriptionController extends Controller
                 'children.address'
             ])
             ->where('driver_id', $driver->id)
+            ->where('id', $id)
             ->first();
 
         if (!$subscriptionRequest) {

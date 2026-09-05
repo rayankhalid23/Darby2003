@@ -115,9 +115,7 @@ class WalletController extends Controller
     public function balance(): JsonResponse
     {
         $user = auth()->user();
-        $parentProfile = $user->parentProfile ?? $user->parent ?? \App\Models\Parent\ParentModel::where('user_id', $user->id)->first();
-
-        $balance = $parentProfile ? ($parentProfile->balance / 100) : 0.0;
+        $balance = (float) (($user->balance ?? 0) / 100);
 
         return response()->json([
             'success' => true,
@@ -169,7 +167,6 @@ class WalletController extends Controller
             'data'    => [
                 'id'           => $hold->id,
                 'trip_id'      => $hold->trip_id,
-                'parent_id'    => $hold->parent_id,
                 'driver_id'    => $hold->driver_id,
                 'amount'       => round($hold->amount / 100, 2),
                 'hold_status'  => $hold->hold_status,

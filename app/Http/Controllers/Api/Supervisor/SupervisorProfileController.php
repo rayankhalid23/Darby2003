@@ -27,7 +27,7 @@ class SupervisorProfileController extends Controller
     private function currentSupervisor(Request $request): ?Admin
     {
         return Admin::with(['user', 'creator'])
-            ->where('user_id', $request->user()->id)
+            ->where('id', $request->user()->id)
             ->first();
     }
 

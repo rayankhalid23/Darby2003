@@ -21,17 +21,8 @@ class DriverSearchController extends Controller
     public function search(SearchDriversRequest $request): JsonResponse
     {
         try {
-            // 1. جلب ولي الأمر المرتبط بالحساب الحالي
-            $parent = DB::table('parents')->where('user_id', auth()->id())->first();
-
-            if (!$parent) {
-                return response()->json([
-                    'status'  => false,
-                    'message' => 'عذراً، لم يتم العثور على ملف ولي أمر نشط مرتبط بهذا الحساب.'
-                ], Response::HTTP_NOT_FOUND);
-            }
-
-            $parentId = (int) $parent->id;
+            // 1. استخدام المعرف الموحد لولي الأمر من حساب المستخدم الحالي
+            $parentId = (int) auth()->id();
             $filters  = $request->validated();
 
             // 2. التحقق من أمان ملكية الأطفال في حال تم إرسال child_ids

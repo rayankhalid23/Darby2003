@@ -38,23 +38,8 @@ class ChildService
                 unset($data['photo']);
             }
 
-            // الحقول الخاصة بجدول اللوجستيات
-            $logisticsFields = ['preferred_time_slot', 'trip_direction', 'pickup_time', 'dropoff_time', 'start_date', 'end_date', 'subscription_type', 'is_active'];
-            $logisticsData   = array_intersect_key($data, array_flip($logisticsFields));
-            $childData       = array_diff_key($data, array_flip($logisticsFields));
-            $child = Child::create($childData);
-
-            // 3. إضافة بيانات الـ Logistics مع الحقول الجديدة
-            $child->logistics()->create([
-                'preferred_time_slot' => $logisticsData['preferred_time_slot'] ?? 'morning',
-                'trip_direction'      => $logisticsData['trip_direction'] ?? 'both',
-                'pickup_time'         => $logisticsData['pickup_time'] ?? null,
-                'dropoff_time'        => $logisticsData['dropoff_time'] ?? null,
-                'start_date'          => $logisticsData['start_date'] ?? now()->toDateString(),
-                'end_date'            => $logisticsData['end_date'] ?? now()->addMonth()->toDateString(),
-                'subscription_type'   => $logisticsData['subscription_type'] ?? 'multi_day',
-                'is_active'           => true,
-            ]);
+            // في V2 تم دمج بيانات النقل اللوجستية مباشرة كأعمدة في جدول children
+            $child = Child::create($data);
     
             return $child;
         });
@@ -78,35 +63,12 @@ class ChildService
            unset($data['photo'], $data['child_photo'], $data['image']);
        }
 
-       // 3. فصل بيانات الطفل الأساسية عن البيانات اللوجستية (Logistics)
-       $logisticsFields = [
-           'preferred_time_slot',
-           'trip_direction',
-           'pickup_time',
-           'dropoff_time',
-           'start_date',
-           'end_date',
-           'subscription_type',
-           'is_active'
-       ];
+        // 3. تحديث بيانات الطفل الأساسية واللوجستية المدمجة في جدول children
+        if (!empty($data)) {
+            $child->update($data);
+        }
 
-       $logisticsData = array_intersect_key($data, array_flip($logisticsFields));
-       $childData     = array_diff_key($data, array_flip($logisticsFields));
-
-       // 4. تحديث بيانات الطفل الأساسية فقط في حال وجود حقول مرسلة
-       if (!empty($childData)) {
-           $child->update($childData);
-       }
-
-       // 5. تحديث أو إنشاء البيانات اللوجستية إذا تم إرسال أي منها في الطلب
-       if (!empty($logisticsData)) {
-           $child->logistics()->updateOrCreate(
-               ['child_id' => $child->id],
-               $logisticsData
-           );
-       }
-
-       return $child->refresh();
+        return $child->refresh();
    }
 
     /**

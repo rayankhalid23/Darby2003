@@ -137,8 +137,12 @@ class AdminDriverService
             $rejectionReason = $data['rejection_reason'] ?? null;
 
             $driver->update([
-                'status' => $status
+                'status'           => $status,
+                'reviewed_by'      => $adminId,
+                'rejection_reason' => $rejectionReason,
             ]);
+
+            $vehicleIds = Vehicle::where('driver_id', $driver->id)->pluck('id');
 
             if ($status === 'Approved') {
                 $driver->user->update([
@@ -147,31 +151,30 @@ class AdminDriverService
 
                 // تفعيل وتأكيد المركبة التابعة للسائق تلقائياً
                 Vehicle::where('driver_id', $driver->id)->update([
-                    'status'      => 'Active',
+                    'status' => 'Active',
+                ]);
+
+                // اعتماد جميع وثائق المركبة المرفوعة
+                \App\Models\Driver\VehicleDocument::whereIn('vehicle_id', $vehicleIds)->update([
                     'is_verified' => true,
                 ]);
-
-                // اعتماد جميع وثائق السائق المرفوعة
-                DriverDocument::where('driver_id', $driver->id)
-                    ->whereIn('status', ['Pending', 'Expired'])
-                    ->update(['status' => 'Verified']);
             } elseif ($status === 'Rejected') {
                 Vehicle::where('driver_id', $driver->id)->update([
-                    'status'      => 'Out',
-                    'is_verified' => false,
+                    'status' => 'Maintenance',
                 ]);
 
-                DriverDocument::where('driver_id', $driver->id)
-                    ->where('status', 'Pending')
-                    ->update(['status' => 'Rejected']);
+                \App\Models\Driver\VehicleDocument::whereIn('vehicle_id', $vehicleIds)->update([
+                    'is_verified' => false,
+                ]);
             }
 
             DriverApproval::create([
                 'driver_id'        => $driver->id,
+                'request_type'     => 'Registration',
                 'admin_id'         => $adminId,
                 'status'           => $status,
                 'rejection_reason' => $rejectionReason,
-                'created_at'       => now()
+                'reviewed_at'      => now(),
             ]);
 
             // 📝 تسجيل إجراء القرار في سجل تدقيق المشرفين
@@ -790,13 +793,10 @@ class AdminDriverService
                 }
             }
 
-            // إشعار أولياء الأمور المرتبطين بهذه الرحلات
             try {
                 if (!empty($unassignedTripIds)) {
                     $parentUserIds = ActiveSubscription::whereIn('route_id', $trips->pluck('route_id')->filter())
-                        ->join('children', 'active_subscriptions.child_id', '=', 'children.id')
-                        ->join('parents', 'children.parent_id', '=', 'parents.id')
-                        ->pluck('parents.user_id')
+                        ->pluck('parent_id')
                         ->unique();
 
                     $usersToNotify = User::whereIn('id', $parentUserIds)->get();

@@ -48,16 +48,11 @@ class SubscriptionRequestService
             if (is_object($user)) {
                 if (method_exists($user, 'parent') && $user->parent) {
                     $parentId = $user->parent->id;
-                } elseif (isset($user->user_id)) { 
-                    $parentId = $user->id;
                 } else {
-                    $parentId = DB::table('parents')->where('user_id', $user->id)->value('id');
+                    $parentId = (int) $user->id;
                 }
             } elseif (is_numeric($user)) {
-                $parentId = DB::table('parents')
-                    ->where('id', $user)
-                    ->orWhere('user_id', $user)
-                    ->value('id');
+                $parentId = (int) $user;
             }
 
             if (!$parentId) {
@@ -544,7 +539,7 @@ class SubscriptionRequestService
     // 2. منطق القبول
     // ============================================================
 
-    private function handleAcceptance(SubscriptionRequest $req, ?ParentModel $parent): SubscriptionRequest
+    private function handleAcceptance(SubscriptionRequest $req, User|ParentModel|null $parent): SubscriptionRequest
     {
         // 0. إعادة التحقق من عدم تعارض أيام هذا الطلب مع أي اشتراك نشط أصبح موجوداً
         //    لنفس الطفل بعد إنشاء هذا الطلب (مثال: طلب آخر تم قبوله للطفل نفسه في نفس
@@ -700,9 +695,10 @@ class SubscriptionRequestService
 
         // 7. إرسال إشعار القبول مع حمايته من إلغاء الـ Transaction
         try {
-            if ($parent && $parent->user) {
+            $targetUser = ($parent instanceof User) ? $parent : ($parent?->user ?? User::find($req->parent_id));
+            if ($targetUser) {
                 $this->notifyUser(
-                    $parent->user,
+                    $targetUser,
                     'تم قبول طلب الاشتراك',
                     "تم قبول طلبك مع السائق " . ($req->driver->user->full_name ?? 'السائق') . ". رقم الطلب: #{$req->id}",
                     'request_accepted',
@@ -721,7 +717,7 @@ class SubscriptionRequestService
     // 3. منطق الرفض
     // ============================================================
 
-    private function handleRejection(SubscriptionRequest $req, ?ParentModel $parent, ?string $reason): SubscriptionRequest
+    private function handleRejection(SubscriptionRequest $req, User|ParentModel|null $parent, ?string $reason): SubscriptionRequest
     {
         $req->update([
             'status'           => SubscriptionRequest::STATUS_REJECTED,
@@ -729,9 +725,10 @@ class SubscriptionRequestService
         ]);
 
         try {
-            if ($parent && $parent->user) {
+            $targetUser = ($parent instanceof User) ? $parent : ($parent?->user ?? User::find($req->parent_id));
+            if ($targetUser) {
                 $this->notifyUser(
-                    $parent->user,
+                    $targetUser,
                     'تم رفض طلب الاشتراك',
                     "عذراً، تم رفض طلبك. السبب: " . ($reason ?? 'لم يحدد السائق سبباً.'),
                     'request_rejected',
@@ -749,7 +746,7 @@ class SubscriptionRequestService
      * التحقق من الرصيد في محفظة ولي الأمر ومنع إرسال الطلب في حال عدم كفايته
      * (لا يتم حجز أو خصم المبلغ إلا عند قبول السائق للطلب)
      */
-    protected function validateAndDeductWalletBalance(?ParentModel $parent, float $totalPrice): void
+    protected function validateAndDeductWalletBalance(User|ParentModel|null $parent, float $totalPrice): void
     {
         if (!$parent) {
             throw new Exception("حساب ولي الأمر غير موجود.");
@@ -766,10 +763,10 @@ class SubscriptionRequestService
     /**
      * حجز مبلغ الاشتراك ونقله للأمانات عند قبول السائق للطلب (كل أنواع الاشتراكات).
      */
-    protected function holdSubscriptionFundsOnAcceptance(SubscriptionRequest $req, ?ParentModel $parent): void
+    protected function holdSubscriptionFundsOnAcceptance(SubscriptionRequest $req, User|ParentModel|null $parent): void
     {
         if (!$parent) {
-            $parent = ParentModel::find($req->parent_id) ?? ParentModel::where('user_id', $req->parent_id)->first();
+            $parent = User::find($req->parent_id) ?? ParentModel::find($req->parent_id);
         }
         if (!$parent) {
             throw new Exception("تعذر العثور على حساب ولي الأمر لحجز قيمة الرحلة.");
@@ -1801,21 +1798,16 @@ class SubscriptionRequestService
 
     public function getParentChats(int $userId): array
     {
-        $parent = ParentModel::where('user_id', $userId)->first();
-        $parentId = $parent ? $parent->id : $userId;
+        $parentId = $userId;
 
-        // جلب جميع الاشتراكات النشطة لولي الأمر، بالبحث بـ parent_id و user_id
+        // جلب جميع الاشتراكات النشطة لولي الأمر
         $subscriptions = ActiveSubscription::with(['driver.user'])
-            ->where(function ($q) use ($parentId, $userId) {
-                $q->where('parent_id', $parentId)->orWhere('parent_id', $userId);
-            })
+            ->where('parent_id', $parentId)
             ->get();
 
         // دعم إضافي: جلب طلبات الاشتراكات أيضاً في حال كانت تحت الإجراء أو العقد
         $requestSubs = SubscriptionRequest::with(['driver.user'])
-            ->where(function ($q) use ($parentId, $userId) {
-                $q->where('parent_id', $parentId)->orWhere('parent_id', $userId);
-            })
+            ->where('parent_id', $parentId)
             ->whereIn('status', ['accepted', 'contract_offered', 'pending', 'active'])
             ->get();
 
@@ -1869,7 +1861,7 @@ class SubscriptionRequestService
     }
 
     /**
-     * جلب قائمة محادثات السائق بالكامل متوافقة مع كافة الهياكل
+     * جلب قائمة محادثات السائق بالكامل متوافقة مع كافة الهياكل (بدون parent_id في بيانات الإخراج)
      */
     public function getDriverChats(int $userId): array
     {
@@ -1882,7 +1874,7 @@ class SubscriptionRequestService
             })
             ->get();
 
-        $requestSubs = SubscriptionRequest::with(['parent.user'])
+        $requestSubs = SubscriptionRequest::with(['parent'])
             ->where(function ($q) use ($driverId, $userId) {
                 $q->where('driver_id', $driverId)->orWhere('driver_id', $userId);
             })
@@ -1893,23 +1885,13 @@ class SubscriptionRequestService
         $chats = [];
 
         foreach ($subscriptions as $sub) {
-            $parentUser = $sub->parent; // العلاقة parent في ActiveSubscription ترجع User
-            if (!$parentUser) {
-                // تجربة جلب المستخدم من جدول parents إذا كان parent_id هو id من جدول parents
-                $parentRecord = ParentModel::with('user')->find($sub->parent_id);
-                $parentUser = $parentRecord?->user;
-            }
-
+            $parentUser = $sub->parent;
             if (!$parentUser) continue;
             if (in_array($parentUser->id, $processedParents)) continue;
             $processedParents[] = $parentUser->id;
 
-            $parentRecord = ParentModel::where('user_id', $parentUser->id)->first();
-            $parentId = $parentRecord ? $parentRecord->id : $parentUser->id;
-
             $chats[] = [
-                "chat_room_id"        => "parent_" . $parentId . "_driver_" . $driverId,
-                "parent_id"           => $parentId,
+                "chat_room_id"        => "parent_" . $parentUser->id . "_driver_" . $driverId,
                 "parent_user_id"      => $parentUser->id,
                 "parent_name"         => $parentUser->full_name,
                 "parent_phone"        => $parentUser->phone_number,
@@ -1920,18 +1902,13 @@ class SubscriptionRequestService
         }
 
         foreach ($requestSubs as $req) {
-            $parentRecord = $req->parent;
-            $parentUser = $parentRecord?->user;
-
+            $parentUser = $req->parent;
             if (!$parentUser) continue;
             if (in_array($parentUser->id, $processedParents)) continue;
             $processedParents[] = $parentUser->id;
 
-            $parentId = $parentRecord ? $parentRecord->id : $parentUser->id;
-
             $chats[] = [
-                "chat_room_id"        => "parent_" . $parentId . "_driver_" . $driverId,
-                "parent_id"           => $parentId,
+                "chat_room_id"        => "parent_" . $parentUser->id . "_driver_" . $driverId,
                 "parent_user_id"      => $parentUser->id,
                 "parent_name"         => $parentUser->full_name,
                 "parent_phone"        => $parentUser->phone_number,

@@ -125,16 +125,10 @@ class WalletRechargeService
                 ]);
             }
 
-            // البحث عن سجل ولي الأمر المقترن
-            $parent = ParentModel::where('user_id', $recharge->parent_id)->first();
+            // جلب حساب ولي الأمر مباشرة من جدول المستخدمين
+            $parent = User::find($recharge->parent_id);
             if (!$parent) {
-                $parent = ParentModel::find($recharge->parent_id);
-            }
-            if (!$parent) {
-                $parent = ParentModel::create([
-                    'user_id'    => $recharge->parent_id,
-                    'is_trusted' => 1,
-                ]);
+                throw new \Exception("لم يتم العثور على حساب ولي الأمر برقم: {$recharge->parent_id}");
             }
 
             // تحويل المبلغ إلى قروش وإيداعه في المحفظة
@@ -228,12 +222,9 @@ class WalletRechargeService
                 ->where('status', 'pending')
                 ->firstOrFail();
 
-            $parent = ParentModel::where('user_id', $request->parent_id)->first();
+            $parent = User::find($request->parent_id);
             if (!$parent) {
-                $parent = ParentModel::find($request->parent_id);
-            }
-            if (!$parent) {
-                $parent = ParentModel::create(['user_id' => $request->parent_id, 'is_trusted' => 1]);
+                throw new \Exception("لم يتم العثور على حساب ولي الأمر برقم: {$request->parent_id}");
             }
 
             $amountCents = (int) round($request->amount * 100);

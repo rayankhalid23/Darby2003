@@ -22,7 +22,7 @@ class DriverMatchResource extends JsonResource
             'phone_number'      => $user?->phone_number ?? 'غير متوفر',
             'alternative_phone' => $user?->alternative_phone,
             'avatar_url'        => ($user?->avatar_url) ? asset(Storage::url($user->avatar_url)) : null,
-            'gender'            => $this->gender,
+            'gender'            => $user?->gender ?? $this->gender,
             'accepted_gender'   => $this->accepted_gender,
             'subscription_type' => $this->subscription_type,
             'rating'            => round((float)($this->rating_avg ?? 5.0), 1),

@@ -71,6 +71,7 @@ class DriverRegisterService
                 'phone_number'      => $data['phone_number'],
                 'alternative_phone' => $data['alternative_phone'] ?? null,
                 'password_hash'     => Hash::make($data['password']),
+                'gender'            => $data['gender'] ?? null,
                 'role_id'           => 4,
                 'is_active'         => 0, // معلّق — يتفعل فقط عند موافقة الأدمن
             ]);
@@ -78,7 +79,6 @@ class DriverRegisterService
             // 2. إنشاء ملف السائق الأساسي
             Driver::create([
                 'user_id' => $user->id,
-                'gender'  => $data['gender'],
                 'status'  => 'Offline',
             ]);
 
@@ -132,12 +132,13 @@ class DriverRegisterService
 
         // المعاملة محصورة في تحديث الجداول فقط لتستغرق بضع ميلي ثوانٍ
         DB::transaction(function () use ($driver, $data) {
-            // 1. تحديث بيانات السائق
+            // 1. تحديث بيانات السائق ورخصته
             $driver->update([
-                'national_id'    => $data['national_id'],
-                'license_number' => $data['license_number'],
-                'license_expiry' => $data['license_expiry'],
-                'status'         => 'Pending',
+                'national_id'       => $data['national_id'],
+                'license_number'    => $data['license_number'],
+                'license_expiry'    => $data['license_expiry'],
+                'license_image_url' => $data['doc_license_path'] ?? null,
+                'status'            => 'Pending',
             ]);
 
             // 2. إنشاء المركبة
@@ -151,39 +152,53 @@ class DriverRegisterService
                 'type'              => $data['type'],
                 'capacity_manual'   => $data['capacity_manual'],
                 'vehicle_image_url' => $data['vehicle_image_path'],
-                'has_ac'            => $data['has_ac'],
-                'status'            => 'Pending',
-                'is_verified'       => 0
+                'has_ac'            => $data['has_ac'] ?? true,
+                'status'            => 'Active',
             ]);
 
-            // 3. إدخال المستندات
-            $documents = [
-                'LICENSE'         => ['file_url' => $data['doc_license_path']],
-                'VEHICLE_LOGBOOK' => ['file_url' => $data['doc_logbook_path']],
-                'INSURANCE'       => [
-                    'file_url'               => $data['doc_insurance_path'],
-                    'insurance_expiry_date'   => $data['insurance_expiry'],
+            // 3. إدخال وثائق المركبة (في جدول vehicle_documents المطبع الجديد)
+            $vehicleDocs = [
+                'LOGBOOK' => [
+                    'file_url'    => $data['doc_logbook_path'] ?? null,
+                    'expiry_date' => null,
                 ],
-                'BOOKLET_PERSONAL_PAGE' => ['file_url' => $data['doc_booklet_page_path']],
-                'STAMP'                 => [
-                    'file_url'         => $data['doc_stamp_path'],
-                    'stamp_expiry_date' => $data['stamp_expiry'],
+                'INSURANCE' => [
+                    'file_url'    => $data['doc_insurance_path'] ?? null,
+                    'expiry_date' => $data['insurance_expiry'] ?? null,
                 ],
-                'TECHNICAL_INSPECTION' => [
-                    'file_url'                          => $data['doc_technical_inspection_path'],
-                    'technical_inspection_expiry_date'  => $data['technical_inspection_expiry'],
+                'INSPECTION' => [
+                    'file_url'    => $data['doc_technical_inspection_path'] ?? null,
+                    'expiry_date' => $data['technical_inspection_expiry'] ?? null,
+                ],
+                'OPERATING_PERMIT' => [
+                    'file_url'    => $data['doc_booklet_page_path'] ?? $data['doc_stamp_path'] ?? null,
+                    'expiry_date' => $data['stamp_expiry'] ?? null,
                 ],
             ];
 
-            foreach ($documents as $type => $fields) {
-                DriverDocument::create(array_merge([
-                    'driver_id'   => $driver->id,
-                    'vehicle_id'  => $vehicle->id,
-                    'doc_type'    => $type,
-                    'status'      => 'Pending',
-                    'uploaded_at' => now(),
-                ], $fields));
+            foreach ($vehicleDocs as $docType => $docFields) {
+                if (!empty($docFields['file_url'])) {
+                    \App\Models\Driver\VehicleDocument::create([
+                        'vehicle_id'  => $vehicle->id,
+                        'doc_type'    => $docType,
+                        'file_url'    => $docFields['file_url'],
+                        'expiry_date' => $docFields['expiry_date'],
+                        'is_verified' => false,
+                    ]);
+                }
             }
+
+            // 4. إنشاء سجل طلب الاعتماد في جدول driver_approvals الموحد
+            \App\Models\Driver\DriverApproval::create([
+                'driver_id'    => $driver->id,
+                'request_type' => 'Registration',
+                'status'       => 'Pending',
+                'new_values'   => [
+                    'vehicle_id'     => $vehicle->id,
+                    'license_number' => $data['license_number'],
+                    'plate_number'   => $data['plate_number'],
+                ],
+            ]);
         });
 
         // إرسال إشعار الإدارة خارج المعاملة لحماية قاعدة البيانات من أي بطء في الإشعارات

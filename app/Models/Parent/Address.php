@@ -2,39 +2,56 @@
 
 namespace App\Models\Parent;
 
-use Illuminate\Database\Eloquent\Model;use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use App\Models\User;
+use App\Models\Shared\Zone;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
+/**
+ * نموذج العناوين الموحد لأولياء الأمور والسائقين.
+ */
 class Address extends Model
 {
-
     use SoftDeletes;
+
     protected $table = 'addresses';
-    
-    // إلغاء الزمن بناءً على طلبك والـ ERD
-    public $timestamps = false;
+
+    public $timestamps = true;
 
     protected $fillable = [
-        'parent_id',
+        'user_id',
+        'zone_id',
         'label',
         'lat',
         'lng',
+        'is_default',
     ];
 
-    /**
-     * العنوان يعود لولي أمر محدد
-     */
-    public function parent(): BelongsTo
+    protected $casts = [
+        'lat'        => 'float',
+        'lng'        => 'float',
+        'is_default' => 'boolean',
+    ];
+
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(ParentModel::class, 'parent_id'); // تأكد من اسم كلاس ولي الأمر لديك
+        return $this->belongsTo(User::class, 'user_id');
     }
 
-    /**
-     * العنوان مرتبك بالعديد من الأطفال كعنوان انطلاق لهم
-     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function zone(): BelongsTo
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
+    }
+
     public function children(): HasMany
     {
-        return $this->hasMany(\App\Models\Parent\Child::class, 'home_address_id');
+        return $this->hasMany(Child::class, 'address_id');
     }
 }

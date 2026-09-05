@@ -31,7 +31,7 @@ class UpdateAddressRequest extends FormRequest
                 'regex:/^[\p{Arabic}\p{N}\s\-\/]+$/u',
                 Rule::unique('addresses', 'label')
                     ->where(function ($query) use ($parentId) {
-                        return $query->where('parent_id', $parentId)->whereNull('deleted_at');
+                        return $query->where('user_id', $parentId)->whereNull('deleted_at');
                     })->ignore($addressId)
             ],
 
@@ -43,7 +43,7 @@ class UpdateAddressRequest extends FormRequest
                 'between:-90,90',
                 Rule::unique('addresses', 'lat')
                     ->where(function ($query) use ($parentId) {
-                        return $query->where('parent_id', $parentId)->where('lng', $this->lng ?? ($this->route('address')->lng ?? null));
+                        return $query->where('user_id', $parentId)->where('lng', $this->lng ?? ($this->route('address')->lng ?? null));
                     })->ignore($addressId)
             ],
 
@@ -53,6 +53,14 @@ class UpdateAddressRequest extends FormRequest
                 'required',
                 'numeric',
                 'between:-180,180'
+            ],
+
+            // المنطقة الجغرافية (اختياري)
+            'zone_id' => [
+                'sometimes',
+                'nullable',
+                'integer',
+                'exists:zones,id'
             ],
         ];
     }
@@ -78,6 +86,10 @@ class UpdateAddressRequest extends FormRequest
             'lng.required' => 'إحداثيات خط الطول مطلوبة.',
             'lng.numeric'  => 'إحداثيات خط الطول يجب أن تكون رقماً.',
             'lng.between'  => 'إحداثيات خط الطول غير صالحة جغرافياً.',
+
+            // المنطقة الجغرافية (Zone)
+            'zone_id.integer' => 'معرف المنطقة يجب أن يكون رقماً صحيحاً.',
+            'zone_id.exists'  => 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.',
         ];
     }
 

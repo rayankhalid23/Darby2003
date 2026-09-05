@@ -28,8 +28,7 @@ class ChildrenController extends Controller
      */
     private function getActualParentId(): ?int
     {
-        $parent = DB::table('parents')->where('user_id', auth()->id())->first();
-        return $parent ? (int) $parent->id : null;
+        return auth()->id() ? (int) auth()->id() : null;
     }
 
     /**

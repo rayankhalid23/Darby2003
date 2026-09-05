@@ -18,12 +18,16 @@ class Vehicle extends Model
 
     protected $fillable = [
         'driver_id', 'plate_number', 'brand', 'model', 'year', 'color', 
-        'type', 'capacity_manual', 'capacity_ai', 'is_verified', 
-        'vehicle_image_url', 'has_ac', 'status'
+        'type', 'capacity_manual', 'has_ac', 'status', 'vehicle_image_url'
     ];
 
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Driver::class);
+    }
+
+    public function documents(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(VehicleDocument::class, 'vehicle_id');
     }
 }

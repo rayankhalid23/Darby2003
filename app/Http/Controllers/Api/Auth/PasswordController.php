@@ -55,7 +55,14 @@ class PasswordController extends Controller
             }
 
             // توليد الكود وحفظه
-            $code = $this->otpService->generate($user->email, 'RESET_PASSWORD');
+            $otpResult = $this->otpService->generate($user->email, 'RESET_PASSWORD');
+            if (!$otpResult['success']) {
+                return response()->json([
+                    'status'  => false,
+                    'message' => $otpResult['message']
+                ], 429);
+            }
+            $code = $otpResult['code'];
             Log::info("🔑 [OTP Generated] Email: {$user->email} | Code generated successfully.");
 
             // إرسال الكود عبر البريد
@@ -168,8 +175,10 @@ class PasswordController extends Controller
                 ], 404);
             }
 
-            // 🔥 التعديل الجوهري هنا: تم تغيير الحقل إلى password_hash ليطابق الـ LoginController
-            $user->update(['password_hash' => Hash::make($request->password)]);
+            $user->update([
+                'password'      => Hash::make($request->password),
+                'password_hash' => Hash::make($request->password),
+            ]);
 
             Log::info("🔒 [Reset Password Success] Password updated successfully for User ID: {$user->id} | Email: {$user->email}");
 

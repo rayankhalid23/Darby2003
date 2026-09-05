@@ -42,7 +42,7 @@ class AdminProfileController extends Controller
         // قاعدة البيانات أثناء طلب قراءة (GET)، ويُخفي بيانات ناقصة بدل الإبلاغ عنها،
         // وينهار بخطأ 500 عند غياب الأعمدة المطلوبة بدل إرجاع 404 واضح.
         return Admin::with(['user', 'creator'])
-            ->where('user_id', $user->id)
+            ->where('id', $user->id)
             ->first();
     }
 

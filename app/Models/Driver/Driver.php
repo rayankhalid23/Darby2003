@@ -18,59 +18,68 @@ class Driver extends Model implements Wallet
 {
     use HasWallet;
 
-    public $timestamps = false;
+    public $timestamps = true;
     protected $table = 'drivers';
     protected $guarded = [];
 
     protected $fillable = [
         'user_id',
-        'gender',
-        'shift',
-        'subscription_type',
-        'school_stages',
         'national_id',
         'license_number',
         'license_expiry',
-        'license_expiry_notified_milestone',
+        'license_image_url',
         'status',
-        'is_searchable',
-        'rating_avg',
+        'reviewed_by',
+        'rejection_reason',
+        'shift',
+        'subscription_type',
+        'accepted_gender',
+        'school_stages',
         'current_lat',
         'current_lng',
-        'morning_go',
-        'morning_return',
-        'afternoon_go',
-        'afternoon_return',
-        'last_ping_at'
+        'last_ping_at',
+        'rating_avg',
+        'license_expiry_notified_milestone',
     ];
 
     /**
      * تحويل أنواع البيانات تلقائياً (Casts)
-     * ضروري لتعامل لارافيل الصحيح مع الإحداثيات والتواريخ والـ Enums
      */
     protected function casts(): array
     {
         return [
-            'is_searchable'    => 'boolean',
             'current_lat'      => 'float',
             'current_lng'      => 'float',
             'last_ping_at'     => 'datetime',
             'license_expiry'   => 'date',
-            'morning_go'       => 'boolean',
-            'morning_return'   => 'boolean',
-            'afternoon_go'     => 'boolean',
-            'afternoon_return' => 'boolean',
-            'shift'            => DriverShift::class,
-            'school_stages'    => 'array', // تحويل تلقائي لقراءة الـ value والـ label للـ Enum
+            'rating_avg'       => 'float',
+            'school_stages'    => 'array',
         ];
     }
 
     /**
+     * خاصية محسوبة للتوافق: السائق قابل للبحث إذا كان معتمداً وحسابه موثوقاً ونشطاً
+     */
+    public function getIsSearchableAttribute(): bool
+    {
+        return $this->status === 'Approved' && (bool) ($this->user?->is_trusted && $this->user?->is_active);
+    }
+
+    public function getHiddenFromSearchAttribute(): bool
+    {
+        return !$this->is_searchable;
+    }
+
+    /**
      * نطاق الفلترة بالسائقين القابلين للظهور في نتائج البحث والفلترة فقط
+     * يعتمد على حالة السائق Approved وموثوقية حسابه في جدول users (is_trusted)
      */
     public function scopeSearchable(Builder $query): Builder
     {
-        return $query->where('drivers.is_searchable', true);
+        return $query->where('drivers.status', 'Approved')
+                     ->whereHas('user', function ($q) {
+                         $q->where('is_trusted', true)->where('is_active', true);
+                     });
     }
 
     /**
@@ -111,11 +120,11 @@ public function vehicle(): \Illuminate\Database\Eloquent\Relations\HasOne
 }
 
     /**
-     * علاقة مع وثائق السائق (الرخصة، كتيب المركبة، إلخ)
+     * علاقة مع وثائق مركبات السائق عبر جدول vehicle_documents المطبع
      */
-    public function documents(): HasMany
+    public function documents(): \Illuminate\Database\Eloquent\Relations\HasManyThrough
     {
-        return $this->hasMany(DriverDocument::class, 'driver_id');
+        return $this->hasManyThrough(VehicleDocument::class, Vehicle::class, 'driver_id', 'vehicle_id');
     }
 
     /**
@@ -135,11 +144,11 @@ public function vehicle(): \Illuminate\Database\Eloquent\Relations\HasOne
     }
 
     /**
-     * جلب عناوين السائق المتعددة من الجدول المنفصل
+     * جلب عناوين السائق من جدول العناوين الموحد (addresses) عبر user_id
      */
     public function addresses(): HasMany
     {
-        return $this->hasMany(Address::class, 'driver_id');
+        return $this->hasMany(\App\Models\Parent\Address::class, 'user_id', 'user_id');
     }
 
     /**

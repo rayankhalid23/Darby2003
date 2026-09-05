@@ -2,6 +2,10 @@
 
 namespace App\Models;
 
+use Bavix\Wallet\Interfaces\Wallet;
+use Bavix\Wallet\Traits\HasWallet;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -13,9 +17,9 @@ use App\Models\Admin\Admin;
 use App\Models\Parent\ParentModel;
 use Filament\Models\Contracts\HasName;
 
-class User extends Authenticatable implements HasName
+class User extends Authenticatable implements HasName, Wallet
 {
-    use HasApiTokens, HasFactory, Notifiable, SoftDeletes; 
+    use HasApiTokens, HasFactory, Notifiable, SoftDeletes, HasWallet; 
 
     protected $table = 'users';
 
@@ -25,70 +29,130 @@ class User extends Authenticatable implements HasName
         'full_name',
         'email',
         'phone_number',
+        'alternative_phone',
+        'password',
         'password_hash',
         'avatar_url',
+        'gender',
         'role_id',
-        'custom_permissions',
         'is_active',
+        'is_trusted',
+        'created_by',
+        'custom_permissions',
         'phone_verified',
         'email_verified_at',
-        'phone_verified_at',
-        'alternative_phone',
         'last_login_at',
         'new_email_temporary',
-        'pending_new_email', // أضفنا هذا الحقل المطابق لكود الـ Service
+        'pending_new_email',
         'email_change_pending',
     ];
 
     protected $hidden = [
+        'password',
         'password_hash',
-        'remember_token'
+        'remember_token',
     ];
 
     protected function casts(): array
     {
         return [
-            'custom_permissions'   => 'array',
             'is_active'            => 'boolean',
-            'phone_verified'       => 'boolean',
+            'is_trusted'           => 'boolean',
             'email_verified_at'    => 'datetime',
-            'phone_verified_at'    => 'datetime',
             'last_login_at'        => 'datetime',
             'created_at'           => 'datetime',
-            'updated_at'           => 'datetime', // تصحيح الحرف الكبير
-            'deleted_at'           => 'datetime', // تصحيح الحرف الكبير
+            'updated_at'           => 'datetime',
+            'deleted_at'           => 'datetime',
             'email_change_pending' => 'boolean',
         ];
     }
 
-    public function getAuthPassword()
+    public function setCustomPermissionsAttribute($value): void
     {
-        return $this->password_hash;
+        // V2 schema manages permissions purely via roles & permission_role pivot table.
     }
 
-    public function role()
+    public function getCustomPermissionsAttribute(): ?array
+    {
+        return null;
+    }
+
+    public function setPasswordAttribute($value): void
+    {
+        $this->attributes['password'] = $value;
+    }
+
+    public function setPasswordHashAttribute($value): void
+    {
+        $this->attributes['password'] = $value;
+    }
+
+    public function getPasswordHashAttribute(): ?string
+    {
+        return $this->attributes['password'] ?? null;
+    }
+
+    public function getAuthPassword()
+    {
+        return $this->password;
+    }
+
+    public function getPhoneVerifiedAttribute(): bool
+    {
+        return !empty($this->phone_number);
+    }
+
+    public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class, 'role_id');
     }
 
+    /**
+     * للتوافق التام مع الشاشات والـ Eager Loading القديم: استدعاء $user->user يعيد نفس السجل
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'id');
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function createdUsers(): HasMany
+    {
+        return $this->hasMany(User::class, 'created_by');
+    }
+
     public function parentProfile()
     {
-        return $this->hasOne(ParentModel::class, 'user_id');
+        return $this->hasOne(ParentModel::class, 'id', 'id');
     }
 
     public function parent()
     {
-        return $this->hasOne(ParentModel::class, 'user_id');
+        return $this->hasOne(ParentModel::class, 'id', 'id');
     }
 
-    public function driver()
+    public function driver(): HasMany|BelongsTo|\Illuminate\Database\Eloquent\Relations\HasOne
     {
         return $this->hasOne(Driver::class, 'user_id');
     }
     
     public function admin()
     {
-        return $this->hasOne(Admin::class, 'user_id');
+        return $this->hasOne(Admin::class, 'id', 'id');
+    }
+
+    public function children(): HasMany
+    {
+        return $this->hasMany(\App\Models\Parent\Child::class, 'parent_id');
+    }
+
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(\App\Models\Parent\Address::class, 'parent_id');
     }
 
     public function devices()

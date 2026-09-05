@@ -379,8 +379,7 @@ class TripLifecycleService
                     }
 
                     $parentUserIds = \App\Models\Parent\Child::whereIn('id', $childIds)
-                        ->join('parents', 'children.parent_id', '=', 'parents.id')
-                        ->pluck('parents.user_id')
+                        ->pluck('parent_id')
                         ->unique();
 
                     $usersToNotify = User::whereIn('id', $parentUserIds)->get();
@@ -425,9 +424,7 @@ class TripLifecycleService
 
         // جلب جميع أولياء الأمور (Users) المرتبطين باشتراكات هذا السائق لإشعارهم
         $parentUserIds = ActiveSubscription::where('driver_id', $driverId)
-            ->join('children', 'active_subscriptions.child_id', '=', 'children.id')
-            ->join('parents', 'children.parent_id', '=', 'parents.id')
-            ->pluck('parents.user_id')
+            ->pluck('parent_id')
             ->unique();
 
         $usersToNotify = User::whereIn('id', $parentUserIds)->get();
@@ -531,9 +528,7 @@ class TripLifecycleService
 
             // 3. إشعار أولياء الأمور المشتركين في هذه الرحلة بنهاية الرحلة والوصول الآمن للوجهة
             $parentUserIds = ActiveSubscription::where('driver_id', $driverId)
-                ->join('children', 'active_subscriptions.child_id', '=', 'children.id')
-                ->join('parents', 'children.parent_id', '=', 'parents.id')
-                ->pluck('parents.user_id')
+                ->pluck('parent_id')
                 ->unique();
 
             $usersToNotify = User::whereIn('id', $parentUserIds)->get();

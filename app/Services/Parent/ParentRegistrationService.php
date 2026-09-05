@@ -75,17 +75,12 @@ class ParentRegistrationService
                     'password_hash'     => Hash::make($data['password']),
                     'role_id'           => 3,
                     'is_active'         => 1,
+                    'is_trusted'        => 1,
                     'email_verified_at' => Carbon::now(),
                     'last_login_at'     => Carbon::now(),
                     'avatar_url'        => $data['avatar_url'] ?? null,
                 ]);
                 Log::info("Service: User record created for ID: {$user->id}");
-
-                ParentModel::create([
-                    'user_id'    => $user->id,
-                    'is_trusted' => 1,
-                ]);
-                Log::info("Service: Parent profile created for User ID: {$user->id}");
 
                 // تسجيل الجهاز فقط إذا تم إرسال fcm_token حقيقي (فريد عالمياً في الجدول)؛
                 // التسجيل الرسمي يتم عبر POST /api/user/device-token بعد تسجيل الدخول
@@ -163,11 +158,9 @@ class ParentRegistrationService
                     $user->password_hash = Hash::make($data['password']);
                 }
 
-                // تحديث حالة الموثوقية بجدول parents إن أُرسلت
+                // تحديث حالة الموثوقية بجدول users إن أُرسلت
                 if (isset($data['is_trusted'])) {
-                    ParentModel::where('user_id', $user->id)->update([
-                        'is_trusted' => (int) $data['is_trusted']
-                    ]);
+                    $user->is_trusted = (bool) $data['is_trusted'];
                 }
 
                 // متغير مؤقت لتتبع ما إذا كان هناك طلب لتغيير البريد الإلكتروني

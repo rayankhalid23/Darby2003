@@ -25,7 +25,7 @@ class StoreChildRequest extends FormRequest
 
         return [
             // جعلنا parent_id اختياري هنا لأن الكنترولر يجذبه تلقائياً من التوكن (auth)
-            'parent_id'           => 'nullable|exists:parents,id',
+            'parent_id'           => 'nullable|exists:users,id',
             'school_id'           => 'required|exists:schools,id',
             'address_id'          => 'required|exists:addresses,id',
             'full_name'           => ['required', 'string', 'min:8', 'max:150', 'regex:/^[\p{L}]+([\s]+[\p{L}]+){2,}$/u'],

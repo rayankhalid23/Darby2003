@@ -11,29 +11,32 @@ class AdminResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $user = ($this->resource instanceof \App\Models\User) ? $this->resource : ($this->user ?? $this->resource);
+        $userId = (int) ($user->id ?? $this->id ?? 0);
+
         // طلب تغيير بريد معلّق (إن وُجد) حتى تعرض الواجهة شارة "بانتظار التأكيد"
-        $pendingEmail = $this->user
-            ? (Cache::get("admin_email_change_{$this->user_id}")['new_email'] ?? null)
+        $pendingEmail = $user
+            ? (Cache::get("admin_email_change_{$userId}")['new_email'] ?? null)
             : null;
 
         return [
             'id'           => $this->id,
-            'user_id'      => $this->user_id,
-            'full_name'    => $this->user->full_name ?? null,
-            'email'        => $this->user->email ?? null,
-            'phone_number' => $this->user->phone_number ?? null,
+            'user_id'      => $userId,
+            'full_name'    => $user->full_name ?? null,
+            'email'        => $user->email ?? null,
+            'phone_number' => $user->phone_number ?? null,
             // يمر عبر مسار لارافيل ليحصل على ترويسات CORS التي يحتاجها Flutter Web
-            'avatar_url'   => AdminAvatarController::urlFor($this->user->avatar_url ?? null),
-            'is_active'    => (bool) ($this->user->is_active ?? false),
-            'role_id'            => $this->user->role_id ?? null,
-            'role_key'           => $this->user?->role?->name ?? 'supervisor',
-            'role_name'          => $this->user?->role?->display_name ?? (((int) ($this->user->role_id ?? 0) === 1) ? 'مدير النظام العام' : 'مشرف'),
-            'permissions'        => $this->user ? $this->user->getAllPermissions() : [],
-            'custom_permissions' => $this->user?->custom_permissions ?? [],
-            'created_by'         => $this->created_by,
-            'creator_name'       => $this->creator->full_name ?? null,
-            'created_at'         => optional($this->user)->created_at?->toDateTimeString(),
-            'last_login_at'      => optional($this->user)->last_login_at?->toDateTimeString(),
+            'avatar_url'   => AdminAvatarController::urlFor($user->avatar_url ?? null),
+            'is_active'    => (bool) ($user->is_active ?? false),
+            'role_id'            => $user->role_id ?? null,
+            'role_key'           => $user?->role?->name ?? 'supervisor',
+            'role_name'          => $user?->role?->display_name ?? (((int) ($user->role_id ?? 0) === 1) ? 'مدير النظام العام' : 'مشرف'),
+            'permissions'        => method_exists($user, 'getAllPermissions') ? $user->getAllPermissions() : [],
+            'custom_permissions' => $user?->custom_permissions ?? [],
+            'created_by'         => $user->created_by ?? null,
+            'creator_name'       => $user->creator->full_name ?? null,
+            'created_at'         => optional($user)->created_at?->toDateTimeString(),
+            'last_login_at'      => optional($user)->last_login_at?->toDateTimeString(),
 
             // حالة تغيير البريد الإلكتروني المعلّق
             'email_change_pending' => $pendingEmail !== null,
