@@ -238,16 +238,9 @@ class AdminDriverController extends Controller
     public function reviewProfileChange(ReviewProfileChangeRequest $request, int $id): JsonResponse
     {
         try {
-            // 🚀 جلب id الأدمن من جدول admins مباشرة عن طريق user_id
-            $userId = auth()->id();
-            
-            $adminId = \Illuminate\Support\Facades\DB::table('admins')
-                ->where('user_id', $userId)
-                ->value('id');
-    
-            // إذا لم يُعثر على أدمن مربوط، نأخذ أول id أدمن متاح في الجدول
-            if (!$adminId) {
-                $adminId = \Illuminate\Support\Facades\DB::table('admins')->value('id') ?? 1;
+            $adminId = auth()->id() ?? 1;
+            if (\Illuminate\Support\Facades\Schema::hasTable('admins')) {
+                $adminId = \Illuminate\Support\Facades\DB::table('admins')->where('user_id', auth()->id())->value('id') ?? $adminId;
             }
     
             $decision = $request->input('decision');

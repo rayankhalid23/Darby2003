@@ -110,6 +110,21 @@ class ChildrenController extends Controller
             $data = $request->validated();
             $data['parent_id'] = $parentId;
 
+            // كل أطفال ولي الأمر يُسنَدون حصراً للعنوان الرئيسي المفعّل،
+            // فنملأ address_id منه دائماً بدل الاعتماد على ما يرسله العميل.
+            $defaultAddress = app(\App\Services\Parent\AddressService::class)->ensureDefaultAddress($parentId);
+
+            if (!$defaultAddress) {
+                return response()->json([
+                    'success'    => false,
+                    'status'     => false,
+                    'error_code' => 'NO_DEFAULT_ADDRESS',
+                    'message'    => 'لا يوجد عنوان رئيسي مفعّل في حسابك، يرجى إضافة عنوان أولاً قبل إضافة طفل.'
+                ], 422);
+            }
+
+            $data['address_id'] = $defaultAddress->id;
+
             // محاولة إنشاء الطفل عبر السيرفس
             $child = $this->childService->createChild($data);
 
@@ -125,6 +140,13 @@ class ChildrenController extends Controller
                 'message' => 'تم إضافة بيانات الطفل بنجاح.',
                 'data'    => new ChildResource($child->load(['logistics', 'school', 'address']))
             ], 201);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return $e->getResponse() ?: response()->json([
+                'success' => false,
+                'message' => $e->validator ? $e->validator->errors()->first() : $e->getMessage(),
+                'errors'  => $e->validator ? $e->validator->errors() : [],
+            ], 422);
 
         } catch (\Throwable $e) {
             // 2. حالة فشل: حدوث استثناء (Exception / Query Error / Runtime Error)
@@ -230,6 +252,13 @@ public function update(UpdateChildRequest $request, $id): JsonResponse
             'data'    => new ChildResource($updatedChild->load(['logistics', 'school', 'address']))
         ], 200);
 
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return $e->getResponse() ?: response()->json([
+            'success' => false,
+            'message' => $e->validator ? $e->validator->errors()->first() : $e->getMessage(),
+            'errors'  => $e->validator ? $e->validator->errors() : [],
+        ], 422);
+
     } catch (\Throwable $e) {
         Log::error('Failed to update child: Exception occurred', [
             'user_id'       => $userId,
@@ -262,11 +291,33 @@ public function update(UpdateChildRequest $request, $id): JsonResponse
             ], 404);
         }
 
-        $this->childService->deleteChild($child);
+        // منع حذف طفل لديه اشتراك مفعل أو مجدول
+        if ($this->childService->hasActiveOrScheduledSubscription($child)) {
+            return response()->json([
+                'success' => false,
+                'status'  => false,
+                'message' => 'لا يمكن حذف الطفل لوجود اشتراك مفعل أو مجدول مرتبط به.'
+            ], 422);
+        }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'تم حذف بيانات الطفل وإلغاء اشتراكه بنجاح.'
-        ], 200);
+        try {
+            $this->childService->deleteChild($child);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم حذف بيانات الطفل وإلغاء أي طلبات معلقة بنجاح.'
+            ], 200);
+        } catch (\Throwable $e) {
+            Log::error('Failed to delete child: ' . $e->getMessage(), [
+                'child_id'  => $id,
+                'parent_id' => $parentId,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'status'  => false,
+                'message' => $e->getMessage() ?: 'حدث خطأ أثناء حذف بيانات الطفل.'
+            ], 400);
+        }
     }
 }

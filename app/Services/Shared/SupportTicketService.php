@@ -324,7 +324,7 @@ class SupportTicketService
             return collect();
         }
 
-        $routeIds = ActiveSubscription::where('parent_id', $user->id)->pluck('route_id')->unique();
+        $routeIds = ActiveSubscription::forParent($user->id)->pluck('route_id')->unique();
 
         return Trip::with('driver.user')
             ->whereIn('route_id', $routeIds)

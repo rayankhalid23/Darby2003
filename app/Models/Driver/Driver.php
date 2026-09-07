@@ -32,6 +32,10 @@ class Driver extends Model implements Wallet
         'reviewed_by',
         'rejection_reason',
         'shift',
+        'morning_go',
+        'morning_return',
+        'afternoon_go',
+        'afternoon_return',
         'subscription_type',
         'accepted_gender',
         'school_stages',
@@ -48,6 +52,10 @@ class Driver extends Model implements Wallet
     protected function casts(): array
     {
         return [
+            'morning_go'       => 'boolean',
+            'morning_return'   => 'boolean',
+            'afternoon_go'     => 'boolean',
+            'afternoon_return' => 'boolean',
             'current_lat'      => 'float',
             'current_lng'      => 'float',
             'last_ping_at'     => 'datetime',
@@ -151,22 +159,18 @@ public function vehicle(): \Illuminate\Database\Eloquent\Relations\HasOne
         return $this->hasMany(\App\Models\Parent\Address::class, 'user_id', 'user_id');
     }
 
-    /**
-     * 🔥 الفلترة الذكية بالسعة المتبقية للمركبة
-     * تفحص (سعة المركبة النشطة - عدد الطلاب الحاليين >= عدد المقاعد المطلوبة للأطفال الجدد)
-     */
-    public function scopeAvailableCapacity(Builder $query, ?int $requiredSeats): Builder
-    {
-        if (!$requiredSeats) return $query;
-
-        return $query->whereHas('vehicles', function ($q) use ($requiredSeats) {
-            $q->whereRaw('(capacity - (select count(*) from students where students.driver_id = drivers.id)) >= ?', [$requiredSeats]);
-        });
-    }
-    // جلب الاشتراكات الفعالة التابعة للسائق
+    // جلب الاشتراكات الفعالة التابعة للسائق (عبر طلب الاشتراك، بما إن active_subscriptions
+    // ما عادش تحمل driver_id مباشرة)
     public function activeSubscriptions()
     {
-        return $this->hasMany(\App\Models\Shared\ActiveSubscription::class, 'driver_id');
+        return $this->hasManyThrough(
+            \App\Models\Shared\ActiveSubscription::class,
+            \App\Models\Shared\SubscriptionRequest::class,
+            'driver_id',
+            'subscription_request_id',
+            'id',
+            'id'
+        );
     }
 
     // جلب كافة الرحلات اليومية للسائق
@@ -213,5 +217,10 @@ public function vehicle(): \Illuminate\Database\Eloquent\Relations\HasOne
     public function reviews()
     {
         return $this->hasMany(\App\Models\Shared\DriverReview::class, 'driver_id');
+    }
+
+    public function absences(): HasMany
+    {
+        return $this->hasMany(\App\Models\Driver\DriverAbsence::class, 'driver_id');
     }
 }

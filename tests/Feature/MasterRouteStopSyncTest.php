@@ -68,7 +68,6 @@ class MasterRouteStopSyncTest extends TestCase
             'color'           => 'ط£ط¨ظٹط¶',
             'plate_number'    => 'SYNC-' . rand(1000, 9999),
             'capacity_manual' => 10,
-            'capacity_ai'     => 10,
             'status'          => 'Active',
             'deleted_at'      => null,
             'created_at'      => now(),
@@ -84,10 +83,8 @@ class MasterRouteStopSyncTest extends TestCase
             'is_active'    => 1,
         ]);
 
-        $this->parent = ParentModel::create([
-            'user_id'    => $this->parentUser->id,
-            'is_trusted' => 1,
-        ]);
+        // ParentModel هو Proxy فوق جدول users في التطبيع V2، فالمعرّف نفسه معرّف المستخدم
+        $this->parent = ParentModel::findOrFail($this->parentUser->id);
 
         // قيمة الاشتراك تُحجز في الأمانات لكل الأنواع (وليس اليومي فقط)،
         // لذا يجب أن تكون محفظة ولي الأمر ممولة قبل إرسال الطلب أو قبوله.
@@ -98,7 +95,7 @@ class MasterRouteStopSyncTest extends TestCase
             'address' => 'ط´ط§ط±ط¹ ط§ظ„ط§ط®طھط¨ط§ط±',
             'lat'     => 32.9000,
             'lng'     => 13.2000,
-            'status'  => 'active',
+            'status'  => 'Approved',
         ]);
 
         $this->child = Child::create([
@@ -112,7 +109,7 @@ class MasterRouteStopSyncTest extends TestCase
         ]);
 
         $addressId = DB::table('addresses')->insertGetId([
-            'parent_id'  => $this->parentUser->id,
+            'user_id'    => $this->parentUser->id,
             'label'      => 'منزل ولي الأمر',
             'lat'        => 32.88,
             'lng'        => 13.19,
@@ -143,6 +140,12 @@ class MasterRouteStopSyncTest extends TestCase
             'discount_amount'             => 0.00,
             'total_amount_after_discount' => 200.00,
             'driver_net_price'            => 184.00,
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+            'home_label'                  => 'home',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'school_label'                => 'school',
             'created_at'                  => now(),
             'updated_at'                  => now(),
         ]);
@@ -165,7 +168,7 @@ class MasterRouteStopSyncTest extends TestCase
         ]);
 
         $addressId = DB::table('addresses')->insertGetId([
-            'parent_id'  => $this->parentUser->id,
+            'user_id'    => $this->parentUser->id,
             'label'      => 'منزل ' . $label,
             'lat'        => 32.885,
             'lng'        => 13.195,
@@ -196,6 +199,12 @@ class MasterRouteStopSyncTest extends TestCase
             'discount_amount'             => 0.00,
             'total_amount_after_discount' => 200.00,
             'driver_net_price'            => 184.00,
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+            'home_label'                  => 'home',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'school_label'                => 'school',
             'created_at'                  => now(),
             'updated_at'                  => now(),
         ]);
@@ -345,7 +354,7 @@ class MasterRouteStopSyncTest extends TestCase
         ]);
 
         $secondAddressId = DB::table('addresses')->insertGetId([
-            'parent_id'  => $this->parentUser->id,
+            'user_id'    => $this->parentUser->id,
             'label'      => 'منزل ولي الأمر الثاني',
             'lat'        => 32.885,
             'lng'        => 13.195,
@@ -376,6 +385,12 @@ class MasterRouteStopSyncTest extends TestCase
             'discount_amount'             => 0.00,
             'total_amount_after_discount' => 200.00,
             'driver_net_price'            => 184.00,
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+            'home_label'                  => 'home',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'school_label'                => 'school',
             'created_at'                  => now(),
             'updated_at'                  => now(),
         ]);

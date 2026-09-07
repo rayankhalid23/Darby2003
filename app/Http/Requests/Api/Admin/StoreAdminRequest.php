@@ -65,9 +65,12 @@ class StoreAdminRequest extends FormRequest
                 'max:2048'
             ],
             'is_active'          => 'required|boolean',
-            'role_id'            => 'required|integer',
+            // role_id يجب أن يكون موجوداً فعلاً في جدول الأدوار لمنع تسريب خطأ SQL الخام
+            // ولمنع إسناد دور غير موجود عبر قيد قاعدة البيانات فقط.
+            'role_id'            => 'required|integer|exists:roles,id',
             'custom_permissions' => 'nullable|array',
-            'created_by'         => 'required|integer',
+            // created_by يُفرض من المستخدم المصادَق في prepareForValidation ولا يُعتمد على قيمة العميل.
+            'created_by'         => 'required|integer|exists:users,id',
         ];
     }
 

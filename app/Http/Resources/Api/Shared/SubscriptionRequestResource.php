@@ -66,12 +66,12 @@ class SubscriptionRequestResource extends JsonResource
                         'name'                        => $child->full_name ?? $child->name,
                         'photo'                       => $child->photo_url ? asset($child->photo_url) : null,
                         'details' => [
-                            'subscription_type'           => $pivot?->subscription_type,
-                            'trip_direction'              => $pivot?->trip_direction ?? 'both',
+                            'subscription_type'           => $this->subscription_type,
+                            'trip_direction'              => $this->trip_direction ?? 'both',
                             'timing'                      => $pivot?->timing ?? 'BOTH',
-                            'start_date'                  => $pivot?->start_date,
-                            'end_date'                    => $pivot?->end_date,
-                            'working_days_count'          => (int) ($pivot?->working_days_count ?? 0),
+                            'start_date'                  => $this->start_date,
+                            'end_date'                    => $this->end_date,
+                            'working_days_count'          => (int) ($this->working_days_count ?? 0),
                             'distance_km'                 => (float) ($pivot?->distance_km ?? 0),
                             'trip_price'                  => $tripPrice,          // 1. سعر الرحلة الواحدة
                             'price_per_child'             => $rawChildPrice,      // 2. إجمالي المبلغ للطفل قبل التخفيض

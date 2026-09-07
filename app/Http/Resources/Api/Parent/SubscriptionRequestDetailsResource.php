@@ -18,6 +18,34 @@ class SubscriptionRequestDetailsResource extends JsonResource
             ? $this->resource->resolveState() 
             : ['state' => 'active', 'status' => 'active', 'state_label' => 'ساري ومفعل', 'status_text' => 'اشتراك نشط وساري', 'is_active' => true];
 
+        $firstChild = $this->relationLoaded('children') ? $this->children?->first() : null;
+        $firstPivot = $firstChild?->pivot ?? null;
+
+        $subType = $this->subscription_type ?? $firstPivot?->subscription_type ?? 'multi_day';
+        $subTypeLabel = match ($subType) {
+            'single_day' => 'اشتراك يوم واحد',
+            'multi_day'  => 'اشتراك عدة أيام',
+            'monthly'    => 'اشتراك شهري',
+            'term'       => 'اشتراك فصل دراسي',
+            'yearly'     => 'اشتراك سنوي',
+            default      => $subType,
+        };
+
+        $tripDir = $this->trip_direction ?? $firstPivot?->trip_direction ?? $firstPivot?->direction ?? 'both';
+        $tripDirLabel = match ($tripDir) {
+            'go', 'one_way_morning'     => 'ذهاب صباحي فقط',
+            'return', 'one_way_evening' => 'عودة مسائية فقط',
+            'both', 'two_way'           => 'ذهاب وإياب',
+            default                     => $tripDir,
+        };
+
+        $startDateStr = $this->start_date ? (is_string($this->start_date) ? $this->start_date : $this->start_date->format('Y-m-d')) : $firstPivot?->start_date;
+        $endDateStr   = $this->end_date ? (is_string($this->end_date) ? $this->end_date : $this->end_date->format('Y-m-d')) : $firstPivot?->end_date;
+
+        $homeLabel = $this->home_label ?? $firstPivot?->home_label ?? optional($firstChild?->address)->label ?? 'منزل ولي الأمر';
+        $homeLat   = (float) ($this->home_lat ?? $firstPivot?->home_lat ?? optional($firstChild?->address)->lat ?? 32.8872);
+        $homeLng   = (float) ($this->home_lng ?? $firstPivot?->home_lng ?? optional($firstChild?->address)->lng ?? 13.1913);
+
         return [
             'id'                          => $this->id,
             'subscription_id'             => $this->id,
@@ -32,6 +60,27 @@ class SubscriptionRequestDetailsResource extends JsonResource
             'total_amount_after_discount' => (float) ($this->total_amount_after_discount ?? max(0, (float)($this->total_price ?? 0) - (float)($this->discount_amount ?? 0))),
             'notes'                       => $this->notes,
 
+            // ── الحقول المشتركة لطلب الاشتراك (العائلة) ──
+            'subscription' => [
+                'type'               => $subType,
+                'type_label'         => $subTypeLabel,
+                'direction'          => $tripDir,
+                'direction_label'    => $tripDirLabel,
+                'start_date'         => $startDateStr,
+                'end_date'           => $endDateStr,
+                'working_days_count' => (int) ($this->working_days_count ?? 0),
+            ],
+
+            // ── عنوان المنزل المشترك ──
+            'home_address' => [
+                'label'     => $homeLabel,
+                'address'   => $homeLabel,
+                'latitude'  => $homeLat,
+                'longitude' => $homeLng,
+                'lat'       => $homeLat,
+                'lng'       => $homeLng,
+            ],
+
             // بيانات السائق
             'driver' => [
                 'id'    => $this->driver_id,
@@ -40,13 +89,13 @@ class SubscriptionRequestDetailsResource extends JsonResource
                 'photo' => $this->driver?->user?->profile_photo_url ?? null,
             ],
 
-            // تفاصيل الأطفال
-            'children' => $this->whenLoaded('children', function () {
-                return $this->children->map(function ($child) {
-                    $pivot = $child->pivot;
+            // عدد الأطفال
+            'children_count' => (int) ($this->children_count ?? ($this->children?->count() ?: 1)),
 
-                    // الاعتماد على العلاقات المباشرة (Eager Loading) لتسريع الأداء وتجنب استعلامات N+1
-                    $homeAddr = $child->address; 
+            // تفاصيل الأطفال
+            'children' => $this->whenLoaded('children', function () use ($homeLabel, $homeLat, $homeLng, $subType, $tripDir, $startDateStr, $endDateStr) {
+                return $this->children->map(function ($child) use ($homeLabel, $homeLat, $homeLng, $subType, $tripDir, $startDateStr, $endDateStr) {
+                    $pivot = $child->pivot;
                     $school   = $child->school;  
 
                     $rawChildPrice  = (float) ($pivot?->price_per_child ?? $pivot?->trip_price ?? 0);
@@ -65,6 +114,10 @@ class SubscriptionRequestDetailsResource extends JsonResource
                     $platformFeeAmount  = max(0, round($afterDiscount - $driverNetPrice, 2));
                     $platformFeePercent = $afterDiscount > 0 ? round(($platformFeeAmount / $afterDiscount) * 100, 2) : round(\App\Models\Shared\PricingSetting::commissionRateFraction() * 100, 2);
 
+                    $schoolName = $pivot?->school_label ?? $school?->name ?? 'المدرسة';
+                    $schoolLat  = (float) ($pivot?->school_lat ?? $school?->lat ?? $school?->latitude ?? 32.8700);
+                    $schoolLng  = (float) ($pivot?->school_lng ?? $school?->lng ?? $school?->longitude ?? 13.1800);
+
                     return [
                         'id'                      => $child->id,
                         'child_id'                => $child->id,
@@ -73,23 +126,27 @@ class SubscriptionRequestDetailsResource extends JsonResource
                         'active_subscription_id'  => optional($this->activeSubscriptions?->firstWhere('child_id', $child->id))->id ?? $this->id,
                         'name'                    => $child->full_name ?? $child->name,
                         'photo'                   => $child->photo_url ? asset($child->photo_url) : null,
-                        'details' => [
-                            'subscription_type'           => $pivot?->subscription_type,
-                            'trip_direction'              => $pivot?->trip_direction ?? $pivot?->direction ?? 'both',
-                            'timing'                      => $pivot?->timing ?? 'BOTH',
-                            'start_date'                  => $pivot?->start_date,
-                            'end_date'                    => $pivot?->end_date,
-                            'working_days_count'          => (int) ($pivot?->working_days_count ?? 0),
-                            'distance_km'                 => (float) ($pivot?->distance_km ?? 0),
-                            'trip_price'                  => $tripPrice,          // 1. سعر الرحلة الواحدة
-                            'price_per_child'             => $rawChildPrice,      // 2. إجمالي المبلغ للطفل قبل التخفيض
-                            'discount_percentage'         => $discountPercent,    // 3. نسبة التخفيض %
-                            'discount_amount'             => $discountAmt,        // 4. قيمة التخفيض
-                            'total_amount_after_discount' => $afterDiscount,      // 5. السعر بعد التخفيض (المطلوب دفعه للطفل)
-                            'platform_commission_rate'    => $platformFeePercent, // 6. نسبة عمولة المنصة %
-                            'platform_commission_amount'  => $platformFeeAmount,  // 7. قيمة عمولة المنصة
-                            'driver_net_price'            => $driverNetPrice,     // 8. إجمالي السعر للسائق بعد التخفيض وخصم نسبة المنصة
+                        'photo_url'               => $child->photo_url ? asset($child->photo_url) : null,
+                        'age'                     => $child->age,
+                        'birth_date'              => $child->birth_date?->toDateString(),
+                        'gender'                  => $child->gender,
+                        'grade'                   => $child->grade,
+                        'grade_label'             => $child->grade ? 'الصف ' . $child->grade : 'غير محدد',
+                        'school_stage'            => $child->school_stage,
+                        'school_stage_label'      => $child->school_stage_label,
+                        'medical_notes'           => $child->medical_notes,
+
+                        // مدرسة الطفل
+                        'school' => [
+                            'id'        => $school?->id,
+                            'name'      => $schoolName,
+                            'address'   => $school?->address_line ?? $school?->address ?? 'عنوان غير متوفر',
+                            'latitude'  => $schoolLat,
+                            'longitude' => $schoolLng,
+                            'lat'       => $schoolLat,
+                            'lng'       => $schoolLng,
                         ],
+
                         'pricing' => [
                             'trip_price'                  => $tripPrice,
                             'original_price'              => $rawChildPrice,
@@ -101,22 +158,42 @@ class SubscriptionRequestDetailsResource extends JsonResource
                             'platform_commission_amount'  => $platformFeeAmount,
                             'driver_net_price'            => $driverNetPrice,
                         ],
-                        // اللقطة المحفوظة في request_children هي المصدر الأول: هي عنوان الطفل
-                        // ومدرسته لحظة الاشتراك، والتي حُسبت عليها المسافة والسعر. العلاقة الحية
-                        // تبقى احتياطاً للطلبات القديمة التي أُنشئت قبل وجود هذه الأعمدة.
+
+                        'details' => [
+                            'subscription_type'           => $pivot?->subscription_type ?? $subType,
+                            'trip_direction'              => $pivot?->trip_direction ?? $pivot?->direction ?? $tripDir,
+                            'timing'                      => $pivot?->timing ?? 'BOTH',
+                            'start_date'                  => $pivot?->start_date ?? $startDateStr,
+                            'end_date'                    => $pivot?->end_date ?? $endDateStr,
+                            'working_days_count'          => (int) ($subReq->working_days_count ?? 0),
+                            'distance_km'                 => (float) ($pivot?->distance_km ?? 0),
+                            'trip_price'                  => $tripPrice,
+                            'price_per_child'             => $rawChildPrice,
+                            'discount_percentage'         => $discountPercent,
+                            'discount_amount'             => $discountAmt,
+                            'total_amount_after_discount' => $afterDiscount,
+                            'platform_commission_rate'    => $platformFeePercent,
+                            'platform_commission_amount'  => $platformFeeAmount,
+                            'driver_net_price'            => $driverNetPrice,
+                        ],
+
+                        // دعم التوافق العكسي
                         'Home' => [
-                            'id'        => $homeAddr?->id,
-                            'name'      => $pivot?->home_label ?? $homeAddr?->label ?? 'منزل ولي الأمر', // ✅ اسم الحوش (المنزل)
-                            'address'   => $homeAddr?->address_line ?? 'عنوان غير متوفر',
-                            'latitude'  => (float) ($pivot?->home_lat ?? $homeAddr?->lat ?? $homeAddr?->latitude ?? 32.8872),
-                            'longitude' => (float) ($pivot?->home_lng ?? $homeAddr?->lng ?? $homeAddr?->longitude ?? 13.1913),
+                            'name'      => $homeLabel,
+                            'address'   => $homeLabel,
+                            'latitude'  => $homeLat,
+                            'longitude' => $homeLng,
+                            'lat'       => $homeLat,
+                            'lng'       => $homeLng,
                         ],
                         'School' => [
                             'id'        => $school?->id,
-                            'name'      => $pivot?->school_label ?? $school?->name ?? 'المدرسة', // ✅ اسم المدرسة
+                            'name'      => $schoolName,
                             'address'   => $school?->address_line ?? $school?->address ?? 'عنوان غير متوفر',
-                            'latitude'  => (float) ($pivot?->school_lat ?? $school?->lat ?? $school?->latitude ?? 32.8700),
-                            'longitude' => (float) ($pivot?->school_lng ?? $school?->lng ?? $school?->longitude ?? 13.1800),
+                            'latitude'  => $schoolLat,
+                            'longitude' => $schoolLng,
+                            'lat'       => $schoolLat,
+                            'lng'       => $schoolLng,
                         ],
                     ];
                 });

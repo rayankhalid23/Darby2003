@@ -96,7 +96,10 @@ class AdminController extends Controller
     public function store(StoreAdminRequest $request): JsonResponse
     {
         try {
-            try { $validated = $request->validated(); } catch (\Throwable $e) { $validated = $request->all(); }
+            $validated = $request->validated();
+            // منشئ الحساب يُؤخذ من المستخدم المصادَق حصراً (لا من مدخلات العميل).
+            $validated['created_by'] = auth()->id();
+
             $admin = $this->adminService->createAdmin(
                 $validated,
                 $request->file('avatar') ?? $request->file('avatar_url')
@@ -108,8 +111,9 @@ class AdminController extends Controller
                 'data'    => new AdminResource($admin)
             ], 201);
         } catch (Exception $e) {
+            // تسجيل الخطأ التفصيلي داخلياً فقط، دون تسريب رسالة SQL الخام للعميل.
             Log::error("Store Admin Error: " . $e->getMessage());
-            return response()->json(['status' => false, 'message' => 'تعذر إضافة المشرف: ' . $e->getMessage()], 500);
+            return response()->json(['status' => false, 'message' => 'تعذر إضافة المشرف، يرجى مراجعة البيانات والمحاولة مرة أخرى.'], 500);
         }
     }
 

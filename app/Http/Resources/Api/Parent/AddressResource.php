@@ -16,6 +16,8 @@ class AddressResource extends JsonResource
             'zone_name' => $this->zone?->name,
             'lat'       => (float) $this->lat,
             'lng'       => (float) $this->lng,
+            // العنوان الرئيسي المفعل: واحد فقط لكل ولي أمر، وكل أطفاله مسنَدون إليه.
+            'is_default' => (bool) $this->is_default,
         ];
     }
 }

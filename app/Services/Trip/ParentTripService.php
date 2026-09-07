@@ -56,7 +56,7 @@ class ParentTripService
      * الأولوية لـ trip_price المخزّن (سعر الرحلة المفردة بعد التخفيض)، وإن لم يوجد
      * يُشتق من إجمالي الاشتراك ÷ (أيام العمل × عدد الرحلات في اليوم).
      */
-    private function resolvePerTripCost($childPivot): float
+    private function resolvePerTripCost($childPivot, $subscriptionRequest = null): float
     {
         if (!$childPivot) {
             return 0.0;
@@ -72,8 +72,8 @@ class ParentTripService
             return 0.0;
         }
 
-        $workingDays = max(1, (int) ($childPivot->working_days_count ?? 1));
-        $tripsPerDay = in_array($childPivot->trip_direction, ['one_way_morning', 'one_way_evening'], true) ? 1 : 2;
+        $workingDays = max(1, (int) ($subscriptionRequest->working_days_count ?? 1));
+        $tripsPerDay = in_array($subscriptionRequest?->trip_direction, ['one_way_morning', 'one_way_evening'], true) ? 1 : 2;
 
         return round($totalAmount / max(1, $workingDays * $tripsPerDay), 2);
     }
@@ -105,7 +105,7 @@ class ParentTripService
             return [];
         }
 
-        $subscriptions = ActiveSubscription::whereIn('child_id', $childIds)
+        $subscriptions = ActiveSubscription::forChildren($childIds)
             ->where('status', 'active')
             ->with(['child.address', 'child.school', 'driver.user', 'driver.vehicles', 'school'])
             ->get();
@@ -135,8 +135,7 @@ class ParentTripService
                     ->unique('child_id')
                     ->count();
             } else {
-                $totalTripChildren = DB::table('active_subscriptions')
-                    ->where('driver_id', $trip->driver_id)
+                $totalTripChildren = ActiveSubscription::forDriver($trip->driver_id)
                     ->where('status', 'active')
                     ->count();
 
@@ -330,8 +329,8 @@ class ParentTripService
             ->whereIn('child_id', $childIds)
             ->exists();
 
-        $hasSubscription = ActiveSubscription::whereIn('child_id', $childIds)
-            ->where('driver_id', $trip->driver_id)
+        $hasSubscription = ActiveSubscription::forChildren($childIds)
+            ->forDriver($trip->driver_id)
             ->when($trip->route_id, fn($q) => $q->where('route_id', $trip->route_id))
             ->where('status', '!=', 'cancelled')
             ->exists();
@@ -359,7 +358,7 @@ class ParentTripService
             $isOnline = true;
         }
 
-        $firstSub = ActiveSubscription::where('driver_id', $trip->driver_id)->where('status', 'active')->with('school')->first();
+        $firstSub = ActiveSubscription::forDriver($trip->driver_id)->where('status', 'active')->with('school')->first();
         $school = optional($firstSub?->school);
         $direction = strtolower($trip->trip_type) === 'afternoon' ? 'to_home' : 'to_school';
 
@@ -376,8 +375,8 @@ class ParentTripService
 
         $childrenArray = [];
         if (!empty($childIds)) {
-            $subscriptions = ActiveSubscription::whereIn('child_id', $childIds)
-                ->where('driver_id', $trip->driver_id)
+            $subscriptions = ActiveSubscription::forChildren($childIds)
+                ->forDriver($trip->driver_id)
                 ->where('status', 'active')
                 ->with(['child.address', 'child.school', 'school'])
                 ->get();
@@ -449,7 +448,7 @@ class ParentTripService
         $today = $this->resolveRequestedDate($date);
         $parentIds = $this->resolveParentIds($userId);
 
-        $subscriptions = ActiveSubscription::whereHas('child', function ($q) use ($parentIds) {
+        $subscriptions = ActiveSubscription::whereHas('requestChild.child', function ($q) use ($parentIds) {
             $q->whereIn('parent_id', $parentIds);
         })
         ->where('status', 'active')
@@ -539,7 +538,7 @@ class ParentTripService
 
                     // سعر الرحلة الواحدة — بنفس ترتيب الاشتقاق المستخدم في السجل تماماً،
                     // وإلا رأى ولي الأمر سعرين مختلفين لنفس الرحلة في شاشتين.
-                    $costPerChildNum = $this->resolvePerTripCost($childPivot);
+                    $costPerChildNum = $this->resolvePerTripCost($childPivot, $s->subscriptionRequest);
                     $hasCost = $costPerChildNum > 0;
                     if ($hasCost) {
                         $totalCost += $costPerChildNum;
@@ -624,7 +623,7 @@ class ParentTripService
             ];
         }
 
-        $driverIds = ActiveSubscription::whereIn('child_id', $childIds)->pluck('driver_id')->filter()->unique()->toArray();
+        $driverIds = ActiveSubscription::forChildren($childIds)->with('subscriptionRequest')->get()->pluck('driver_id')->filter()->unique()->toArray();
 
         $paginatedTrips = Trip::where(function ($query) use ($childIds, $driverIds) {
                 $query->whereHas('events', function ($q) use ($childIds) {
@@ -638,7 +637,7 @@ class ParentTripService
                     $query->orWhere(function ($q2) use ($driverIds, $childIds) {
                         $q2->whereIn('driver_id', $driverIds)
                            ->whereHas('activeSubscriptions', function ($q3) use ($childIds) {
-                               $q3->whereIn('child_id', $childIds);
+                               $q3->forChildren($childIds);
                            });
                     });
                 }
@@ -666,13 +665,15 @@ class ParentTripService
                 ->pluck('child_id')
                 ->toArray();
 
-            $subChildIds = ActiveSubscription::whereIn('child_id', $childIds)
-                ->where('driver_id', $trip->driver_id)
+            $subChildIds = ActiveSubscription::forChildren($childIds)
+                ->forDriver($trip->driver_id)
                 ->where(function($sq) use ($trip) {
                     if ($trip->route_id) {
                         $sq->where('route_id', $trip->route_id)->orWhereNull('route_id');
                     }
                 })
+                ->with('requestChild')
+                ->get()
                 ->pluck('child_id')
                 ->toArray();
 
@@ -684,9 +685,9 @@ class ParentTripService
             }
 
             $childrenModels = Child::whereIn('id', $tripChildIds)->with(['address', 'school'])->get()->keyBy('id');
-            $subsModels = ActiveSubscription::whereIn('child_id', $tripChildIds)
-                ->where('driver_id', $trip->driver_id)
-                ->with(['school', 'subscriptionRequest.children'])
+            $subsModels = ActiveSubscription::forChildren($tripChildIds)
+                ->forDriver($trip->driver_id)
+                ->with(['school', 'subscriptionRequest.children', 'requestChild'])
                 ->get()
                 ->keyBy('child_id');
 
@@ -724,7 +725,7 @@ class ParentTripService
 
                 if ($costPerChildNum <= 0 && $activeSub?->subscriptionRequest) {
                     $childPivot = $activeSub->subscriptionRequest->children->firstWhere('id', $cId)?->pivot;
-                    $costPerChildNum = $this->resolvePerTripCost($childPivot);
+                    $costPerChildNum = $this->resolvePerTripCost($childPivot, $activeSub->subscriptionRequest);
                 }
 
                 $hasCost = $costPerChildNum > 0;
@@ -858,8 +859,8 @@ class ParentTripService
     {
         ['trip' => $trip, 'child_ids' => $childIds] = $this->authorizeParentTripAccess($userId, $tripId);
 
-        $subscriptions = ActiveSubscription::whereIn('child_id', $childIds)
-            ->where('driver_id', $trip->driver_id)
+        $subscriptions = ActiveSubscription::forChildren($childIds)
+            ->forDriver($trip->driver_id)
             ->with(['child.school', 'child.address', 'school'])
             ->get()
             ->unique('child_id');
@@ -1043,7 +1044,7 @@ class ParentTripService
             throw new \Exception('بيانات الطفل غير موجودة.');
         }
 
-        $subs = ActiveSubscription::where('child_id', $childId)->where('status', 'active')->get();
+        $subs = ActiveSubscription::forChild($childId)->where('status', 'active')->get();
         $sub = $subs->first(function ($s) use ($targetDate) {
             return !\App\Models\Driver\DriverAbsence::where('driver_id', $s->driver_id)
                 ->whereDate('absence_date', $targetDate)
@@ -1248,7 +1249,7 @@ class ParentTripService
             return [];
         }
 
-        $subscriptions = ActiveSubscription::whereIn('child_id', $childIds)
+        $subscriptions = ActiveSubscription::forChildren($childIds)
             ->where('status', 'active')
             ->with(['child.address', 'child.school', 'school'])
             ->get();

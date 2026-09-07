@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Models\User;
 use App\Models\Driver\Driver;
-use App\Models\Driver\DriverDocument;
+use App\Models\Driver\Vehicle;
+use App\Models\Driver\VehicleDocument;
 
 class DriverCompleteProfileTest extends TestCase
 {
@@ -82,12 +83,17 @@ class DriverCompleteProfileTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonPath('status', true);
 
-        $insuranceDoc = DriverDocument::where('driver_id', $this->driver->id)
+        $vehicle = Vehicle::where('driver_id', $this->driver->id)->first();
+        $this->assertNotNull($vehicle);
+
+        $insuranceDoc = VehicleDocument::where('vehicle_id', $vehicle->id)
             ->where('doc_type', 'INSURANCE')
             ->first();
 
         $this->assertNotNull($insuranceDoc);
-        $this->assertEquals($payload['insurance_expiry'], $insuranceDoc->insurance_expiry_date);
+        $this->assertEquals($payload['insurance_expiry'], $insuranceDoc->expiry_date->format('Y-m-d'));
+        $this->assertEquals(VehicleDocument::STATE_PENDING, $insuranceDoc->state);
+        $this->assertEquals('معلقة', $insuranceDoc->state_label);
     }
 
     /** Test 2: فشل عند غياب تاريخ انتهاء التأمين */
@@ -133,10 +139,13 @@ class DriverCompleteProfileTest extends TestCase
 
         $response->assertStatus(200);
 
-        $this->assertDatabaseMissing('driver_documents', [
-            'driver_id' => $this->driver->id,
-            'doc_type'  => 'VEHICLE_REGISTRATION',
-        ]);
+        $vehicle = Vehicle::where('driver_id', $this->driver->id)->first();
+        if ($vehicle) {
+            $this->assertDatabaseMissing('vehicle_documents', [
+                'vehicle_id' => $vehicle->id,
+                'doc_type'   => 'VEHICLE_REGISTRATION',
+            ]);
+        }
     }
 
     /** Test 5: إرسال doc_vehicle_registration (حقل قديم من الفرونت) لا يكسر الطلب ولا يُخزَّن */
@@ -152,9 +161,12 @@ class DriverCompleteProfileTest extends TestCase
 
         $response->assertStatus(200);
 
-        $this->assertDatabaseMissing('driver_documents', [
-            'driver_id' => $this->driver->id,
-            'doc_type'  => 'VEHICLE_REGISTRATION',
-        ]);
+        $vehicle = Vehicle::where('driver_id', $this->driver->id)->first();
+        if ($vehicle) {
+            $this->assertDatabaseMissing('vehicle_documents', [
+                'vehicle_id' => $vehicle->id,
+                'doc_type'   => 'VEHICLE_REGISTRATION',
+            ]);
+        }
     }
 }

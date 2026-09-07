@@ -107,11 +107,17 @@ return new class extends Migration
                 if (!$opts['nullable']) {
                     $t->unsignedBigInteger('subscription_request_id')->nullable(false)->change();
                 }
-
-                $t->foreign('subscription_request_id')
-                  ->references('id')->on('requests')
-                  ->onDelete($opts['onDelete'] === 'cascade' ? 'cascade' : 'set null');
             });
+
+            try {
+                Schema::table($table, function (Blueprint $t) use ($opts) {
+                    $t->foreign('subscription_request_id')
+                      ->references('id')->on('requests')
+                      ->onDelete($opts['onDelete'] === 'cascade' ? 'cascade' : 'set null');
+                });
+            } catch (\Exception $e) {
+                // Ignore if it already exists
+            }
         }
 
         // 6) توسعة حالات الاشتراك النشط لتغطية الحالات التي كان يحملها العقد

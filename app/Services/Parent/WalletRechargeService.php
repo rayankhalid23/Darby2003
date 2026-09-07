@@ -308,43 +308,10 @@ class WalletRechargeService
 
     private function getFallbackPaymentMethods(): array
     {
-        return [
-            [
-                'id'          => 1,
-                'code'        => 'sadad',
-                'name_ar'     => 'خدمة سداد (Sadad)',
-                'name_en'     => 'Sadad Payment',
-                'target_audience' => 'both',
-                'processing_type' => 'instant_simulation',
-                'min_amount'  => 1.00,
-                'max_amount'  => 5000.00,
-                'instructions_ar' => 'الدفع الإلكتروني المباشر عبر خدمة سداد التابعة لشركة ليبيانا.',
-            ],
-            [
-                'id'          => 2,
-                'code'        => 'tadawul',
-                'name_ar'     => 'تداول / بطاقة مصرفية (Tadawul)',
-                'name_en'     => 'Tadawul / Bank Card',
-                'target_audience' => 'both',
-                'processing_type' => 'instant_simulation',
-                'min_amount'  => 5.00,
-                'max_amount'  => 10000.00,
-                'instructions_ar' => 'الدفع الإلكتروني عبر بطاقات تداول المصرفية وخدمة ادفع لي.',
-            ],
-            [
-                'id'          => 3,
-                'code'        => 'ncb_bank',
-                'name_ar'     => 'المصرف التجاري الوطني (تحويل بنكي)',
-                'name_en'     => 'National Commercial Bank',
-                'target_audience' => 'both',
-                'processing_type' => 'manual_proof',
-                'account_name'=> 'شركة دربي لنقل الطلاب',
-                'account_number' => '020-1234567-001',
-                'iban'        => 'LY98NCBL0200001234567001',
-                'min_amount'  => 50.00,
-                'max_amount'  => 50000.00,
-                'instructions_ar' => 'التحويل المباشر لحساب الشركة المصرفي وإرفاق صورة الإيصال.',
-            ],
-        ];
+        // ملاحظة: أُزيلت بيانات الحسابات البنكية الوهمية (رقم حساب/IBAN تجريبي)
+        // التي كانت مضمّنة هنا لأنها كانت ستُعرض لأولياء الأمور كوسائل دفع حقيقية.
+        // مصدر الحقيقة الوحيد لوسائل الدفع هو جدول payment_methods في قاعدة البيانات؛
+        // وفي حال عدم وجود أي وسيلة مفعّلة نُعيد قائمة فارغة بدلاً من بيانات مزيّفة.
+        return [];
     }
 }

@@ -217,7 +217,7 @@ class DriverTripController extends Controller
                 ->firstOrFail();
 
             $route = RouteModel::where('id', $trip->route_id)->first();
-            $subs = ActiveSubscription::where('driver_id', $driver->id)
+            $subs = ActiveSubscription::forDriver($driver->id)
                 ->where(function ($q) use ($trip, $route) {
                     $q->where('route_id', $trip->route_id);
                     if ($route?->contract_id) {
@@ -236,13 +236,13 @@ class DriverTripController extends Controller
                     ->unique();
 
                 if ($childIdsFromStopsOrEvents->isNotEmpty()) {
-                    $subs = ActiveSubscription::whereIn('child_id', $childIdsFromStopsOrEvents)
+                    $subs = ActiveSubscription::forChildren($childIdsFromStopsOrEvents->all())
                         ->with(['child.school', 'child.address', 'school'])
                         ->get();
                 }
 
                 if ($subs->isEmpty()) {
-                    $subs = ActiveSubscription::where('driver_id', $driver->id)
+                    $subs = ActiveSubscription::forDriver($driver->id)
                         ->where('status', '!=', 'cancelled')
                         ->with(['child.school', 'child.address', 'school'])
                         ->get();
@@ -529,7 +529,7 @@ class DriverTripController extends Controller
             $driver = $user?->driver;
 
             $trip = Trip::where('id', $tripId)->where('driver_id', $driver->id)->firstOrFail();
-            $subs = ActiveSubscription::where('driver_id', $driver->id)
+            $subs = ActiveSubscription::forDriver($driver->id)
                 ->where('route_id', $trip->route_id)
                 ->where('status', '!=', 'cancelled')
                 ->with(['child', 'school'])
@@ -981,7 +981,7 @@ class DriverTripController extends Controller
             elseif (str_contains($action, 'skip')) $action = 'skip';
 
             // 🔒 التحقق من ملكية الاشتراك للسائق الحالي لمنع التلاعب باشتراكات سائقين آخرين (IDOR)
-            $sub = ActiveSubscription::where('id', $subId)->where('driver_id', $driverId)->first();
+            $sub = ActiveSubscription::where('id', $subId)->forDriver($driverId)->first();
 
             if (!$sub) {
                 return response()->json([
@@ -1386,7 +1386,7 @@ class DriverTripController extends Controller
             $child = $nextStop->child_id ? \App\Models\Parent\Child::with(['school', 'address'])->find($nextStop->child_id) : null;
             $school = $nextStop->school_id ? \App\Models\Parent\School::find($nextStop->school_id) : ($child?->school);
             $sub = $nextStop->child_id
-                ? ActiveSubscription::where('driver_id', $trip->driver_id)->where('child_id', $nextStop->child_id)->first()
+                ? ActiveSubscription::forDriver($trip->driver_id)->forChild($nextStop->child_id)->first()
                 : null;
 
             $name = $isSchool
@@ -1419,15 +1419,16 @@ class DriverTripController extends Controller
         }
 
         // fallback في حال كانت الرحلة بدون سجلات trip_stops مسبقة
-        $unprocessedSubs = ActiveSubscription::where('driver_id', $trip->driver_id)
+        $processedChildIds = DB::table('trip_events')
+            ->where('trip_id', $trip->id)
+            ->whereIn('action_type', ['picked_up', 'absent', 'skipped', 'dropped_off'])
+            ->pluck('child_id')
+            ->all();
+
+        $unprocessedSubs = ActiveSubscription::forDriver($trip->driver_id)
             ->where('route_id', $trip->route_id)
             ->where('status', '!=', 'cancelled')
-            ->whereNotIn('child_id', function ($query) use ($trip) {
-                $query->select('child_id')
-                    ->from('trip_events')
-                    ->where('trip_id', $trip->id)
-                    ->whereIn('action_type', ['picked_up', 'absent', 'skipped', 'dropped_off']);
-            })
+            ->when(!empty($processedChildIds), fn ($q) => $q->excludingChildren($processedChildIds))
             ->with(['child.school', 'child.address'])
             ->get();
 
@@ -1463,13 +1464,13 @@ class DriverTripController extends Controller
             || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
 
         if ($isGoTrip) {
-            $firstSub = ActiveSubscription::where('driver_id', $trip->driver_id)
+            $firstSub = ActiveSubscription::forDriver($trip->driver_id)
                 ->where('route_id', $trip->route_id)
                 ->with('child.school')
                 ->first();
 
             if (!$firstSub && $trip->driver_id) {
-                $firstSub = ActiveSubscription::where('driver_id', $trip->driver_id)
+                $firstSub = ActiveSubscription::forDriver($trip->driver_id)
                     ->with('child.school')
                     ->first();
             }
@@ -1717,7 +1718,7 @@ class DriverTripController extends Controller
                 ->get()
                 ->keyBy('child_id');
 
-            $subs = ActiveSubscription::where('driver_id', $driverId)
+            $subs = ActiveSubscription::forDriver($driverId)
                 ->where(function($q) use ($trip) {
                     $q->where('route_id', $trip->route_id);
                     if ($trip->route?->contract_id) {

@@ -154,28 +154,65 @@ class DriverPreferencesTest extends TestCase
     }
 
     /**
-     * Test 4: PUT /api/v1/driver/preferences (ظپط´ظ„ ط¹ظ†ط¯ ط§ط®طھظٹط§ط± ظ…ظ†ط§ط·ظ‚ طھطھط¨ط¹ ط¨ظ„ط¯ظٹط§طھ ظپط±ط¹ظٹط© ظ…ط®طھظ„ظپط©)
+     * Test 4: PUT /api/v1/driver/preferences (نجاح عند اختيار مناطق تتبع بلديات فرعية مختلفة لربط خط السير)
      */
-    public function test_update_driver_preferences_fails_when_zones_belong_to_different_sub_municipalities(): void
+    public function test_update_driver_preferences_allows_zones_from_different_sub_municipalities(): void
     {
         $payload = [
             'morning_go'        => true,
             'morning_return'    => true,
             'afternoon_go'      => false,
             'afternoon_return'  => false,
-            'subscription_type' => 'multi_day', // قيمة ENUM صحيحة — الـ 422 سببه مناطق ببلديات مختلفة
+            'subscription_type' => 'multi_day',
             'school_stages'     => ['primary'],
-            'zones'             => [$this->zone1->id, $this->otherSubZone->id], // ط¨ظ„ط¯ظٹط§طھ ظ…ط®طھظ„ظپط©!
+            'zones'             => [$this->zone1->id, $this->otherSubZone->id], // مناطق تتبع بلديات فرعية مختلفة أصبحت مقبولة الآن
         ];
 
         $response = $this->actingAs($this->driverUser)
             ->putJson('/api/v1/driver/preferences', $payload);
 
-        $response->assertStatus(422); // Exception مُعالج بالـ catch في الـ controller
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', true);
+        $this->assertDatabaseHas('driver_zone', [
+            'driver_id' => $this->driver->id,
+            'zone_id'   => $this->zone1->id,
+        ]);
+        $this->assertDatabaseHas('driver_zone', [
+            'driver_id' => $this->driver->id,
+            'zone_id'   => $this->otherSubZone->id,
+        ]);
     }
 
     /**
-     * Test 5: POST /api/v1/driver/preferences/zones/add (ط¥ط¶ط§ظپط© ظ…ظ†ط·ظ‚ط© ظ…ظ†ظپط±ط¯ط© ط¨ظ†ط¬ط§ط­)
+     * Test 4-B: PUT /api/v1/driver/preferences (فشل عند تجاوز الحد الأقصى للمناطق 5 مناطق)
+     */
+    public function test_update_driver_preferences_fails_when_exceeding_max_zones(): void
+    {
+        // إنشاء 6 مناطق للاختبار
+        $zoneIds = [];
+        for ($i = 1; $i <= 6; $i++) {
+            $z = Zone::firstOrCreate(['name' => "منطقة تجريبية زائدة {$i}", 'sub_municipality_id' => $this->zone1->sub_municipality_id]);
+            $zoneIds[] = $z->id;
+        }
+
+        $payload = [
+            'morning_go'        => true,
+            'morning_return'    => true,
+            'afternoon_go'      => false,
+            'afternoon_return'  => false,
+            'subscription_type' => 'multi_day',
+            'school_stages'     => ['primary'],
+            'zones'             => $zoneIds, // 6 مناطق > 5
+        ];
+
+        $response = $this->actingAs($this->driverUser)
+            ->putJson('/api/v1/driver/preferences', $payload);
+
+        $response->assertStatus(422);
+    }
+
+    /**
+     * Test 5: POST /api/v1/driver/preferences/zones/add (إضافة منطقة منفردة بنجاح)
      */
     public function test_add_zone_to_driver_preferences_success(): void
     {
@@ -193,18 +230,36 @@ class DriverPreferencesTest extends TestCase
     }
 
     /**
-     * Test 6: POST /api/v1/driver/preferences/zones/add (ظپط´ظ„ ط¹ظ†ط¯ ط§ط®طھظٹط§ط± ظ…ظ†ط·ظ‚ط© ط¨ط¨ظ„ط¯ظٹط© ظ…ط®طھظ„ظپط©)
+     * Test 6: POST /api/v1/driver/preferences/zones/add (نجاح إضافة منطقة تتبع بلدية فرعية مختلفة لربط خط السير)
      */
-    public function test_add_zone_fails_when_different_sub_municipality(): void
+    public function test_add_zone_allows_different_sub_municipality(): void
     {
         $payload = ['zone_id' => $this->otherSubZone->id];
 
         $response = $this->actingAs($this->driverUser)
             ->postJson('/api/v1/driver/preferences/zones/add', $payload);
 
+        $response->assertStatus(200);
+        $response->assertJsonPath('status', true);
+        $this->assertDatabaseHas('driver_zone', [
+            'driver_id' => $this->driver->id,
+            'zone_id'   => $this->otherSubZone->id,
+        ]);
+    }
+
+    /**
+     * Test 6-B: POST /api/v1/driver/preferences/zones/add (فشل عند محاولة إضافة منطقة مضافة مسبقاً)
+     */
+    public function test_add_zone_fails_when_already_exists(): void
+    {
+        $payload = ['zone_id' => $this->zone1->id]; // مضافة بالفعل في setUp
+
+        $response = $this->actingAs($this->driverUser)
+            ->postJson('/api/v1/driver/preferences/zones/add', $payload);
+
         $response->assertStatus(422);
         $response->assertJsonPath('status', false);
-        $response->assertJsonPath('message', 'لا يمكن إضافة هذه المنطقة؛ لأنها تتبع بلدية فرعية مختلفة.');
+        $response->assertJsonPath('message', 'هذه المنطقة مضافة بالفعل لتفضيلات التغطية الخاصة بك.');
     }
 
     /**

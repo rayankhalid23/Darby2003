@@ -76,6 +76,17 @@ class WalletController extends Controller
             'session_token.required' => 'توكن جلسة الدفع مطلوب.',
         ]);
 
+        // 🔒 بوابة الدفع الوهمية (mock) تُقيّد على بيئات التطوير/الاختبار فقط.
+        // بدون هذا القيد كان بإمكان أي مستخدم شحن محفظته بأموال حقيقية مجاناً
+        // عبر إرسال رقم بطاقة صوري، وهو خطر مالي جسيم في الإنتاج.
+        if (! app()->environment(['local', 'development', 'testing', 'staging'])) {
+            return response()->json([
+                'success'    => false,
+                'error_code' => 'MOCK_GATEWAY_DISABLED',
+                'message'    => 'بوابة الدفع التجريبية غير متاحة. يرجى استخدام وسيلة دفع حقيقية.',
+            ], 403);
+        }
+
         $result = $this->rechargeService->processMockPayment(
             $validated['session_token'],
             $request->only(['card_number', 'card_holder', 'expiry_date', 'cvv', 'otp'])
@@ -191,7 +202,7 @@ class WalletController extends Controller
         }
 
         return \App\Models\Shared\ActiveSubscription::where('route_id', $trip->route_id)
-            ->where('parent_id', $parentUserId)
+            ->forParent($parentUserId)
             ->exists();
     }
 
@@ -203,7 +214,7 @@ class WalletController extends Controller
     private function resolveTripPriceForParent(\App\Models\Shared\Trip $trip, int $parentUserId): float
     {
         $subscriptionIds = \App\Models\Shared\ActiveSubscription::where('route_id', $trip->route_id)
-            ->where('parent_id', $parentUserId)
+            ->forParent($parentUserId)
             ->pluck('subscription_request_id')
             ->filter()
             ->unique();

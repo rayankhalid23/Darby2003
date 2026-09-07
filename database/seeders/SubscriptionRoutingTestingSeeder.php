@@ -250,7 +250,6 @@ class SubscriptionRoutingTestingSeeder extends Seeder
             'status'                   => 'accepted',
             'subscription_type' => 'multi_day',
             'children_count'           => 1,
-            'children_acceptance_mode' => 'all',
         ]);
 
         // 2. ط¹ظ‚ط¯ ط§ظ„ط·ظپظ„ 1 ظ…ط¹ ط§ظ„ط³ط§ط¦ظ‚ 1
@@ -361,7 +360,6 @@ class SubscriptionRoutingTestingSeeder extends Seeder
             'status'                   => 'pending',
             'notes'                    => 'ط·ظ„ط¨ ظ‚ظٹط§ط³ظٹ ظ„ظ„ط§ط®طھط¨ط§ط± ظˆط§ظ„طھظˆطµظٹط©',
             'children_count'           => 1,
-            'children_acceptance_mode' => 'all',
         ]);
 
         DB::table('request_children')->insert([
@@ -406,7 +404,6 @@ class SubscriptionRoutingTestingSeeder extends Seeder
             'status'                   => 'pending',
             'notes'                    => 'ط§ط®طھط¨ط§ط± ط±ظپط¶ ط§ظ„ظپظ„ط§طھط± ط¨ط³ط¨ط¨ ط§ظ„ظپطھط±ط©',
             'children_count'           => 1,
-            'children_acceptance_mode' => 'all',
         ]);
 
         DB::table('request_children')->insert([
@@ -465,7 +462,6 @@ class SubscriptionRoutingTestingSeeder extends Seeder
             'status'                   => 'pending',
             'notes'                    => 'ط·ظ„ط¨ 3 ط£ط·ظپط§ظ„ ظ„ط³ط§ط¦ظ‚ ظ„ط¯ظٹظ‡ ظ…ظ‚ط¹ط¯ط§ظ† ط¨ظˆط¶ط¹ ظ‚ط¨ظˆظ„ ظپط±ط¯ظٹ',
             'children_count'           => 3,
-            'children_acceptance_mode' => 'individual', // ظ‚ط¨ظˆظ„ ظپط±ط¯ظٹ!
         ]);
 
         foreach ([$child4, $child5, $child6] as $ch) {

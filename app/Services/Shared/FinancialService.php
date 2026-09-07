@@ -189,14 +189,6 @@ class FinancialService
         });
     }
 
-    /**
-     * Alias للتوافقية
-     */
-    public function settleContract($subscription): Invoice
-    {
-        return $this->settleSubscription($subscription);
-    }
-
     public function sendPreSettlementWarning(SubscriptionRequest|ActiveSubscription $sub): void
     {
         $subscriptionRequest = $sub instanceof ActiveSubscription ? $sub->subscriptionRequest : $sub;

@@ -28,9 +28,9 @@ class OtpRequest extends FormRequest
             
             // 2. شروط إنشاء الحساب الأساسية لضمان وصول بيانات كاملة وسليمة
             'full_name'         => 'required|string|min:10|max:100',
-            'phone_number'      => 'required|digits:10|unique:users,phone_number|regex:/^09[0-9]{8}$/', // هنا الفحص الفعلي لرقم الهاتف
+            'phone_number'      => 'required|digits:10|unique:users,phone_number|regex:/^09[0-9]{8}$/',
             'gender'            => 'required|in:male,female',
-            'password'          => 'required|string|min:6',
+            'password'          => ['required', 'string', 'min:6', 'regex:/^(?=.*[a-zA-Z])(?=.*\d).+$/'],
             
             // 3. تفاصيل الجهاز والـ FCM (اختيارية ولكن يتم التحقق من بنيتها)
             'alternative_phone' => 'nullable|string|min:7',
@@ -58,16 +58,28 @@ class OtpRequest extends FormRequest
 
             // رسائل بيانات السائق الأساسية
             'full_name.required'     => 'الاسم الكامل مطلوب لإتمام العملية.',
-            'full_name.min'          => 'يرجى إدخال الاسم الثلاثي على الأقل.',
+            'full_name.string'       => 'اسم السائق يجب أن يكون نصاً صالحاً.',
+            'full_name.min'          => 'يرجى إدخال الاسم الثلاثي على الأقل (10 أحرف كحد أدنى).',
+            'full_name.max'          => 'اسم السائق لا يمكن أن يتجاوز 100 حرف.',
+
             'phone_number.required'  => 'رقم الهاتف مطلوب.',
             'phone_number.digits'    => 'يجب أن يتكون رقم الهاتف من 10 أرقام.',
             'phone_number.unique'    => 'رقم الهاتف هذا مستخدم من قبل سائق آخر بالفعل.',
-            'phone_number.regex'     => 'يجب أن يبدأ رقم الهاتف بـ 09 (مثال: 0910000000).',
+            'phone_number.regex'     => 'يجب أن يبدأ رقم الهاتف بـ 09 ويتكون من 10 أرقام (مثال: 0910000000).',
+
             'gender.required'        => 'يرجى تحديد الجنس.',
-            'gender.in'              => 'القيمة المختارة للجنس غير صحيحة.',
+            'gender.in'              => 'القيمة المختارة للجنس غير صحيحة، يجب أن تكون male أو female.',
+
             'password.required'      => 'كلمة المرور مطلوبة.',
+            'password.string'        => 'كلمة المرور يجب أن تكون نصاً.',
             'password.min'           => 'يجب ألا تقل كلمة المرور عن 6 أحرف.',
-            'alternative_phone.min'  => 'رقم الهاتف الاحتياطي يجب ألا يقل عن 7 أرقام.',
+            'password.regex'         => 'كلمة المرور يجب أن تحتوي على حرف إنجليزي ورقم على الأقل.',
+
+            'alternative_phone.string' => 'رقم الهاتف الاحتياطي يجب أن يكون نصاً صالحاً.',
+            'alternative_phone.min'    => 'رقم الهاتف الاحتياطي يجب ألا يقل عن 7 أرقام.',
+            'device_name.string'       => 'اسم الجهاز يجب أن يكون نصاً صالحاً.',
+            'platform.string'          => 'نوع المنصة يجب أن يكون نصاً صالحاً.',
+            'fcm_token.string'         => 'رمز الإشعارات (FCM Token) يجب أن يكون نصاً صالحاً.',
         ];
     }
 
@@ -79,7 +91,7 @@ class OtpRequest extends FormRequest
         throw new HttpResponseException(response()->json([
             'status'     => false,
             'error_code' => 'VALIDATION_ERROR',
-            'message'    => 'خطأ في البيانات المرسلة، يرجى تصحيح الحقول.',
+            'message'    => $validator->errors()->first() ?: 'خطأ في البيانات المرسلة، يرجى تصحيح الحقول.',
             'errors'     => $validator->errors()
         ], 422));
     }

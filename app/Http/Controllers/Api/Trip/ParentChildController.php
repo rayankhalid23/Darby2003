@@ -177,7 +177,7 @@ class ParentChildController extends Controller
         try {
             $this->checkChildBelongsToParent((int) $childId);
 
-            $subscription = ActiveSubscription::where('child_id', $childId)
+            $subscription = ActiveSubscription::forChild($childId)
                 ->where('status', 'active')
                 ->with(['subscriptionRequest.children'])
                 ->first();

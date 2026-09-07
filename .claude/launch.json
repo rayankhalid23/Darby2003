@@ -4,7 +4,7 @@
     {
       "name": "laravel-api",
       "runtimeExecutable": "php",
-      "runtimeArgs": ["artisan", "serve", "--host=127.0.0.1", "--port=8000"],
+      "runtimeArgs": ["-d", "extension=pdo_mysql", "-d", "extension=mysqli", "-S", "127.0.0.1:8000", "-t", "public", "public/index.php"],
       "port": 8000
     }
   ]

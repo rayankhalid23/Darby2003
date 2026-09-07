@@ -14,6 +14,8 @@ use Exception;
 
 class DriverPreferenceService
 {
+    public const MAX_ZONES = 5;
+
     /**
      * جلب التفضيلات مع العلاقات الهرمية (المنطقة -> البلدية الفرعية -> البلدية الكبرى)
      */
@@ -41,94 +43,52 @@ class DriverPreferenceService
                 $driverUpdate['school_stages'] = $data['school_stages'];
             }
 
+            // فحص: لا يمكن تعطيل فترة بها حجوزات مستقبلية
+            foreach (['morning_go', 'morning_return', 'afternoon_go', 'afternoon_return'] as $slotKey) {
+                if (array_key_exists($slotKey, $driverUpdate) && $driverUpdate[$slotKey] === false) {
+                    $hasFutureBookings = \App\Models\Driver\DriverSeatSlot::where('driver_id', $driver->id)
+                        ->where('slot', $slotKey)
+                        ->where('date', '>', now()->toDateString())
+                        ->where('booked', '>', 0)
+                        ->exists();
+
+                    if ($hasFutureBookings) {
+                        throw new Exception("لا يمكن تعطيل فترة [{$slotKey}] لأن بها حجوزات مستقبلية.");
+                    }
+                }
+            }
+
             if (!empty($driverUpdate)) {
                 $driver->update($driverUpdate);
             }
 
             if (array_key_exists('zones', $data)) {
-                $zoneIds = $data['zones'] ?? [];
+                $zoneIds = array_values(array_unique($data['zones'] ?? []));
 
-                if (!empty($zoneIds)) {
-                    $subMunicipalityIds = Zone::whereIn('id', $zoneIds)
-                        ->pluck('sub_municipality_id')
-                        ->filter()
-                        ->unique();
-
-                    if ($subMunicipalityIds->count() > 1) {
-                        throw new Exception('عذراً، يجب أن تكون جميع المناطق المختارة تابعة لنفس البلدية الفرعية.');
-                    }
+                if (count($zoneIds) > self::MAX_ZONES) {
+                    throw new Exception('عذراً، الحد الأقصى للمناطق التي يمكن للسائق تغطيتها هو ' . self::MAX_ZONES . ' مناطق.');
                 }
 
                 $driver->zones()->sync($zoneIds);
             }
-
-            // مزامنة سجلات المقاعد مع الفترات المفعّلة
-            $this->syncSeatSlots($driver);
 
             return $driver->fresh(['zones.subMunicipality.municipality', 'seatSlots']);
         });
     }
 
     /**
-     * مزامنة جدول driver_seat_slots مع الفترات المفعّلة للسائق
-     * - إنشاء سجل للفترات الجديدة بـ total_seats = capacity_manual
-     * - رفض تعطيل فترة بها مقاعد محجوزة
-     */
-    private function syncSeatSlots(Driver $driver): void
-    {
-        $vehicle   = $driver->vehicle;
-        $capacity  = $vehicle?->capacity_manual ?? 0;
-
-        $activeSlots = $driver->getActiveSlots();
-
-        foreach (DriverSeatSlot::ALL_SLOTS as $slot) {
-            $isActive = in_array($slot, $activeSlots);
-            $existing = DriverSeatSlot::where('driver_id', $driver->id)
-                ->where('slot', $slot)
-                ->first();
-
-            if ($isActive) {
-                if (!$existing) {
-                    // إنشاء سجل جديد
-                    DriverSeatSlot::create([
-                        'driver_id'      => $driver->id,
-                        'slot'           => $slot,
-                        'total_seats'    => $capacity,
-                        'reserved_seats' => 0,
-                    ]);
-                } else {
-                    // تحديث الطاقة الكلية إذا تغيرت سعة المركبة
-                    $existing->update(['total_seats' => $capacity]);
-                }
-            } else {
-                // تعطيل فترة — رفض إذا بها محجوزات
-                if ($existing && $existing->reserved_seats > 0) {
-                    throw new Exception(
-                        "لا يمكن تعطيل فترة [{$slot}] لأن بها {$existing->reserved_seats} مقاعد محجوزة حالياً."
-                    );
-                }
-                // حذف السجل إذا لم يكن بها محجوزات
-                if ($existing) {
-                    $existing->delete();
-                }
-            }
-        }
-    }
-
-    /**
-     * إضافة منطقة واحدة مع التحقق من مطابقتها للبلدية الفرعية للمناطق الحالية
+     * إضافة منطقة واحدة مع التحقق من سقف المناطق وعدم التكرار
      */
     public function addZoneToDriver(Driver $driver, int $zoneId): Driver
     {
-        $targetZone = Zone::findOrFail($zoneId);
-        $currentZones = $driver->zones;
+        Zone::findOrFail($zoneId);
 
-        if ($currentZones->isNotEmpty()) {
-            $currentSubMunicipalityId = $currentZones->first()->sub_municipality_id;
+        if ($driver->zones()->where('zones.id', $zoneId)->exists()) {
+            throw new Exception('هذه المنطقة مضافة بالفعل لتفضيلات التغطية الخاصة بك.');
+        }
 
-            if ($targetZone->sub_municipality_id !== $currentSubMunicipalityId) {
-                throw new Exception('لا يمكن إضافة هذه المنطقة؛ لأنها تتبع بلدية فرعية مختلفة.');
-            }
+        if ($driver->zones()->count() >= self::MAX_ZONES) {
+            throw new Exception('عذراً، لا يمكن إضافة المزيد من المناطق؛ الحد الأقصى المسموح به هو ' . self::MAX_ZONES . ' مناطق.');
         }
 
         $driver->zones()->syncWithoutDetaching([$zoneId]);

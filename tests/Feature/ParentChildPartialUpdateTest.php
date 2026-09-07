@@ -92,12 +92,8 @@ class ParentChildPartialUpdateTest extends TestCase
 
         $this->child->logistics()->create([
             'preferred_time_slot' => 'morning',
-            'trip_direction'      => 'both',
             'pickup_time'         => '07:30',
             'dropoff_time'        => '13:30',
-            'start_date'          => now()->addDay()->toDateString(),
-            'end_date'            => now()->addMonths(3)->toDateString(),
-            'subscription_type'   => 'multi_day',
             'is_active'           => true,
         ]);
     }
@@ -174,7 +170,6 @@ class ParentChildPartialUpdateTest extends TestCase
         $response = $this->actingAs($this->parentUser)
             ->patchJson("/api/parent/children/{$this->child->id}", [
                 'preferred_time_slot' => 'evening',
-                'trip_direction'      => 'go',
                 'pickup_time'         => '12:45',
             ]);
 
@@ -185,7 +180,6 @@ class ParentChildPartialUpdateTest extends TestCase
         $logistics = $this->child->logistics;
 
         $this->assertEquals('evening', $logistics->preferred_time_slot);
-        $this->assertEquals('go', $logistics->trip_direction);
         $this->assertEquals('12:45:00', $logistics->pickup_time);
         $this->assertEquals('13:30:00', $logistics->dropoff_time); // الحقل غير المعدل ظل كما هو
     }

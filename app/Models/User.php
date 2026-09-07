@@ -6,6 +6,7 @@ use Bavix\Wallet\Interfaces\Wallet;
 use Bavix\Wallet\Traits\HasWallet;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -150,9 +151,21 @@ class User extends Authenticatable implements HasName, Wallet
         return $this->hasMany(\App\Models\Parent\Child::class, 'parent_id');
     }
 
+    /**
+     * جدول addresses يربط العنوان بصاحبه عبر user_id لا parent_id —
+     * المفتاح الخاطئ كان يُسقط كل استعلام للعلاقة بخطأ «Unknown column».
+     */
     public function addresses(): HasMany
     {
-        return $this->hasMany(\App\Models\Parent\Address::class, 'parent_id');
+        return $this->hasMany(\App\Models\Parent\Address::class, 'user_id');
+    }
+
+    /**
+     * العنوان الرئيسي المفعّل للمستخدم (عنوان واحد فقط لكل مستخدم).
+     */
+    public function defaultAddress(): HasOne
+    {
+        return $this->hasOne(\App\Models\Parent\Address::class, 'user_id')->where('is_default', true);
     }
 
     public function devices()

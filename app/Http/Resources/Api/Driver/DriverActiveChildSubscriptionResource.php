@@ -99,13 +99,13 @@ class DriverActiveChildSubscriptionResource extends JsonResource
             'subscription_period' => [
                 'start_date'         => $pivot?->start_date ? (string) $pivot->start_date : ($subscriptionRequest->start_date ? (string) $subscriptionRequest->start_date : null),
                 'end_date'           => $pivot?->end_date ? (string) $pivot->end_date : ($subscriptionRequest->end_date ? (string) $subscriptionRequest->end_date : null),
-                'working_days_count' => (int) ($pivot?->working_days_count ?? $subscriptionRequest->days_count ?? 0),
+                'working_days_count' => (int) ($subscriptionRequest->working_days_count ?? 0),
             ],
 
             'trip_details' => [
                 'subscription_type' => $pivot?->subscription_type ?? $subscriptionRequest->subscription_type ?? 'monthly',
-                'trip_direction'    => $pivot?->trip_direction ?? $pivot?->direction ?? $subscriptionRequest->direction ?? 'two_way',
-                'timing'            => $pivot?->timing ?? $subscriptionRequest->timing ?? null,
+                'trip_direction'    => $subscriptionRequest->trip_direction ?? 'two_way',
+                'timing'            => $pivot?->timing ?? null,
             ],
 
             'school' => [

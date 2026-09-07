@@ -157,6 +157,7 @@ class AdminDriverService
                 // اعتماد جميع وثائق المركبة المرفوعة
                 \App\Models\Driver\VehicleDocument::whereIn('vehicle_id', $vehicleIds)->update([
                     'is_verified' => true,
+                    'state'       => \App\Models\Driver\VehicleDocument::STATE_ACTIVE,
                 ]);
             } elseif ($status === 'Rejected') {
                 Vehicle::where('driver_id', $driver->id)->update([
@@ -165,6 +166,7 @@ class AdminDriverService
 
                 \App\Models\Driver\VehicleDocument::whereIn('vehicle_id', $vehicleIds)->update([
                     'is_verified' => false,
+                    'state'       => \App\Models\Driver\VehicleDocument::STATE_REJECTED,
                 ]);
             }
 
@@ -273,10 +275,12 @@ class AdminDriverService
                 // تعديل تاريخ الانتهاء من الإدارة يُعيد ضبط عدّاد التذكيرات ويُلغي علامة "منتهية"
                 $driverUpdates['license_expiry_notified_milestone'] = null;
 
-                DriverDocument::where('driver_id', $driver->id)
-                    ->where('doc_type', 'LICENSE')
-                    ->where('status', 'Expired')
-                    ->update(['status' => 'Pending']);
+                if (\Illuminate\Support\Facades\Schema::hasTable('driver_documents')) {
+                    DriverDocument::where('driver_id', $driver->id)
+                        ->where('doc_type', 'LICENSE')
+                        ->where('status', 'Expired')
+                        ->update(['status' => 'Pending']);
+                }
             }
             if (isset($data['status'])) {
                 $driverUpdates['status'] = ucfirst(strtolower($data['status']));
@@ -364,8 +368,11 @@ class AdminDriverService
             ];
 
             $expiryOldSnapshot = [];
+            $hasDriverDocs = \Illuminate\Support\Facades\Schema::hasTable('driver_documents');
             foreach ($expiryFieldMap as $docType => $map) {
-                $expiryOldSnapshot[$map['input']] = DriverDocument::where('driver_id', $driver->id)->where('doc_type', $docType)->value($map['column']);
+                $expiryOldSnapshot[$map['input']] = $hasDriverDocs
+                    ? DriverDocument::where('driver_id', $driver->id)->where('doc_type', $docType)->value($map['column'])
+                    : null;
             }
 
             foreach ($docFileMap as $pathKey => $docType) {
@@ -384,10 +391,12 @@ class AdminDriverService
                         }
                     }
 
-                    DriverDocument::updateOrCreate(
-                        ['driver_id' => $driver->id, 'doc_type' => $docType],
-                        $updateFields
-                    );
+                    if ($hasDriverDocs) {
+                        DriverDocument::updateOrCreate(
+                            ['driver_id' => $driver->id, 'doc_type' => $docType],
+                            $updateFields
+                        );
+                    }
                 }
             }
 
@@ -395,19 +404,23 @@ class AdminDriverService
             foreach ($expiryFieldMap as $docType => $map) {
                 $pathKey = array_search($docType, $docFileMap, true);
                 if (array_key_exists($map['input'], $data) && empty($data[$pathKey])) {
-                    DriverDocument::where('driver_id', $driver->id)
-                        ->where('doc_type', $docType)
-                        ->update([
-                            $map['column']              => $data[$map['input']],
-                            'expiry_notified_milestone' => null,
-                            'status'                    => 'Pending',
-                        ]);
+                    if ($hasDriverDocs) {
+                        DriverDocument::where('driver_id', $driver->id)
+                            ->where('doc_type', $docType)
+                            ->update([
+                                $map['column']              => $data[$map['input']],
+                                'expiry_notified_milestone' => null,
+                                'status'                    => 'Pending',
+                            ]);
+                    }
                 }
             }
 
             $expiryNewSnapshot = [];
             foreach ($expiryFieldMap as $docType => $map) {
-                $expiryNewSnapshot[$map['input']] = DriverDocument::where('driver_id', $driver->id)->where('doc_type', $docType)->value($map['column']);
+                $expiryNewSnapshot[$map['input']] = $hasDriverDocs
+                    ? DriverDocument::where('driver_id', $driver->id)->where('doc_type', $docType)->value($map['column'])
+                    : null;
             }
 
             $driver->refresh()->load(['user', 'vehicles', 'documents']);
@@ -597,41 +610,55 @@ class AdminDriverService
                     'doc_technical_inspection_path'  => 'TECHNICAL_INSPECTION',
                 ];
 
-                foreach ($docMap as $pathKey => $docType) {
-                    if (!empty($newValues[$pathKey])) {
-                        DriverDocument::updateOrCreate(
-                            ['driver_id' => $driver->id, 'doc_type' => $docType],
-                            [
-                                'file_url'    => $newValues[$pathKey],
-                                'status'      => 'Verified',
-                                'uploaded_at' => now(),
-                            ]
-                        );
+                $hasDriverDocs = \Illuminate\Support\Facades\Schema::hasTable('driver_documents');
+
+                if ($hasDriverDocs) {
+                    foreach ($docMap as $pathKey => $docType) {
+                        if (!empty($newValues[$pathKey])) {
+                            DriverDocument::updateOrCreate(
+                                ['driver_id' => $driver->id, 'doc_type' => $docType],
+                                [
+                                    'file_url'    => $newValues[$pathKey],
+                                    'status'      => 'Verified',
+                                    'uploaded_at' => now(),
+                                ]
+                            );
+                        }
                     }
+
+                    // هـ) تحديث تواريخ الانتهاء المخصصة للوثائق
+                    $expiryMap = [
+                        'insurance_expiry'            => ['doc' => 'INSURANCE',            'col' => 'insurance_expiry_date'],
+                        'stamp_expiry'                => ['doc' => 'STAMP',                'col' => 'stamp_expiry_date'],
+                        'technical_inspection_expiry' => ['doc' => 'TECHNICAL_INSPECTION', 'col' => 'technical_inspection_expiry_date'],
+                    ];
+
+                    foreach ($expiryMap as $inputKey => $config) {
+                        if (!empty($newValues[$inputKey])) {
+                            DriverDocument::where('driver_id', $driver->id)
+                                ->where('doc_type', $config['doc'])
+                                ->update([
+                                    $config['col'] => $newValues[$inputKey],
+                                    'status'       => 'Verified'
+                                ]);
+                        }
+                    }
+
+                    // و) تحويل كافة وثائق السائق المعلقة (Pending) إلى معتمدة (Verified/Active)
+                    DriverDocument::where('driver_id', $driver->id)
+                        ->where('status', 'Pending')
+                        ->update(['status' => 'Verified']);
                 }
 
-                // هـ) تحديث تواريخ الانتهاء المخصصة للوثائق
-                $expiryMap = [
-                    'insurance_expiry'            => ['doc' => 'INSURANCE',            'col' => 'insurance_expiry_date'],
-                    'stamp_expiry'                => ['doc' => 'STAMP',                'col' => 'stamp_expiry_date'],
-                    'technical_inspection_expiry' => ['doc' => 'TECHNICAL_INSPECTION', 'col' => 'technical_inspection_expiry_date'],
-                ];
-
-                foreach ($expiryMap as $inputKey => $config) {
-                    if (!empty($newValues[$inputKey])) {
-                        DriverDocument::where('driver_id', $driver->id)
-                            ->where('doc_type', $config['doc'])
-                            ->update([
-                                $config['col'] => $newValues[$inputKey],
-                                'status'       => 'Verified'
-                            ]);
-                    }
+                $vehicle = $driver->vehicles()->first();
+                if ($vehicle) {
+                    \App\Models\Driver\VehicleDocument::where('vehicle_id', $vehicle->id)
+                        ->where('state', \App\Models\Driver\VehicleDocument::STATE_PENDING)
+                        ->update([
+                            'state'       => \App\Models\Driver\VehicleDocument::STATE_ACTIVE,
+                            'is_verified' => true,
+                        ]);
                 }
-
-                // و) تحويل كافة وثائق السائق المعلقة (Pending) إلى معتمدة (Verified)
-                DriverDocument::where('driver_id', $driver->id)
-                    ->where('status', 'Pending')
-                    ->update(['status' => 'Verified']);
 
                 // ز) تحديث حالة سجل الطلب إلى مقبوض وموثق
                 DB::table('driver_profile_changes')->where('id', $changeId)->update([
@@ -654,6 +681,16 @@ class AdminDriverService
                 }
 
             } else {
+
+                $vehicle = $driver->vehicles()->first();
+                if ($vehicle) {
+                    \App\Models\Driver\VehicleDocument::where('vehicle_id', $vehicle->id)
+                        ->where('state', \App\Models\Driver\VehicleDocument::STATE_PENDING)
+                        ->update([
+                            'state'       => \App\Models\Driver\VehicleDocument::STATE_REJECTED,
+                            'is_verified' => false,
+                        ]);
+                }
 
                 // أ) حالة الرفض: تحديث حالة سجل الطلب مع السبب
                 DB::table('driver_profile_changes')->where('id', $changeId)->update([
@@ -796,6 +833,8 @@ class AdminDriverService
             try {
                 if (!empty($unassignedTripIds)) {
                     $parentUserIds = ActiveSubscription::whereIn('route_id', $trips->pluck('route_id')->filter())
+                        ->with('subscriptionRequest')
+                        ->get()
                         ->pluck('parent_id')
                         ->unique();
 

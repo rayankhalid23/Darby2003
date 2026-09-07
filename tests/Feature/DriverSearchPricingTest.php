@@ -177,10 +177,8 @@ class DriverSearchPricingTest extends TestCase
 
         $this->assertEquals('multi_day', $item['subscription_type']);
         $this->assertEquals('عدة أيام', $item['subscription_type_label']);
-        $this->assertEquals($start, $item['start_date']);
-        $this->assertEquals($end, $item['end_date']);
-        // الأحد إلى الخميس فقط (استثناء الجمعة والسبت) = 5 أيام عمل
-        $this->assertEquals(5, $item['working_days']);
+        // تقدير البحث يُحتسب ليوم عمل واحد؛ المدة الفعلية تُحدد عند إنشاء طلب الاشتراك
+        $this->assertEquals(1, $item['working_days']);
         $this->assertEquals('female', $item['gender']);
         $this->assertNotNull($item['school_stage_label']);
     }

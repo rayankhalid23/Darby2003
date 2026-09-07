@@ -62,6 +62,15 @@ class UpdateAddressRequest extends FormRequest
                 'integer',
                 'exists:zones,id'
             ],
+
+            // تبديل العنوان الرئيسي (اختياري).
+            // true  ⇒ يمر عبر حراسات الاشتراكات وقد يُلغي طلبات الاشتراك المعلّقة.
+            // false ⇒ مرفوض على العنوان الرئيسي الحالي (يجب ترقية عنوان بديل بدلاً منه).
+            'is_default' => [
+                'sometimes',
+                'nullable',
+                'boolean'
+            ],
         ];
     }
 
@@ -90,6 +99,9 @@ class UpdateAddressRequest extends FormRequest
             // المنطقة الجغرافية (Zone)
             'zone_id.integer' => 'معرف المنطقة يجب أن يكون رقماً صحيحاً.',
             'zone_id.exists'  => 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.',
+
+            // العنوان الرئيسي
+            'is_default.boolean' => 'قيمة تفعيل العنوان الرئيسي يجب أن تكون true أو false.',
         ];
     }
 

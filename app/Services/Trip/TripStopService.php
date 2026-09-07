@@ -52,8 +52,8 @@ class TripStopService
         $trip = Trip::findOrFail($tripId);
 
         // 1. جلب سجل الاشتراك النشط للطفل لتفادي أخطاء الـ Foreign Key وتأمين البيانات المالية
-        $subscription = ActiveSubscription::where('driver_id', $trip->driver_id)
-            ->where('child_id', $childId)
+        $subscription = ActiveSubscription::forDriver($trip->driver_id)
+            ->forChild($childId)
             ->where('status', 'active')
             ->first();
 
@@ -138,8 +138,8 @@ class TripStopService
   public function verifyPickupQR($tripId, $childId, $qrCode, $driverLat, $driverLng): bool
   {
       // 1. جلب بيانات الاشتراك النشط من جدول active_subscriptions
-      $subscription = \App\Models\Shared\ActiveSubscription::where('child_id', $childId)
-          ->where('driver_id', \Illuminate\Support\Facades\Auth::user()->driver->id)
+      $subscription = \App\Models\Shared\ActiveSubscription::forChild($childId)
+          ->forDriver(\Illuminate\Support\Facades\Auth::user()->driver->id)
           ->where('status', 'active')
           ->first();
 
@@ -242,12 +242,12 @@ class TripStopService
     {
         $trip = Trip::findOrFail($tripId);
         
-        $subscription = ActiveSubscription::where('driver_id', $trip->driver_id)
-            ->where('child_id', $childId)
+        $subscription = ActiveSubscription::forDriver($trip->driver_id)
+            ->forChild($childId)
             ->where('status', 'active')
             ->first();
 
-        $subId = $subscription ? $subscription->id : (ActiveSubscription::where('child_id', $childId)->value('id') ?? 1);
+        $subId = $subscription ? $subscription->id : (ActiveSubscription::forChild($childId)->value('id') ?? 1);
         $pickupLat = $subscription ? ($subscription->pickup_lat ?? 32.89) : 32.89;
         $pickupLng = $subscription ? ($subscription->pickup_lng ?? 13.18) : 13.18;
 

@@ -6,6 +6,7 @@ use App\Models\Parent\Child;
 use App\Models\Driver\Driver;
 use App\Models\User;
 use App\Models\Parent\School;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -15,10 +16,8 @@ class ActiveSubscription extends Model
 
     protected $fillable = [
         'subscription_request_id',
-        'child_id',
-        'driver_id',
+        'request_child_id',
         'route_id',
-        'parent_id',
         'pickup_lat',
         'pickup_lng',
         'pickup_label',
@@ -51,13 +50,34 @@ class ActiveSubscription extends Model
     }
 
     /**
-     * طلب الاشتراك الأصلي — مصدر كل بيانات الاتفاق (المدة، السعر، الفترة، الاتجاه)
+     * طلب الاشتراك الأصلي — مصدر كل بيانات الاتفاق (المدة، السعر، الفترة، الاتجاه،
+     * driver_id، parent_id).
      */
     public function subscriptionRequest(): BelongsTo
     {
         return $this->belongsTo(SubscriptionRequest::class, 'subscription_request_id');
     }
 
+    /**
+     * صف الطفل داخل الطلب — مصدر child_id ومدرسته ومسافته وسعره.
+     */
+    public function requestChild(): BelongsTo
+    {
+        return $this->belongsTo(RequestChild::class, 'request_child_id');
+    }
+
+    public function route(): BelongsTo
+    {
+        return $this->belongsTo(Route::class, 'route_id');
+    }
+
+    /**
+     * ⚠️ child_id/driver_id/parent_id/school_id ما عادوش أعمدة فعلية — بس بما إن
+     * BelongsTo يبني استعلامه عبر $this->{$foreignKey} (يمر بالـaccessor)، إبقاء
+     * هذي العلاقات كما هي بالضبط (بدل hasOneThrough أو حذفها) يخلي كل ->with(['child'])/
+     * ->with(['driver'])/->with(['parent'])/->with(['school']) الموجودة بالكود القديم
+     * تشتغل صح بدون أي تعديل، طالما الـaccessors تحت موجودة.
+     */
     public function child(): BelongsTo
     {
         return $this->belongsTo(Child::class, 'child_id');
@@ -68,11 +88,6 @@ class ActiveSubscription extends Model
         return $this->belongsTo(Driver::class, 'driver_id');
     }
 
-    public function route(): BelongsTo
-    {
-        return $this->belongsTo(Route::class, 'route_id');
-    }
-
     public function parent(): BelongsTo
     {
         return $this->belongsTo(User::class, 'parent_id');
@@ -81,6 +96,61 @@ class ActiveSubscription extends Model
     public function school(): BelongsTo
     {
         return $this->belongsTo(School::class, 'school_id');
+    }
+
+    // ============================================================
+    // Accessors — تعويض عمود child_id/driver_id/parent_id/school_id المحذوفة.
+    // كل قراءة مباشرة ($sub->child_id) وكل eager-load (->with(['child'])) تمر من
+    // هنا تلقائياً لأن BelongsTo يستخدم getAttribute() لا القيمة الخام.
+    // ============================================================
+
+    public function getChildIdAttribute(): ?int
+    {
+        return $this->requestChild?->child_id;
+    }
+
+    public function getDriverIdAttribute(): ?int
+    {
+        return $this->subscriptionRequest?->driver_id;
+    }
+
+    public function getParentIdAttribute(): ?int
+    {
+        return $this->subscriptionRequest?->parent_id;
+    }
+
+    public function getSchoolIdAttribute(): ?int
+    {
+        return $this->requestChild?->school_id;
+    }
+
+    // ============================================================
+    // Scopes — بديل الاستعلام المباشر ::where('driver_id'|'child_id'|'parent_id', ...)
+    // ============================================================
+
+    public function scopeForDriver(Builder $query, int $driverId): Builder
+    {
+        return $query->whereHas('subscriptionRequest', fn (Builder $q) => $q->where('driver_id', $driverId));
+    }
+
+    public function scopeForParent(Builder $query, int $parentId): Builder
+    {
+        return $query->whereHas('subscriptionRequest', fn (Builder $q) => $q->where('parent_id', $parentId));
+    }
+
+    public function scopeForChild(Builder $query, int $childId): Builder
+    {
+        return $query->whereHas('requestChild', fn (Builder $q) => $q->where('child_id', $childId));
+    }
+
+    public function scopeForChildren(Builder $query, array $childIds): Builder
+    {
+        return $query->whereHas('requestChild', fn (Builder $q) => $q->whereIn('child_id', $childIds));
+    }
+
+    public function scopeExcludingChildren(Builder $query, array $childIds): Builder
+    {
+        return $query->whereDoesntHave('requestChild', fn (Builder $q) => $q->whereIn('child_id', $childIds));
     }
 
     /**

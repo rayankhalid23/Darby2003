@@ -18,6 +18,10 @@ class ActiveSubscribedChildResource extends JsonResource
             ? $this->resource->resolveState() 
             : ($this->resource instanceof \App\Models\Shared\ActiveSubscription ? $this->resource->resolveState() : ['state' => 'active', 'status' => 'active', 'state_label' => 'ساري ومفعل', 'status_text' => 'اشتراك نشط وساري', 'is_active' => true]);
 
+        $reqForSharedFields = $this->resource instanceof \App\Models\Shared\ActiveSubscription
+            ? $this->resource->subscriptionRequest
+            : $this->resource;
+
         return [
             'id'          => $this->id,
             'state'       => $resolvedState['state'],
@@ -37,25 +41,25 @@ class ActiveSubscribedChildResource extends JsonResource
             ],
 
             // تفاصيل الأطفال
-            'children' => $this->whenLoaded('children', function () {
-                return $this->children->map(function ($child) {
+            'children' => $this->whenLoaded('children', function () use ($reqForSharedFields) {
+                return $this->children->map(function ($child) use ($reqForSharedFields) {
                     $pivot = $child->pivot;
 
                     // الاعتماد على العلاقات المباشرة (Eager Loading) لتسريع الأداء وتجنب استعلامات N+1
-                    $homeAddr = $child->address; 
-                    $school   = $child->school;  
+                    $homeAddr = $child->address;
+                    $school   = $child->school;
 
                     return [
                         'id'      => $child->id,
                         'name'    => $child->full_name ?? $child->name,
                         'photo'   => $child->photo_url ? asset($child->photo_url) : null,
                         'details' => [
-                            'subscription_type'  => $pivot?->subscription_type,
-                            'trip_direction'     => $pivot?->trip_direction ?? $pivot?->direction ?? 'both',
+                            'subscription_type'  => $reqForSharedFields?->subscription_type,
+                            'trip_direction'     => $reqForSharedFields?->trip_direction ?? 'both',
                             'timing'             => $pivot?->timing ?? 'BOTH',
-                            'start_date'         => $pivot?->start_date,
-                            'end_date'           => $pivot?->end_date,
-                            'working_days_count' => (int) ($pivot?->working_days_count ?? 0),
+                            'start_date'         => $reqForSharedFields?->start_date,
+                            'end_date'           => $reqForSharedFields?->end_date,
+                            'working_days_count' => (int) ($reqForSharedFields?->working_days_count ?? 0),
                             'distance_km'        => (float) ($pivot?->distance_km ?? 0),
                             'trip_price'         => (float) ($pivot?->trip_price ?? 0),      // ✅ سعر الرحلة الواحدة
                             'price_per_child'    => (float) ($pivot?->price_per_child ?? 0), // الإجمالي الخاص بالطفل

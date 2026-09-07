@@ -58,8 +58,8 @@ class UpdateParentProfileRequest extends FormRequest
             // الرقم البديل: اختياري دائماً
             'alternative_phone' => ['nullable', 'string', 'min:7'],
 
-            // حالة الموثوقية: حقل خاص بجدول الـ parents تمت إضافته ليتماشى مع الـ Service
-            'is_trusted' => ['sometimes', 'boolean'],
+            // ملاحظة أمنية: أُزيل حقل is_trusted من مدخلات ولي الأمر لأنه صفة ثقة
+            // تُدار من الإدارة فقط، وكان السماح به يتيح لولي الأمر منح نفسه صفة "موثوق".
 
             // كلمة المرور: قابلة للتحديث الجزئي إذا أُرسلت فقط
             'password' => [

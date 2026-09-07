@@ -229,7 +229,7 @@ class EmergencyBreakdownService
         // فحص سعة المركبة النشطة مقارنة بالطلاب المسجلين
         $activeVehicle = $driver->vehicles->where('status', 'Active')->first() ?? $driver->vehicles->first();
         $capacity = (int) ($activeVehicle?->capacity_manual ?? $activeVehicle?->capacity ?? 10);
-        $currentSubsCount = ActiveSubscription::where('driver_id', $driver->id)
+        $currentSubsCount = ActiveSubscription::forDriver($driver->id)
             ->where('status', '!=', 'cancelled')
             ->count();
 
@@ -631,8 +631,8 @@ class EmergencyBreakdownService
             return 0.00;
         }
 
-        $subs = ActiveSubscription::where('driver_id', $trip->driver_id)
-            ->whereIn('child_id', $strandedChildIds)
+        $subs = ActiveSubscription::forDriver($trip->driver_id)
+            ->forChildren($strandedChildIds)
             ->with('subscriptionRequest')
             ->get();
 
@@ -644,7 +644,7 @@ class EmergencyBreakdownService
             $req = $sub->subscriptionRequest;
             if ($req && $req->total_price > 0 && $req->children_count > 0) {
                 // حصة الطفل من المشوار اليومي
-                $workingDays = max(1, (int) ($req->children->firstWhere('id', $sub->child_id)?->pivot?->working_days_count ?? 22));
+                $workingDays = max(1, (int) ($req->working_days_count ?? 22));
                 $childPrice = (float) ($req->children->firstWhere('id', $sub->child_id)?->pivot?->total_amount_after_discount ?? ($req->total_price / $req->children_count));
                 $singleTripPrice = round($childPrice / ($workingDays * 2), 2);
                 $totalFare += max(2.50, $singleTripPrice);

@@ -133,9 +133,18 @@ class TripTrackingService
     {
         $today = Carbon::today()->toDateString();
 
-        $pendingSubscriptions = ActiveSubscription::where('driver_id', $trip->driver_id)
-            ->whereNotExists(fn($q) => $q->select(DB::raw(1))->from('absence_logs')->whereColumn('child_id', 'active_subscriptions.child_id')->whereDate('absence_date', $today))
-            ->whereNotExists(fn($q) => $q->select(DB::raw(1))->from('trip_events')->whereColumn('child_id', 'active_subscriptions.child_id')->where('trip_id', $trip->id)->whereIn('action_type', ['picked_up', 'skipped']))
+        $pendingSubscriptions = ActiveSubscription::forDriver($trip->driver_id)
+            ->whereNotExists(fn($q) => $q->select(DB::raw(1))
+                ->from('absence_logs')
+                ->join('request_children', 'request_children.child_id', '=', 'absence_logs.child_id')
+                ->whereColumn('request_children.id', 'active_subscriptions.request_child_id')
+                ->whereDate('absence_logs.absence_date', $today))
+            ->whereNotExists(fn($q) => $q->select(DB::raw(1))
+                ->from('trip_events')
+                ->join('request_children', 'request_children.child_id', '=', 'trip_events.child_id')
+                ->whereColumn('request_children.id', 'active_subscriptions.request_child_id')
+                ->where('trip_events.trip_id', $trip->id)
+                ->whereIn('trip_events.action_type', ['picked_up', 'skipped']))
             ->get();
 
         foreach ($pendingSubscriptions as $sub) {

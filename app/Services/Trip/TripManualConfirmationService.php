@@ -39,7 +39,7 @@ class TripManualConfirmationService
             throw new Exception('هذا الحساب غير مسجل كسائق في النظام.');
         }
 
-        return ActiveSubscription::where('driver_id', $driver->id)
+        return ActiveSubscription::forDriver($driver->id)
             ->whereIn('status', ['active', 'completed'])
             ->with(['child:id,full_name,photo_url,parent_id', 'parent:id,full_name,phone_number'])
             ->get()
@@ -160,8 +160,8 @@ class TripManualConfirmationService
                 continue;
             }
 
-            $sub = ActiveSubscription::where('driver_id', $driver->id)
-                ->where('child_id', $childId)
+            $sub = ActiveSubscription::forDriver($driver->id)
+                ->forChild($childId)
                 ->whereIn('status', ['active', 'completed'])
                 ->first();
 

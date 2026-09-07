@@ -50,24 +50,21 @@ class DashboardController extends Controller
 
                 // 4. إجمالي الأطفال المشتركون في رحلات (الذين لديهم اشتراكات نشطة)
                 $subscribedChildren = ActiveSubscription::where('status', 'active')
-                    ->whereNotNull('child_id')
-                    ->distinct('child_id')
-                    ->count('child_id');
+                    ->whereHas('requestChild')
+                    ->with('requestChild')
+                    ->get()
+                    ->pluck('child_id')
+                    ->unique()
+                    ->count();
 
                 // 5. إجمالي الاشتراكات اليومية النشطة
                 $dailySubscriptions = ActiveSubscription::where('status', 'active')
-                    ->where(function ($query) {
-                        $query->whereHas('subscriptionRequest.children', fn($q) => $q->whereIn('request_children.subscription_type', ['single_day', 'daily']))
-                              ->orWhereHas('child.logistics', fn($q) => $q->whereIn('subscription_type', ['single_day', 'daily']));
-                    })
+                    ->whereHas('subscriptionRequest', fn($q) => $q->whereIn('subscription_type', ['single_day', 'daily']))
                     ->count();
 
                 // 6. إجمالي الاشتراكات متعددة الأيام النشطة
                 $monthlySubscriptions = ActiveSubscription::where('status', 'active')
-                    ->where(function ($query) {
-                        $query->whereHas('subscriptionRequest.children', fn($q) => $q->whereIn('request_children.subscription_type', ['multi_day', 'monthly']))
-                              ->orWhereHas('child.logistics', fn($q) => $q->whereIn('subscription_type', ['multi_day', 'monthly']));
-                    })
+                    ->whereHas('subscriptionRequest', fn($q) => $q->whereIn('subscription_type', ['multi_day', 'monthly']))
                     ->count();
 
                 // 7. إجمالي السائقين الذين عندهم رحلات جارية حالياً

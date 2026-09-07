@@ -31,8 +31,16 @@ class UpdateDriverPreferencesRequest extends FormRequest
             'subscription_type' => ['sometimes', 'string', Rule::in(SubscriptionDuration::driverValues())],
             'school_stages'     => ['sometimes', 'array', 'min:1'],
             'school_stages.*'   => ['required', 'string', Rule::in(array_column(SchoolStage::cases(), 'value'))],
-            'zones'             => ['sometimes', 'array', 'min:1'],
+            'zones'             => ['sometimes', 'array', 'min:1', 'max:5'],
             'zones.*'           => ['required', 'integer', 'exists:zones,id'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'zones.max' => 'عذراً، الحد الأقصى لعدد المناطق المختارة هو 5 مناطق.',
+            'zones.min' => 'يجب اختيار منطقة واحدة على الأقل في حال إرسال المناطق.',
         ];
     }
 

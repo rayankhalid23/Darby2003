@@ -7,6 +7,7 @@ use App\Http\Requests\Api\Parent\StoreComplaintRequest;
 use App\Http\Requests\Api\Parent\UpdateComplaintRequest;
 use App\Http\Resources\Api\Parent\ComplaintResource;
 use App\Services\Parent\ComplaintService;
+use App\Models\Shared\ActiveSubscription;
 use Illuminate\Http\JsonResponse;
 
 use Illuminate\Support\Facades\Log;
@@ -206,9 +207,8 @@ public function update(UpdateComplaintRequest $request, int $id): JsonResponse
                 // ج. التحقق من وجود اشتراك يربط الطرفين
                 $subscription = null;
                 if ($parentId && $realDriverId) {
-                    $subscription = DB::table('active_subscriptions')
-                        ->where('parent_id', $parentId)
-                        ->where('driver_id', $realDriverId)
+                    $subscription = ActiveSubscription::forParent($parentId)
+                        ->forDriver($realDriverId)
                         ->first();
                 }
 

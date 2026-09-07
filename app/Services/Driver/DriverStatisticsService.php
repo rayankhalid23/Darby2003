@@ -68,7 +68,7 @@ class DriverStatisticsService
             ->join('requests', 'request_children.request_id', '=', 'requests.id')
             ->where('requests.driver_id', $driver->id)
             ->whereIn('requests.status', ['accepted', 'completed', 'active'])
-            ->whereBetween('request_children.start_date', [$currentMonthStart->toDateString(), $currentMonthEnd->toDateString()])
+            ->whereBetween('requests.start_date', [$currentMonthStart->toDateString(), $currentMonthEnd->toDateString()])
             ->sum('request_children.driver_net_price');
 
         $currentMonthNetEarnings = round(max(
@@ -92,7 +92,7 @@ class DriverStatisticsService
             ->join('requests', 'request_children.request_id', '=', 'requests.id')
             ->where('requests.driver_id', $driver->id)
             ->whereIn('requests.status', ['accepted', 'completed', 'active'])
-            ->whereBetween('request_children.start_date', [$previousMonthStart->toDateString(), $previousMonthEnd->toDateString()])
+            ->whereBetween('requests.start_date', [$previousMonthStart->toDateString(), $previousMonthEnd->toDateString()])
             ->sum('request_children.driver_net_price');
 
         $previousMonthNetEarnings = round(max(
@@ -114,7 +114,7 @@ class DriverStatisticsService
             ->join('requests', 'request_children.request_id', '=', 'requests.id')
             ->where('requests.driver_id', $driver->id)
             ->whereIn('requests.status', ['accepted', 'completed', 'active'])
-            ->where('request_children.end_date', '<', Carbon::today()->toDateString())
+            ->where('requests.end_date', '<', Carbon::today()->toDateString())
             ->sum('request_children.driver_net_price');
 
         $totalNetEarnings = round(max(
@@ -140,7 +140,7 @@ class DriverStatisticsService
             ->join('requests', 'request_children.request_id', '=', 'requests.id')
             ->where('requests.driver_id', $driver->id)
             ->whereIn('requests.status', ['accepted', 'active'])
-            ->where('request_children.end_date', '>=', Carbon::today()->toDateString())
+            ->where('requests.end_date', '>=', Carbon::today()->toDateString())
             ->sum('request_children.driver_net_price');
 
         $activeEscrowHoldsDinar = (float) TripEscrowHold::where('driver_id', $driver->id)
@@ -182,17 +182,20 @@ class DriverStatisticsService
     public function getSubscriptionAndPassengerStats(Driver $driver): array
     {
         // 1. عدد الطلاب المشتركين النشطين
-        $activeStudentsFromActiveSubs = ActiveSubscription::where('driver_id', $driver->id)
+        $activeStudentsFromActiveSubs = ActiveSubscription::forDriver($driver->id)
             ->where('status', 'active')
-            ->whereNotNull('child_id')
-            ->distinct('child_id')
-            ->count('child_id');
+            ->whereHas('requestChild')
+            ->with('requestChild')
+            ->get()
+            ->pluck('child_id')
+            ->unique()
+            ->count();
 
         $activeStudentsFromRequests = DB::table('request_children')
             ->join('requests', 'request_children.request_id', '=', 'requests.id')
             ->where('requests.driver_id', $driver->id)
             ->whereIn('requests.status', ['accepted', 'active'])
-            ->where('request_children.end_date', '>=', Carbon::today()->toDateString())
+            ->where('requests.end_date', '>=', Carbon::today()->toDateString())
             ->distinct('request_children.child_id')
             ->count('request_children.child_id');
 
@@ -215,12 +218,7 @@ class DriverStatisticsService
                 $q->where('status', 'completed')
                   ->orWhere(function ($subQ) {
                       $subQ->whereIn('status', ['accepted', 'active'])
-                           ->whereExists(function ($childQ) {
-                               $childQ->select(DB::raw(1))
-                                      ->from('request_children')
-                                      ->whereColumn('request_children.request_id', 'requests.id')
-                                      ->where('request_children.end_date', '<', Carbon::today()->toDateString());
-                           });
+                           ->where('end_date', '<', Carbon::today()->toDateString());
                   });
             })
             ->count();
@@ -354,14 +352,14 @@ class DriverStatisticsService
             ->leftJoin('schools', 'children.school_id', '=', 'schools.id')
             ->where('requests.driver_id', $driver->id)
             ->whereIn('requests.status', ['accepted', 'active'])
-            ->whereBetween('request_children.end_date', [$today->toDateString(), $fiveDaysFromNow->toDateString()])
+            ->whereBetween('requests.end_date', [$today->toDateString(), $fiveDaysFromNow->toDateString()])
             ->select([
                 'requests.id as subscription_id',
                 'children.id as child_id',
                 'children.full_name as child_full_name',
                 'schools.name as school_name',
-                'request_children.end_date',
-                'request_children.trip_direction',
+                'requests.end_date',
+                'requests.trip_direction',
             ])
             ->get();
 

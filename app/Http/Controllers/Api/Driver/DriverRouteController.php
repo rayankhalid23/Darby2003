@@ -49,7 +49,7 @@ class DriverRouteController extends Controller
                 return $this->errorResponse('بيانات السائق غير مقترنة بالحساب.', 'DRIVER_NOT_FOUND', 403);
             }
 
-            $pendingSubs = ActiveSubscription::where('driver_id', $driver->id)
+            $pendingSubs = ActiveSubscription::forDriver($driver->id)
                 ->whereNull('route_id')
                 ->where('status', '!=', 'cancelled')
                 ->with(['child', 'school', 'subscriptionRequest'])
@@ -341,7 +341,7 @@ class DriverRouteController extends Controller
             $driver = $user?->driver;
 
             $sub = ActiveSubscription::where('id', $subscriptionId)
-                ->where('driver_id', $driver->id)
+                ->forDriver($driver->id)
                 ->with('subscriptionRequest')          // ← مطلوب لقراءة timing في الخدمة
                 ->firstOrFail();
 
@@ -378,7 +378,7 @@ class DriverRouteController extends Controller
             $driver = $user?->driver;
 
             $sub = ActiveSubscription::where('id', $subscriptionId)
-                ->where('driver_id', $driver->id)
+                ->forDriver($driver->id)
                 ->firstOrFail();
 
             $route = RouteModel::where('id', $request->route_id)
@@ -431,7 +431,7 @@ class DriverRouteController extends Controller
             $driver = $user?->driver;
 
             $sub = ActiveSubscription::where('id', $subscriptionId)
-                ->where('driver_id', $driver->id)
+                ->forDriver($driver->id)
                 ->firstOrFail();
 
             $oldRoute = $sub->route;
@@ -490,7 +490,7 @@ class DriverRouteController extends Controller
 
             $sub = ActiveSubscription::where('id', $subscriptionId)
                 ->where('route_id', $routeId)
-                ->where('driver_id', $driver->id)
+                ->forDriver($driver->id)
                 ->firstOrFail();
 
             $sub->route_id = null;

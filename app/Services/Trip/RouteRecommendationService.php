@@ -148,7 +148,7 @@ class RouteRecommendationService
 
         // 3. لا يمكن إضافة طفل إلى مسارين نفس الفترة (صباحيين أو مسائيين) في نفس الوقت
         $subTripType = strtolower($route->route_type);
-        $alreadyAssignedOtherRoute = ActiveSubscription::where('child_id', $sub->child_id)
+        $alreadyAssignedOtherRoute = ActiveSubscription::forChild($sub->child_id)
             ->where('id', '!=', $sub->id)
             ->whereNotNull('route_id')
             ->whereHas('route', function ($q) use ($subTripType) {

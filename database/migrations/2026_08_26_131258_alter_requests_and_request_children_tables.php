@@ -12,11 +12,23 @@ return new class extends Migration
     public function up(): void
     {
         // 1. إزالة المفتاح الأجنبي والعمودين من جدول requests
-        Schema::table('requests', function (Blueprint $table) {
-            // حذف المفتاح الأجنبي أولاً لتفادي أخطاء MySQL Foreign Key Constraint
-            $table->dropForeign(['school_id']);
-            $table->dropColumn(['school_id', 'timing']);
-        });
+        try {
+            Schema::table('requests', function (Blueprint $table) {
+                if (Schema::hasColumn('requests', 'school_id')) {
+                    $table->dropForeign(['school_id']);
+                }
+            });
+        } catch (\Exception $e) {}
+        try {
+            Schema::table('requests', function (Blueprint $table) {
+                if (Schema::hasColumn('requests', 'school_id')) {
+                    $table->dropColumn('school_id');
+                }
+                if (Schema::hasColumn('requests', 'timing')) {
+                    $table->dropColumn('timing');
+                }
+            });
+        } catch (\Exception $e) {}
 
         // 2. إضافة عمود timing إلى جدول request_children (أو الجدول المسمى لديك)
         // ملاحظة: تأكد من اسم الجدول في قاعدة البيانات إذا كان request_children أو غيره

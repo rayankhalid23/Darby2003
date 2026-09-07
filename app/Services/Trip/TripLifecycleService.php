@@ -171,7 +171,7 @@ class TripLifecycleService
         ];
 
         // جلب الاشتراكات الفعالة المقترنة بالسائق مرتبة هندسياً حسب حقل الترتيب
-        $subscriptions = ActiveSubscription::where('driver_id', $trip->driver_id)
+        $subscriptions = ActiveSubscription::forDriver($trip->driver_id)
             ->orderBy('sort_order', 'asc')
             ->get();
 
@@ -374,6 +374,8 @@ class TripLifecycleService
                         $routeIds = $trips->pluck('route_id')->filter()->unique();
                         $childIds = ActiveSubscription::whereIn('route_id', $routeIds)
                             ->where('status', 'active')
+                            ->with('requestChild')
+                            ->get()
                             ->pluck('child_id')
                             ->unique();
                     }
@@ -423,7 +425,9 @@ class TripLifecycleService
         });
 
         // جلب جميع أولياء الأمور (Users) المرتبطين باشتراكات هذا السائق لإشعارهم
-        $parentUserIds = ActiveSubscription::where('driver_id', $driverId)
+        $parentUserIds = ActiveSubscription::forDriver($driverId)
+            ->with('subscriptionRequest')
+            ->get()
             ->pluck('parent_id')
             ->unique();
 
@@ -519,7 +523,7 @@ class TripLifecycleService
             Cache::forget("driver_last_loc_{$driverId}");
             
             // جلب الأطفال لتنظيف كاش العدادات الخاص بهم
-            $childIds = ActiveSubscription::where('driver_id', $driverId)->pluck('child_id');
+            $childIds = ActiveSubscription::forDriver($driverId)->with('requestChild')->get()->pluck('child_id');
             foreach ($childIds as $childId) {
                 Cache::forget("trip_waiting_{$trip->id}_{$childId}");
                 Cache::forget("proximity_alert_sent_{$trip->id}_{$childId}");
@@ -527,7 +531,9 @@ class TripLifecycleService
             }
 
             // 3. إشعار أولياء الأمور المشتركين في هذه الرحلة بنهاية الرحلة والوصول الآمن للوجهة
-            $parentUserIds = ActiveSubscription::where('driver_id', $driverId)
+            $parentUserIds = ActiveSubscription::forDriver($driverId)
+                ->with('subscriptionRequest')
+                ->get()
                 ->pluck('parent_id')
                 ->unique();
 
@@ -588,8 +594,8 @@ class TripLifecycleService
             ->unique();
 
         if ($childIds->isNotEmpty()) {
-            $ids = \App\Models\Shared\ActiveSubscription::where('driver_id', $trip->driver_id)
-                ->whereIn('child_id', $childIds)
+            $ids = \App\Models\Shared\ActiveSubscription::forDriver($trip->driver_id)
+                ->forChildren($childIds->all())
                 ->pluck('subscription_request_id')
                 ->filter()
                 ->unique()

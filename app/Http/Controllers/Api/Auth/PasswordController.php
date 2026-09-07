@@ -129,8 +129,16 @@ class PasswordController extends Controller
 
             Log::info("✅ [Verification Success] Email: {$request->email} has passed OTP check successfully.");
 
+            // منح إذن مؤقت (15 دقيقة) لتعيين كلمة مرور جديدة، لإغلاق ثغرة تجاوز الـ OTP.
+            // بدون هذا الإذن كان بإمكان أي شخص استدعاء /reset مباشرة دون التحقق من الرمز.
+            \Illuminate\Support\Facades\Cache::put(
+                'password_reset_verified:' . strtolower($request->email),
+                true,
+                now()->addMinutes(15)
+            );
+
             return response()->json([
-                'status'  => true, 
+                'status'  => true,
                 'message' => 'تم التحقق من رمز التأكيد بنجاح، يمكنك الآن تعيين كلمة مرور جديدة.'
             ], 200);
 
@@ -165,8 +173,20 @@ class PasswordController extends Controller
         Log::info("🔄 [Reset Password Attempt] Email: {$request->email}");
 
         try {
+            // إلزام التحقق المسبق من الـ OTP: يجب أن يكون هناك إذن مؤقت صالح من verify-otp.
+            // pull تجعل الإذن أحادي الاستخدام (يُحذف فور استعماله) لمنع إعادة الاستخدام.
+            $resetKey = 'password_reset_verified:' . strtolower($request->email);
+            if (! \Illuminate\Support\Facades\Cache::pull($resetKey)) {
+                Log::warning("⛔ [Reset Password Blocked] No verified OTP for email: {$request->email}");
+                return response()->json([
+                    'status'     => false,
+                    'error_code' => 'OTP_NOT_VERIFIED',
+                    'message'    => 'يرجى التحقق من رمز OTP أولاً قبل تعيين كلمة مرور جديدة.'
+                ], 403);
+            }
+
             $user = User::where('email', $request->email)->first();
-            
+
             if (!$user) {
                 Log::warning("⚠️ [Reset Password Failed] User not found for email: {$request->email}");
                 return response()->json([

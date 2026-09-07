@@ -37,12 +37,32 @@ class SubscriptionRequestService
     }
     public function createRequest(array $data, $user): SubscriptionRequest
     {
-        // التحقق من عدم وجود تعارض مع اشتراكات نشطة سارية للأطفال ما لم يكن السائق غائباً
+        // ─── استخراج الحقول المشتركة على مستوى الطلب كله ───────────────────────
+        $sharedSubscriptionType = $data['subscription_type'] ?? null;
+        $sharedTripDirection    = $data['trip_direction']    ?? 'both';
+        $sharedStartDate        = $data['start_date']        ?? null;
+        $sharedEndDate          = $data['end_date']          ?? $sharedStartDate;
+        $sharedHomeAddress      = $data['home_address']      ?? [];
+        // الفترة اختيارية على مستوى الطلب؛ غيابها يعني «افترض تفضيل كل طفل المسجَّل».
+        $sharedTiming           = $data['timing']            ?? null;
+
+        // التحقق من عدم وجود تعارض مع اشتراكات نشطة سارية للأطفال
+        // نُمرر الحقول المشتركة داخل كل طفل مؤقتاً لاستخدامها في دالة التحقق
         if (isset($data['children']) && is_array($data['children'])) {
-            $this->validateChildActiveSubscriptionConflicts($data['children']);
+            $childrenWithDates = array_map(function ($child) use ($sharedStartDate, $sharedEndDate) {
+                return array_merge($child, [
+                    'start_date' => $sharedStartDate,
+                    'end_date'   => $sharedEndDate,
+                ]);
+            }, $data['children']);
+            $this->validateChildActiveSubscriptionConflicts($childrenWithDates);
         }
 
-        $subscriptionRequest = DB::transaction(function () use ($data, $user) {
+        $subscriptionRequest = DB::transaction(function () use (
+            $data, $user,
+            $sharedSubscriptionType, $sharedTripDirection,
+            $sharedStartDate, $sharedEndDate, $sharedHomeAddress, $sharedTiming
+        ) {
             $parentId = null;
 
             if (is_object($user)) {
@@ -59,45 +79,67 @@ class SubscriptionRequestService
                 throw new \InvalidArgumentException("حساب ولي الأمر (Parent Profile) غير مكتمل أو غير موجود لهذا المستخدم.");
             }
 
-            // 0. تحميل بيانات الأطفال مع منازلهم ومدارسهم مرة واحدة (تفادي N+1)
-            //    تُستخدم لتعبئة لقطة الموقع في request_children تلقائياً.
+            // 0. تحميل بيانات الأطفال مع مدارسهم (المنزل أصبح مشتركاً من $sharedHomeAddress)
             $childModels = Child::with(['address', 'school'])
                 ->whereIn('id', collect($data['children'])->pluck('child_id')->filter()->all())
                 ->get()
                 ->keyBy('id');
 
-            // 1. جلب إعدادات التسعير من قاعدة البيانات
+            // 1. جلب إعدادات التسعير
             $pricingSetting = PricingSetting::first();
 
-            // تحديد نسبة الخصم بناءً على إجمالي عدد الأطفال بالطلب
-            $childrenCount = count($data['children']);
+            $childrenCount   = count($data['children']);
             $discountPercent = $this->pricingCalculator
                 ->discountPercentForChildrenCount($childrenCount, $pricingSetting);
 
-            // ⚠️ السعر يُحسب على الخادم ولا يُقبل من العميل. كان الكود يأخذ
-            // `price_per_child ?? trip_price` كما أرسلهما التطبيق ويحجز الناتج من
-            // المحفظة مباشرة. والمفتاحان يحملان معنيين مختلفين (إجمالي الاشتراك
-            // مقابل سعر اليوم الواحد)، فإرسال `trip_price` وحده كان يجعل إجمالي
-            // اشتراك الشهر مساوياً لسعر يوم واحد — تسعير أقل بعشرات الأضعاف يقرّره
-            // العميل. الآن يُحسب من نفس معادلة شاشة البحث عن سائق، فيرى ولي الأمر
-            // عند الطلب نفس الرقم الذي رآه عند اختيار السائق.
             $driverModel = Driver::with('vehicles')->find($data['driver_id']);
 
-            $totalOrderRawPrice = 0.0;
-            $totalOrderDiscount = 0.0;
+            if (!$driverModel) {
+                throw new Exception('السائق المحدد غير موجود.', 422);
+            }
+
+            $totalOrderRawPrice            = 0.0;
+            $totalOrderDiscount            = 0.0;
             $totalOrderAmountAfterDiscount = 0.0;
-            $childrenPivotData = [];
+            $childrenPivotData             = [];
+            $seatSpecs                     = [];
+            $sharedWorkingDaysCount        = null;
 
             foreach ($data['children'] as $child) {
-                $childModel = $childModels->get((int) $child['child_id']);
+                $childId    = (int) $child['child_id'];
+                $childModel = $childModels->get($childId);
 
+                // ─── فترة هذا الطفل ────────────────────────────────────────
+                // ⚠️ كانت مثبَّتة على 'BOTH' لكل طلب، فكان طفلٌ يركب صباحاً فقط
+                // يحجز مقعداً في الفترة المسائية أيضاً — أي ضعف استهلاك طاقة
+                // السائق وإغلاق رحلات لا علاقة له بها. المصدر الصحيح هو تفضيله
+                // المسجَّل، وما يرسله ولي الأمر صراحةً يعلو عليه.
+                $childTiming = $sharedTiming
+                    ?? \App\Models\Driver\DriverSeatSlot::timingFromPreferredSlot($childModel?->preferred_time_slot);
+
+                if (!$childTiming) {
+                    $childName = $childModel?->full_name ?? "#{$childId}";
+                    throw new Exception(
+                        "تعذّر تحديد فترة الاشتراك للطفل [{$childName}]. يرجى تحديد الفترة (صباحي/مسائي/كلاهما) في بياناته أو في الطلب.",
+                        422
+                    );
+                }
+
+                $seatSpecs[] = [
+                    'timing'     => $childTiming,
+                    'direction'  => $sharedTripDirection,
+                    'start_date' => Carbon::parse($sharedStartDate)->toDateString(),
+                    'end_date'   => Carbon::parse($sharedEndDate ?: $sharedStartDate)->toDateString(),
+                ];
+
+                // ─── حساب السعر باستخدام الحقول المشتركة ───────────────────
                 $pricing = $this->pricingCalculator->calculateForChild(
                     child:            $childModel,
                     driver:           $driverModel,
-                    subscriptionType: $child['subscription_type'],
-                    direction:        $child['trip_direction'] ?? $child['direction'] ?? 'both',
-                    startDate:        $child['start_date'],
-                    endDate:          $child['end_date'] ?? $child['start_date'],
+                    subscriptionType: $sharedSubscriptionType,
+                    direction:        $sharedTripDirection,
+                    startDate:        $sharedStartDate,
+                    endDate:          $sharedEndDate,
                     distanceKm:       isset($child['distance_km']) ? (float) $child['distance_km'] : null,
                     discountPercent:  $discountPercent,
                     settings:         $pricingSetting,
@@ -106,18 +148,17 @@ class SubscriptionRequestService
                 $totalOrderRawPrice            += $pricing['raw_total'];
                 $totalOrderDiscount            += $pricing['discount_amount'];
                 $totalOrderAmountAfterDiscount += $pricing['total_after_discount'];
+                $sharedWorkingDaysCount       ??= $pricing['working_days'];
 
-                // لقطة اسم وإحداثيات المنزل والمدرسة وقت إنشاء الطلب
-                $locationSnapshot = $this->resolveChildLocationSnapshot($child, $childModel);
+                // لقطة مدرسة الطفل فقط — عنوان المنزل مشترك على مستوى الطلب
+                $schoolSnapshot = $this->resolveChildSchoolSnapshot($child, $childModel);
 
-                $childrenPivotData[$child['child_id']] = [
-                    ...$locationSnapshot,
-                    'subscription_type'           => $child['subscription_type'],
-                    'trip_direction'              => $child['trip_direction'] ?? $child['direction'] ?? 'both',
-                    'timing'                      => $child['timing'] ?? 'BOTH',
-                    'start_date'                  => $child['start_date'],
-                    'end_date'                    => $child['end_date'] ?? $child['start_date'],
-                    'working_days_count'          => $pricing['working_days'],
+                $childrenPivotData[$childId] = [
+                    ...$schoolSnapshot,
+                    // الحقول المشتركة (subscription_type/trip_direction/start_date/end_date/home_*)
+                    // موجودة فقط على مستوى الطلب requests الآن — تُقرأ من هناك لا من هذا الـpivot.
+                    'timing'                      => $childTiming,
+                    // التسعير
                     'distance_km'                 => $pricing['distance_km'],
                     'trip_price'                  => $pricing['trip_price_after_discount'],
                     'price_per_child'             => $pricing['raw_total'],
@@ -133,15 +174,23 @@ class SubscriptionRequestService
             $totalOrderDiscount            = round($totalOrderDiscount, 2);
             $totalOrderAmountAfterDiscount = round($totalOrderAmountAfterDiscount, 2);
 
-            // فحص الرصيد لكل أنواع الاشتراكات (لا اليومي فقط) ليتطابق مع الحجز عند القبول.
-            // ⚠️ بدون ذلك يستطيع ولي الأمر إرسال طلب شهري لا يملك قيمته، فيفشل الحجز لاحقاً
-            // في وجه السائق لحظة القبول برسالة لا علاقة له بها.
+            // ─── جدوى الطلب تُفحص قبل لمس المال ────────────────────────────
+            // ⚠️ كان الخصم يسبق كل فحص للمقاعد والفترات: يُخصم من ولي الأمر ثم
+            // يفشل الطلب عند القبول لأن السائق لا يعمل في الفترة أو لا مقعد لديه،
+            // فيدفع مقابل اشتراك مستحيل من لحظة إنشائه.
+            foreach (array_unique(array_column($seatSpecs, 'timing')) as $timingToCheck) {
+                $this->validateDriverShiftCompatibility($driverModel, $timingToCheck, $sharedTripDirection);
+            }
+
+            $this->assertSeatCellsAvailable($driverModel, $this->buildSeatCells($seatSpecs));
+
+            // فحص رصيد المحفظة قبل إنشاء الطلب
             $parentModel = ParentModel::with('wallet')->find($parentId);
             if ($totalOrderAmountAfterDiscount > 0) {
                 $this->validateAndDeductWalletBalance($parentModel, $totalOrderAmountAfterDiscount);
             }
 
-            // 2. إنشاء الطلب الرئيسي
+            // 2. إنشاء الطلب الرئيسي مع الحقول المشتركة
             $subscriptionRequest = SubscriptionRequest::create([
                 'parent_id'                   => $parentId,
                 'driver_id'                   => $data['driver_id'],
@@ -150,6 +199,15 @@ class SubscriptionRequestService
                 'discount_amount'             => $totalOrderDiscount,
                 'total_amount_after_discount' => $totalOrderAmountAfterDiscount,
                 'notes'                       => $data['notes'] ?? null,
+                // ── الحقول المشتركة الجديدة ──────────────────────────────
+                'subscription_type'           => $sharedSubscriptionType,
+                'trip_direction'              => $sharedTripDirection,
+                'start_date'                  => $sharedStartDate,
+                'end_date'                    => $sharedEndDate,
+                'working_days_count'          => $sharedWorkingDaysCount,
+                'home_label'                  => $sharedHomeAddress['label'] ?? null,
+                'home_lat'                    => isset($sharedHomeAddress['lat']) ? (float) $sharedHomeAddress['lat'] : null,
+                'home_lng'                    => isset($sharedHomeAddress['lng']) ? (float) $sharedHomeAddress['lng'] : null,
             ]);
 
             // 3. ربط الأطفال بجدول الـ Pivot
@@ -182,14 +240,7 @@ class SubscriptionRequestService
 
     /**
      * تجهيز لقطة (Snapshot) لاسم وإحداثيات منزل الطفل ومدرسته لتُحفظ في request_children.
-     *
-     * أولوية المصادر:
-     *   1. ما أرسله الفرونت صراحة مع الطفل (home_lat / school_label ... إلخ) — لطلب من عنوان مختلف.
-     *   2. التعبئة التلقائية من بيانات الطفل المربوطة: children.address_id و children.school_id.
-     *   3. null إن لم يتوفر أي مصدر (الأعمدة nullable ولا تُعطِّل إنشاء الطلب).
-     *
-     * الهدف تجميد الموقع لحظة الاشتراك: تغيير ولي الأمر لعنوانه أو مدرسة طفله لاحقاً
-     * يجب ألا يُعيد كتابة العنوان المعروض في طلب قديم حُسبت مسافته وسعره على العنوان السابق.
+     * (تُستخدم في الطلبات القديمة فقط — الطلبات الجديدة تستخدم resolveChildSchoolSnapshot)
      *
      * @param  array  $childInput  عنصر الطفل كما ورد في payload الطلب
      * @param  \App\Models\Parent\Child|null  $childModel  الطفل مع علاقتَي address و school
@@ -222,6 +273,40 @@ class SubscriptionRequestService
             'school_lng'   => $toCoordinate($pick(['school_lng', 'dropoff_lng'], $school?->lng)),
         ];
     }
+
+    /**
+     * تجهيز لقطة (Snapshot) لاسم وإحداثيات مدرسة الطفل فقط لتُحفظ في request_children.
+     *
+     * الفرق عن resolveChildLocationSnapshot: عنوان المنزل أصبح مشتركاً على مستوى الطلب
+     * كله (جدول requests) وليس لكل طفل على حدة، لذا هذه الدالة تعيد مدرسة الطفل فحسب.
+     *
+     * @param  array  $childInput  عنصر الطفل كما ورد في payload الطلب
+     * @param  \App\Models\Parent\Child|null  $childModel  الطفل مع علاقة school
+     * @return array<string, mixed>
+     */
+    private function resolveChildSchoolSnapshot(array $childInput, ?Child $childModel): array
+    {
+        $school = $childModel?->school;
+
+        $pick = function (array $keys, $fallback) use ($childInput) {
+            foreach ($keys as $key) {
+                $value = $childInput[$key] ?? null;
+                if ($value !== null && $value !== '') {
+                    return $value;
+                }
+            }
+            return $fallback;
+        };
+
+        $toCoordinate = fn ($value) => is_numeric($value) ? (float) $value : null;
+
+        return [
+            'school_label' => $pick(['school_label', 'school_name', 'dropoff_label'], $school?->name),
+            'school_lat'   => $toCoordinate($pick(['school_lat', 'dropoff_lat'], $school?->lat)),
+            'school_lng'   => $toCoordinate($pick(['school_lng', 'dropoff_lng'], $school?->lng)),
+        ];
+    }
+
 
     /**
      * حساب عدد أيام العمل الفعلية (استثناء الجمعة والسبت)
@@ -305,7 +390,7 @@ class SubscriptionRequestService
             }
 
             // البحث عن أي اشتراكات نشطة سارية لهذا الطفل
-            $activeSubs = ActiveSubscription::where('child_id', $childId)
+            $activeSubs = ActiveSubscription::forChild($childId)
                 ->where('status', 'active')
                 ->with(['subscriptionRequest.children', 'driver.user', 'child'])
                 ->get();
@@ -387,35 +472,12 @@ class SubscriptionRequestService
     }
 
     // ============================================================
-    // تحقق الفلتر 2: توفر المقاعد لكل slot مطلوبة
-    // ============================================================
-
-    private function validateSeatAvailability(Driver $driver, string $timing, string $direction, int $childrenCount): void
-    {
-        $requiredSlots = \App\Models\Driver\DriverSeatSlot::resolveSlots($timing, $direction);
-        $slotLabels    = \App\Models\Driver\DriverSeatSlot::slotLabels();
-
-        $driver->loadMissing('seatSlots');
-
-        foreach ($requiredSlots as $slot) {
-            $seatSlot  = $driver->seatSlots->firstWhere('slot', $slot);
-            $available = $seatSlot ? $seatSlot->available_seats : 0;
-
-            if ($available < $childrenCount) {
-                throw new Exception(
-                    "لا توجد مقاعد كافية في فترة [{$slotLabels[$slot]}]. المتاح: {$available} مقعد، المطلوب: {$childrenCount}."
-                );
-            }
-        }
-    }
-
-    // ============================================================
-    // تحقق المقاعد مع الوعي الزمني (يحل: التعارض المستقبلي + الأيام الجزئية + اللا-تداخل)
+    // تحقق المقاعد مع الوعي الزمني
     // ============================================================
 
     /**
-     * يتحقق من أن عدد المقاعد المتاحة يكفي في كل يوم عمل ضمن فترة الاشتراك.
-     * يُستخدم عند القبول والفحص الدوري — أدق من الفحص اللحظي.
+     * يتحقق من توفر المقاعد عبر كل الخانات (slot × date) في فترة الاشتراك.
+     * مقبول ⟺ minAvailable ≥ childrenCount
      */
     private function validateSeatAvailabilityForPeriod(
         Driver $driver,
@@ -427,84 +489,218 @@ class SubscriptionRequestService
     ): void {
         $requiredSlots = \App\Models\Driver\DriverSeatSlot::resolveSlots($timing, $direction);
         $slotLabels    = \App\Models\Driver\DriverSeatSlot::slotLabels();
-        $driver->loadMissing('seatSlots');
 
-        foreach ($requiredSlots as $slot) {
-            $seatSlot         = $driver->seatSlots->firstWhere('slot', $slot);
-            $slotCapacity     = $seatSlot?->total_seats ?? ($driver->vehicle?->capacity_manual ?? 0);
-            $slotAvailableNow = $seatSlot ? $seatSlot->available_seats : $slotCapacity;
+        if (empty($requiredSlots)) {
+            return;
+        }
 
-            $peak            = $this->computeSlotPeakConcurrency($driver->id, $slot, $startDate, $endDate);
-            $availableByPeak = max(0, $slotCapacity - $peak);
+        $capacity = (int) ($driver->vehicle?->capacity_manual ?? $driver->vehicles?->where('status','Active')->first()?->capacity_manual ?? 0);
 
-            $available = min($slotAvailableNow, $availableByPeak);
+        $minAvail = \App\Models\Driver\DriverSeatSlot::minAvailableOverPeriod(
+            $driver->id,
+            $requiredSlots,
+            $startDate,
+            $endDate,
+            $capacity
+        );
 
-            if ($available < $childrenCount) {
-                $label = $slotLabels[$slot] ?? $slot;
+        if ($minAvail < $childrenCount) {
+            $slotsLabel = implode(' + ', array_map(fn($s) => $slotLabels[$s] ?? $s, $requiredSlots));
+            throw new \Exception(
+                "لا توجد مقاعد كافية في [{$slotsLabel}] خلال فترة الاشتراك. المتاح: {$minAvail}، المطلوب: {$childrenCount}."
+            );
+        }
+    }
+
+    // ============================================================
+    // تحقق المقاعد بالخانات (سائق · تاريخ · فترة)
+    // ============================================================
+
+    /**
+     * طاقة السائق = سعة مركبته **النشطة**.
+     *
+     * ⚠️ العلاقة `vehicle()` هي hasOne بلا فلتر حالة، فكانت تُرجع أحياناً مركبة
+     * مرفوضة أو قديمة سعتها أكبر، بينما القبول لا يتم إلا بمركبة Active — فيُقبل
+     * الطلب على سعة لا وجود لها على الأرض.
+     */
+    private function activeVehicleCapacity(Driver $driver): int
+    {
+        $driver->loadMissing('vehicles');
+
+        return (int) ($driver->vehicles->firstWhere('status', 'Active')?->capacity_manual ?? 0);
+    }
+
+    /**
+     * خانات حجز طفل واحد: أيام مداه × فترات اشتراكه.
+     *
+     * الجمعة والسبت إجازة فلا تُحجز — تماماً كما يفعل createActiveSubscriptions،
+     * وإلا اختلف ما يُفحص عما يُحجز.
+     *
+     * @return array<string, int>  مفتاح "Y-m-d|slot" وقيمته عدد المقاعد المطلوبة
+     */
+    private function seatCellsForChild(
+        string $timing,
+        string $direction,
+        string $startDate,
+        string $endDate,
+        int    $seats = 1
+    ): array {
+        $slots = \App\Models\Driver\DriverSeatSlot::resolveSlots($timing, $direction);
+        if (empty($slots)) {
+            return [];
+        }
+
+        $cells = [];
+        $cursor = Carbon::parse($startDate)->startOfDay();
+        $last   = Carbon::parse($endDate)->startOfDay();
+
+        while ($cursor->lte($last)) {
+            if (!$cursor->isFriday() && !$cursor->isSaturday()) {
+                $day = $cursor->toDateString();
+                foreach ($slots as $slot) {
+                    $key = $day . '|' . $slot;
+                    $cells[$key] = ($cells[$key] ?? 0) + $seats;
+                }
+            }
+            $cursor->addDay();
+        }
+
+        return $cells;
+    }
+
+    /**
+     * تجميع خانات كل أطفال الطلب.
+     *
+     * ⚠️ الجمع لكل طفل على حدة لا اعتماداً على أول طفل: طفلان بفترتين مختلفتين
+     * يتقاسمان بعض الرحلات ويستقل كل منهما بأخرى، والفحص على أول طفل وحده كان
+     * يمرّر طلباً يتجاوز الطاقة في الرحلات التي لا يشترك فيها الأول.
+     *
+     * @param  array<int, array{timing: string, direction: string, start_date: string, end_date: string}>  $specs
+     * @return array<string, int>
+     */
+    private function buildSeatCells(array $specs): array
+    {
+        $cells = [];
+
+        foreach ($specs as $spec) {
+            foreach ($this->seatCellsForChild(
+                $spec['timing'],
+                $spec['direction'],
+                $spec['start_date'],
+                $spec['end_date'],
+            ) as $key => $seats) {
+                $cells[$key] = ($cells[$key] ?? 0) + $seats;
+            }
+        }
+
+        return $cells;
+    }
+
+    /**
+     * يرمي عند أول رحلة لا تتسع — باسم اليوم والفترة، لأن «لا توجد مقاعد كافية»
+     * بلا تاريخ لا تدل ولي الأمر ولا السائق على اليوم المتعطل.
+     *
+     * @param  array<string, int>  $cells
+     */
+    private function assertSeatCellsAvailable(Driver $driver, array $cells): void
+    {
+        if (empty($cells)) {
+            throw new Exception(
+                'تعذّر تحديد رحلات الاشتراك من الفترة والاتجاه والتواريخ المطلوبة، فلا يمكن التحقق من المقاعد.',
+                422
+            );
+        }
+
+        $capacity = $this->activeVehicleCapacity($driver);
+
+        if ($capacity <= 0) {
+            throw new Exception(
+                'لا توجد مركبة نشطة بسعة معتمدة لهذا السائق، فلا يمكن حجز مقاعد معه.',
+                422
+            );
+        }
+
+        $dates = array_values(array_unique(array_map(
+            fn($key) => explode('|', $key)[0],
+            array_keys($cells)
+        )));
+
+        // أيام الغياب: طاقة اليوم صفر.
+        $absentDates = DriverAbsence::where('driver_id', $driver->id)
+            ->whereIn('absence_date', $dates)
+            ->pluck('absence_date')
+            ->map(fn($d) => Carbon::parse($d)->toDateString())
+            ->flip()
+            ->all();
+
+        // المحجوز حالياً لكل خانة — استعلام واحد لكل الطلب لا استعلام لكل يوم.
+        $booked = \App\Models\Driver\DriverSeatSlot::where('driver_id', $driver->id)
+            ->whereIn('date', $dates)
+            ->get(['slot', 'date', 'booked'])
+            ->mapWithKeys(fn($row) => [
+                Carbon::parse($row->date)->toDateString() . '|' . $row->slot => (int) $row->booked,
+            ])
+            ->all();
+
+        $labels = \App\Models\Driver\DriverSeatSlot::slotLabels();
+
+        foreach ($cells as $key => $needed) {
+            [$date, $slot] = explode('|', $key);
+            $label = $labels[$slot] ?? $slot;
+
+            if (isset($absentDates[$date])) {
                 throw new Exception(
-                    "لا توجد مقاعد كافية في فترة [{$label}] خلال مدة الاشتراك المطلوبة. المتاح: {$available}، المطلوب: {$childrenCount}."
+                    "السائق مسجَّل كغائب يوم [{$date}]، فلا يمكن حجز رحلة [{$label}] في ذلك اليوم.",
+                    422
+                );
+            }
+
+            $available = max(0, $capacity - ($booked[$key] ?? 0));
+
+            if ($available < $needed) {
+                throw new Exception(
+                    "لا توجد مقاعد كافية في رحلة [{$label}] يوم [{$date}]. المتاح: {$available}، المطلوب: {$needed}.",
+                    422
                 );
             }
         }
     }
 
     /**
-     * يحسب أعلى عدد اشتراكات نشطة متزامنة لنفس الـ slot في أي يوم عمل واحد
-     * ضمن الفترة المطلوبة — يكشف التعارض في الأيام الجزئية والاشتراكات المستقبلية.
+     * فحص مقاعد طلب قائم انطلاقاً من صف كل طفل في request_children.
      */
-    private function computeSlotPeakConcurrency(int $driverId, string $slot, string $startDate, string $endDate): int
+    private function assertSeatsAvailableForRequest(SubscriptionRequest $req): void
     {
-        $overlapping = ActiveSubscription::where('driver_id', $driverId)
-            ->where('status', 'active')
-            ->whereHas('subscriptionRequest.children', function ($q) use ($startDate, $endDate) {
-                $q->where('request_children.start_date', '<=', $endDate)
-                  ->where('request_children.end_date', '>=', $startDate);
-            })
-            ->with(['subscriptionRequest.children', 'child'])
-            ->get(['id', 'subscription_request_id', 'child_id'])
-            ->filter(function ($sub) use ($slot) {
-                $subReq = $sub->subscriptionRequest;
-                if (!$subReq) {
-                    return false;
-                }
-                $childPivot = $subReq->children?->firstWhere('id', $sub->child_id)?->pivot ?? $subReq->children?->first()?->pivot;
-                $timing = $childPivot?->timing ?? $subReq->timing ?? 'MORNING';
-                $direction = $childPivot?->trip_direction ?? $subReq->direction ?? 'both';
+        $req->loadMissing(['children', 'driver.vehicles']);
 
-                $subSlots = \App\Models\Driver\DriverSeatSlot::resolveSlots($timing, $direction);
-                return in_array($slot, $subSlots);
-            });
+        $specs = [];
 
-        if ($overlapping->isEmpty()) {
-            return 0;
-        }
+        foreach ($req->children as $child) {
+            $pivot = $child->pivot;
 
-        $start    = \Carbon\Carbon::parse($startDate)->startOfDay();
-        $end      = \Carbon\Carbon::parse($endDate)->startOfDay();
-        $maxCount = 0;
-        $cur      = $start->copy();
+            $timing = $pivot->timing
+                ?? \App\Models\Driver\DriverSeatSlot::timingFromPreferredSlot($child->preferred_time_slot);
 
-        while ($cur->lte($end)) {
-            if (!in_array($cur->dayOfWeek, [\Carbon\Carbon::FRIDAY, \Carbon\Carbon::SATURDAY])) {
-                $dayStr   = $cur->toDateString();
-                $dayCount = $overlapping->filter(function ($sub) use ($dayStr) {
-                    $subReq = $sub->subscriptionRequest;
-                    $childPivot = $subReq?->children?->firstWhere('id', $sub->child_id)?->pivot ?? $subReq?->children?->first()?->pivot;
-                    $sStart = $childPivot?->start_date ?? $subReq?->start_date;
-                    $sEnd   = $childPivot?->end_date ?? $subReq?->end_date;
-                    if (!$sStart || !$sEnd) {
-                        return false;
-                    }
-                    $sStartStr = ($sStart instanceof \DateTimeInterface) ? $sStart->format('Y-m-d') : (string) $sStart;
-                    $sEndStr   = ($sEnd   instanceof \DateTimeInterface) ? $sEnd->format('Y-m-d')   : (string) $sEnd;
-                    return $sStartStr <= $dayStr && $sEndStr >= $dayStr;
-                })->count();
-                $maxCount = max($maxCount, $dayCount);
+            $direction = $req->trip_direction;
+            $start     = $req->start_date;
+            $end       = $req->end_date ?? $start;
+
+            if (!$timing || !$direction || !$start) {
+                throw new Exception(
+                    "بيانات الاشتراك ناقصة للطفل [{$child->full_name}] (الفترة/الاتجاه/التاريخ)، فلا يمكن التحقق من المقاعد.",
+                    422
+                );
             }
-            $cur->addDay();
+
+            $specs[] = [
+                'timing'     => (string) $timing,
+                'direction'  => (string) $direction,
+                'start_date' => Carbon::parse($start)->toDateString(),
+                'end_date'   => Carbon::parse($end)->toDateString(),
+            ];
         }
 
-        return $maxCount;
+        $this->assertSeatCellsAvailable($req->driver, $this->buildSeatCells($specs));
     }
 
     // ============================================================
@@ -545,11 +741,11 @@ class SubscriptionRequestService
         //    لنفس الطفل بعد إنشاء هذا الطلب (مثال: طلب آخر تم قبوله للطفل نفسه في نفس
         //    الفترة أثناء انتظار هذا الطلب). الفحص عند الإنشاء فقط لا يمنع هذا السباق.
         $this->validateChildActiveSubscriptionConflicts(
-            $req->children->map(function ($child) {
+            $req->children->map(function ($child) use ($req) {
                 return [
                     'child_id'   => $child->id,
-                    'start_date' => $child->pivot->start_date,
-                    'end_date'   => $child->pivot->end_date,
+                    'start_date' => $req->start_date,
+                    'end_date'   => $req->end_date,
                 ];
             })->all()
         );
@@ -564,29 +760,44 @@ class SubscriptionRequestService
         }
 
         // التحقق من توفر المقاعد مع الوعي الزمني الكامل بفترة الاشتراك
-        $firstChildPivot = $req->children?->first()?->pivot;
-        $requiredSeats   = $req->children_count > 0 ? $req->children_count : ($req->children ? $req->children->count() : 1);
-        $startDate       = $firstChildPivot?->start_date ? \Carbon\Carbon::parse($firstChildPivot->start_date)->toDateString() : ($req->start_date ? \Carbon\Carbon::parse($req->start_date)->toDateString() : now()->toDateString());
-        $endDate         = $firstChildPivot?->end_date ? \Carbon\Carbon::parse($firstChildPivot->end_date)->toDateString() : ($req->end_date ? \Carbon\Carbon::parse($req->end_date)->toDateString() : $startDate);
-        $timing          = $firstChildPivot?->timing ?? $req->timing ?? 'MORNING';
-        $direction       = $firstChildPivot?->trip_direction ?? $req->direction ?? 'both';
+        $firstChild      = $req->children?->first();
+        $firstChildPivot = $firstChild?->pivot;
+
+        // ⚠️ جدول requests لا يحوي عمودَي timing و direction أصلاً (الموجود هو
+        // trip_direction)، فكان $req->timing يساوي null دائماً وتسقط القيمة على
+        // 'MORNING' الثابتة مهما كان الاشتراك. المصدر الصحيح هو صف الطفل في
+        // request_children، ثم تفضيله المسجَّل، ولا قيمة افتراضية بعدهما.
+        $timing = $firstChildPivot?->timing
+            ?? \App\Models\Driver\DriverSeatSlot::timingFromPreferredSlot($firstChild?->preferred_time_slot);
+
+        $direction = $firstChildPivot?->trip_direction ?? $req->trip_direction;
+
+        // ⚠️ فترة/اتجاه غير معروفين ينتجان قائمة slots فارغة، فيُقبل الطلب ويُحجز المال
+        // بينما يُنشأ مسار بلا shift_slot وبلا محطات لا يولّد له النظام أي رحلة أبداً.
+        // الرفض هنا يمنع "اشتراكاً ميتاً" صامتاً.
+        if (!$timing || !$direction) {
+            throw new Exception(
+                'تعذّر تحديد فترة أو اتجاه الرحلة من بيانات الطلب. لا يمكن قبول الطلب لأنه لن تُولَّد له أي رحلة.'
+            );
+        }
 
         // أقفل صفوف المقاعد المعنية لمنع السباق (race condition) عند القبول المتزامن
         $requiredSlots = \App\Models\Driver\DriverSeatSlot::resolveSlots($timing, $direction);
+
+        if (empty($requiredSlots)) {
+            throw new Exception(
+                "تعذّر تحديد فترة/اتجاه الرحلة من بيانات الطلب (الفترة: {$timing}، الاتجاه: {$direction}). لا يمكن قبول الطلب لأنه لن تُولَّد له أي رحلة."
+            );
+        }
+
         \App\Models\Driver\DriverSeatSlot::where('driver_id', $req->driver_id)
             ->whereIn('slot', $requiredSlots)
             ->lockForUpdate()
             ->get();
 
-        $req->loadMissing('driver.seatSlots');
-        $this->validateSeatAvailabilityForPeriod(
-            $req->driver,
-            $timing,
-            $direction,
-            $requiredSeats,
-            $startDate,
-            $endDate
-        );
+        // الفحص يجمع خانات كل طفل على حدة لا خانات أول طفل مضروبة في عددهم،
+        // فطفلان بفترتين مختلفتين لا يستهلكان نفس الرحلات.
+        $this->assertSeatsAvailableForRequest($req);
 
         // 2. تحديث حالة الطلب الحالي إلى مقبول مع توثيق وقت الاستجابة
         $req->update([
@@ -632,7 +843,7 @@ class SubscriptionRequestService
                 $osrm = new \App\Services\Shared\OsrmRoutingService();
 
                 $driverPos = ['lat' => (float)($req->driver->current_lat ?? 0), 'lng' => (float)($req->driver->current_lng ?? 0)];
-                $childPos  = ['lat' => (float)($req->children->first()->pivot->home_lat ?? $req->pickup_lat ?? 0), 'lng' => (float)($req->children->first()->pivot->home_lng ?? $req->pickup_lng ?? 0)];
+                $childPos  = ['lat' => (float)($req->home_lat ?? $req->pickup_lat ?? 0), 'lng' => (float)($req->home_lng ?? $req->pickup_lng ?? 0)];
                 $schoolPos = ['lat' => (float)($req->school->lat ?? $req->school->latitude ?? $req->dropoff_lat ?? 0), 'lng' => (float)($req->school->lng ?? $req->school->longitude ?? $req->dropoff_lng ?? 0)];
 
                 $routeData = $osrm->calculateRoute([$driverPos, $childPos, $schoolPos]);
@@ -648,17 +859,21 @@ class SubscriptionRequestService
                 Log::warning("فشل حساب المسار عبر OSRM للطلب ID: {$req->id} - " . $e->getMessage());
             }
 
-            $timingUpper = strtoupper($req->timing ?? 'MORNING');
+            // ⚠️ كان يقرأ $req->timing (عمود غير موجود) فينتهي كل مسار في النظام
+            // بنوع 'Morning' حتى المسارات المسائية. الفترة المحسوبة أعلاه هي المصدر.
+            $timingUpper = strtoupper($timing);
             $routeType = ($timingUpper === 'EVENING' || $timingUpper === 'AFTERNOON') ? 'Afternoon' : 'Morning';
 
             $route = \App\Models\Shared\Route::create([
                 'subscription_request_id' => $req->id,
                 'driver_id'               => $req->driver_id,
                 'vehicle_id'              => $vehicle->id,
-                'route_name'              => \App\Models\Shared\Route::generateGenericRouteName($req->timing, $req->direction),
+                'route_name'              => \App\Models\Shared\Route::generateGenericRouteName($timing, $direction),
                 'route_type'              => $routeType,
                 'shift_slot'              => $primarySlot,
-                'start_time'              => $req->pickup_time ?? '07:00:00',
+                // ⚠️ وقت الانطلاق يتبع اتجاه الـ slot: الذهاب من وقت الاصطحاب،
+                // والإياب من وقت الانصراف — لا من وقت الاصطحاب الصباحي.
+                'start_time'              => $this->masterRouteStopSyncService->resolveSlotStartTime($req, $primarySlot),
                 'optimized_points'        => $routeData ? json_encode($routeData) : null,
                 'total_distance'          => $distanceKm,
                 'estimated_duration'      => $durationMinutes,
@@ -687,11 +902,9 @@ class SubscriptionRequestService
         }
 
         // 6.5 مزامنة المسار الرئيسي (Master Route) لكل فترة/اتجاه مطلوبة (route_stops)
-        try {
-            $this->masterRouteStopSyncService->syncOnAcceptance($req, $route, $slots);
-        } catch (\Throwable $e) {
-            Log::warning("فشل مزامنة المسار الرئيسي (route_stops) للطلب ID: {$req->id} - " . $e->getMessage());
-        }
+        // ⚠️ لا يُبتلع الخطأ هنا: القبول كله داخل DB::transaction، وقبول اشتراك ومعه
+        // حجز مالي بينما المسار نصف مبني (أو بلا محطات) أسوأ من رفض القبول وإبلاغ السائق.
+        $this->masterRouteStopSyncService->syncOnAcceptance($req, $route, $slots);
 
         // 7. إرسال إشعار القبول مع حمايته من إلغاء الـ Transaction
         try {
@@ -760,9 +973,6 @@ class SubscriptionRequestService
         }
     }
 
-    /**
-     * حجز مبلغ الاشتراك ونقله للأمانات عند قبول السائق للطلب (كل أنواع الاشتراكات).
-     */
     protected function holdSubscriptionFundsOnAcceptance(SubscriptionRequest $req, User|ParentModel|null $parent): void
     {
         if (!$parent) {
@@ -784,45 +994,100 @@ class SubscriptionRequestService
         $parent->withdraw($amountCents);
         $balAfter = (int) $parent->balance;
 
-        $vault = \App\Models\Shared\MasterEscrowVault::getVault();
-        $vault->increment('parents_escrow_pool', $amountCents);
-
         $pricingSetting = PricingSetting::first();
         $commissionRate = (float) ($pricingSetting->platform_commission_rate ?? 8.00);
         $commissionAmount = round(($amountDinar * $commissionRate) / 100, 2);
         $driverNetAmount = max(0, round($amountDinar - $commissionAmount, 2));
 
-        $platformFinance = \App\Models\Shared\PlatformFinance::create([
-            'subscription_request_id'    => $req->id,
-            'parent_id'                  => $parent->id,
-            'driver_id'                  => $req->driver_id,
-            'total_amount'               => $amountDinar,
-            'platform_commission_rate'   => $commissionRate,
-            'platform_commission_amount' => $commissionAmount,
-            'driver_net_amount'          => $driverNetAmount,
-            'expected_trips_count'       => $this->resolveExpectedTripsCount($req),
-            'settled_trips_count'        => 0,
-            'settled_amount'             => 0,
-            'status'                     => \App\Models\Shared\PlatformFinance::STATUS_HELD,
-            'held_at'                    => now(),
-        ]);
+        $driverNetAmountCents = (int) round($driverNetAmount * 100);
+        $commissionCents = (int) round($commissionAmount * 100);
 
-        // ⚠️ القيد ليس ملحقاً اختيارياً بالحركة المالية بل جزء منها. ابتلاع فشله
-        // بـ Log::warning في دفتر يوصف بأنه «غير قابل للمسح» يعني مالاً تحرّك بلا
-        // أثر يمكن تدقيقه أو تسويته. الفشل هنا يجب أن يُسقط المعاملة كاملة.
-        app(\App\Services\Shared\FinancialLedgerService::class)->recordLedgerEntry(
-            \App\Services\Shared\FinancialLedgerService::parentAccount($parent),
-            "parents_escrow_pool",
-            $amountCents,
-            'subscription_hold',
-            $balBefore,
-            $balAfter,
-            "REQ-HOLD-{$req->id}",
-            [
-                'subscription_request_id' => $req->id,
-                'platform_finance_id'     => $platformFinance->id,
-            ]
-        );
+        $vault = \App\Models\Shared\MasterEscrowVault::getVault();
+        $ledgerService = app(\App\Services\Shared\FinancialLedgerService::class);
+
+        if ($req->subscription_type === 'single_day') {
+            $vault->increment('parents_escrow_pool', $amountCents);
+
+            $platformFinance = \App\Models\Shared\PlatformFinance::create([
+                'subscription_request_id'    => $req->id,
+                'parent_id'                  => $parent->id,
+                'driver_id'                  => $req->driver_id,
+                'total_amount'               => $amountDinar,
+                'platform_commission_rate'   => $commissionRate,
+                'platform_commission_amount' => $commissionAmount,
+                'driver_net_amount'          => $driverNetAmount,
+                'expected_trips_count'       => $this->resolveExpectedTripsCount($req),
+                'settled_trips_count'        => 0,
+                'settled_amount'             => 0,
+                'status'                     => \App\Models\Shared\PlatformFinance::STATUS_HELD,
+                'held_at'                    => now(),
+            ]);
+
+            $ledgerService->recordLedgerEntry(
+                \App\Services\Shared\FinancialLedgerService::parentAccount($parent),
+                "parents_escrow_pool",
+                $amountCents,
+                'subscription_hold',
+                $balBefore,
+                $balAfter,
+                "REQ-HOLD-{$req->id}",
+                [
+                    'subscription_request_id' => $req->id,
+                    'platform_finance_id'     => $platformFinance->id,
+                ]
+            );
+        } else {
+            if ($commissionCents > 0) {
+                $vault->increment('platform_revenue_pool', $commissionCents);
+            }
+
+            $driver = Driver::find($req->driver_id) ?? Driver::where('user_id', $req->driver_id)->first();
+            if ($driver) {
+                $driverBalBefore = (int) $driver->balance;
+                $driver->deposit($driverNetAmountCents);
+                $driverBalAfter = (int) $driver->balance;
+
+                if ($commissionCents > 0) {
+                    $ledgerService->recordLedgerEntry(
+                        \App\Services\Shared\FinancialLedgerService::parentAccount($parent),
+                        'platform_revenue_pool',
+                        $commissionCents,
+                        'platform_commission',
+                        $balBefore,
+                        $balBefore - $commissionCents,
+                        "COMMISSION-MULTI-{$req->id}",
+                        ['subscription_request_id' => $req->id]
+                    );
+                }
+
+                $ledgerService->recordLedgerEntry(
+                    \App\Services\Shared\FinancialLedgerService::parentAccount($parent),
+                    \App\Services\Shared\FinancialLedgerService::driverAccount($driver),
+                    $driverNetAmountCents,
+                    'subscription_payment',
+                    $balBefore - $commissionCents,
+                    $driverBalAfter,
+                    "REQ-PAY-{$req->id}",
+                    ['subscription_request_id' => $req->id]
+                );
+            }
+
+            \App\Models\Shared\PlatformFinance::create([
+                'subscription_request_id'    => $req->id,
+                'parent_id'                  => $parent->id,
+                'driver_id'                  => $req->driver_id,
+                'total_amount'               => $amountDinar,
+                'platform_commission_rate'   => $commissionRate,
+                'platform_commission_amount' => $commissionAmount,
+                'driver_net_amount'          => $driverNetAmount,
+                'expected_trips_count'       => $this->resolveExpectedTripsCount($req),
+                'settled_trips_count'        => $this->resolveExpectedTripsCount($req),
+                'settled_amount'             => $amountDinar,
+                'status'                     => \App\Models\Shared\PlatformFinance::STATUS_COMPLETED,
+                'held_at'                    => now(),
+                'settled_at'                 => now(),
+            ]);
+        }
     }
 
     /**
@@ -834,9 +1099,8 @@ class SubscriptionRequestService
         $total = 0;
 
         foreach ($req->children as $child) {
-            $pivot        = $child->pivot;
-            $workingDays  = max(1, (int) ($pivot->working_days_count ?? 1));
-            $direction    = strtolower((string) ($pivot->trip_direction ?? 'both'));
+            $workingDays  = max(1, (int) ($req->working_days_count ?? 1));
+            $direction    = strtolower((string) ($req->trip_direction ?? 'both'));
             $tripsPerDay  = in_array($direction, ['one_way_morning', 'one_way_evening', 'go', 'return'], true) ? 1 : 2;
 
             $total = max($total, $workingDays * $tripsPerDay);
@@ -866,7 +1130,6 @@ class SubscriptionRequestService
      */
     protected function performRefundHeldFundsOnCancellation(int $requestId, string $cancelledBy, ?int $driverId = null): ?array
     {
-        // القفل يمنع تنفيذ استرجاعين متزامنين لنفس الاشتراك (نقرة مزدوجة أو إعادة إرسال)
         $finance = \App\Models\Shared\PlatformFinance::where('subscription_request_id', $requestId)
             ->where('status', \App\Models\Shared\PlatformFinance::STATUS_HELD)
             ->lockForUpdate()
@@ -876,231 +1139,89 @@ class SubscriptionRequestService
             return null;
         }
 
-        // platform_finances تخزّن ParentModel::id (لا User::id) — الدلالة مثبتة في
-        // holdSubscriptionFundsOnAcceptance()، والمُحلّل يسجّل تحذيراً إن لجأ للاحتياطية.
         $ledgerService = app(\App\Services\Shared\FinancialLedgerService::class);
         $parent = $ledgerService->resolveParent($finance->parent_id, preferUserId: false);
         $driver = Driver::find($finance->driver_id) ?? Driver::where('user_id', $finance->driver_id)->first();
         $vault = \App\Models\Shared\MasterEscrowVault::getVault();
 
-        // فحص هل السائق تحرك بالفعل (بدأت الرحلة الفعلية) أم لا
-        $hasDriverMoved = false;
-        if ($finance->trip_id) {
-            $trip = \App\Models\Shared\Trip::find($finance->trip_id);
-            $hasDriverMoved = $trip && ($trip->status === 'in_progress' || !empty($trip->actual_start_time));
-        } else {
-            $hasDriverMoved = \App\Models\Shared\Trip::where('driver_id', $finance->driver_id)
-                ->where('status', 'in_progress')
-                ->whereDate('trip_date', now()->toDateString())
-                ->exists();
-        }
+        $totalDinar = (float) $finance->total_amount;
+        $totalCents = (int) round($totalDinar * 100);
+        $commissionCents = (int) round((float)$finance->platform_commission_amount * 100);
+        $driverNetCents = (int) round((float)$finance->driver_net_amount * 100);
 
-        // ⚠️ المبلغ القابل للاسترجاع هو ما تبقّى في الأمانة فعلاً، لا قيمة الاشتراك
-        // الكاملة. سجل PlatformFinance يبقى بحالة `held` طوال التسوية الجزئية (لا
-        // يصبح `completed` إلا بعد آخر رحلة)، وكانت هذه الدالة تعتمد على
-        // total_amount وتتجاهل settled_amount تماماً. فاشتراك من ٢٠ رحلة نُفّذ منه
-        // ٥ وصُرفت حصصها للسائق ثم أُلغي، كان يخصم كامل المبلغ من حوض الأمانات —
-        // وهو لم يعد موجوداً فيه — ويودع ١٠٠٪ في محفظة ولي الأمر، فيدفع النظام
-        // ١٢٥٪ من قيمة الاشتراك على حساب أمانات أولياء أمور آخرين.
-        $totalDinar     = (float) $finance->total_amount;
-        $settledDinar   = (float) ($finance->settled_amount ?? 0);
-        $refundedDinar  = (float) ($finance->refunded_amount ?? 0);
-        $remainingDinar = max(0.0, round($totalDinar - $settledDinar - $refundedDinar, 2));
-        $remainingCents = (int) round($remainingDinar * 100);
-
-        // لم يتبقّ شيء في الأمانة: كل المبلغ صُرف مقابل رحلات نُفّذت فعلاً.
-        if ($remainingCents <= 0) {
-            $finance->update([
-                'status'      => \App\Models\Shared\PlatformFinance::STATUS_COMPLETED,
-                'settled_at'  => $finance->settled_at ?? now(),
-                'notes'       => 'أُلغي الاشتراك بعد صرف كامل قيمته مقابل الرحلات المنفّذة — لا يوجد مبلغ قابل للاسترجاع.',
-            ]);
-
-            return [
-                'refund_amount'    => 0.0,
-                'compensation_fee' => 0.0,
-                'driver_net_pay'   => 0.0,
-                'platform_fee'     => 0.0,
-                'settled_amount'   => $settledDinar,
-                'status'           => 'nothing_to_refund',
-            ];
-        }
-
-        // من هنا فصاعداً `totalDinar` تعني المتبقي في الأمانة القابل للتوزيع.
-        $totalDinar = $remainingDinar;
-        $totalCents = $remainingCents;
-
-        // احتساب رسوم طلبات تغيير الموقع المعتمدة غير المسواة
-        $activeSubIds = ActiveSubscription::where('subscription_request_id', $requestId)->pluck('id');
-        $approvedChanges = \App\Models\Shared\LocationChangeRequest::whereIn('active_subscription_id', $activeSubIds)
-            ->where('status', \App\Models\Shared\LocationChangeRequest::STATUS_APPROVED)
-            ->where('is_settled', false)
-            ->get();
-        $totalChangesFee = (float) $approvedChanges->sum('fee_amount');
-
-        // إذا تحرك السائق الفعلي وكان الإلغاء من ولي الأمر:
-        if ($hasDriverMoved && $cancelledBy === 'parent') {
-            $baseCompDinar = \App\Models\Shared\PlatformFinance::NOMINAL_FUEL_COMPENSATION;
-            $nominalCompDinar = min($baseCompDinar + $totalChangesFee, $totalDinar);
-            $commissionRate = (float) ($finance->platform_commission_rate ?? 8.00);
-            $commissionOnComp = round(($nominalCompDinar * $commissionRate) / 100, 2);
-            $driverNetComp = max(0, round($nominalCompDinar - $commissionOnComp, 2));
-            $refundToParent = max(0, round($totalDinar - $nominalCompDinar, 2));
-
-            $refundCents = (int) round($refundToParent * 100);
-            $driverCompCents = (int) round($driverNetComp * 100);
-            $commissionCents = (int) round($commissionOnComp * 100);
-
+        if ($cancelledBy === 'parent') {
+            // Parent cancelled: give money to driver & platform
             $vault->decrement('parents_escrow_pool', $totalCents);
-
-            if ($refundCents > 0 && $parent) {
-                $parent->deposit($refundCents);
+            
+            if ($driverNetCents > 0 && $driver) {
+                $driver->deposit($driverNetCents);
             }
-
-            if ($driverCompCents > 0 && $driver) {
-                $driver->deposit($driverCompCents);
-            }
-
             if ($commissionCents > 0) {
                 $vault->increment('platform_revenue_pool', $commissionCents);
             }
 
-            // ⚠️ لا تُكتب قيم التعويض فوق platform_commission_amount و driver_net_amount:
-            // هذان الحقلان يحملان خطة الاشتراك كما اتُّفق عليها عند القبول، والمصروف
-            // الفعلي يُقرأ من settled_amount ومن جدول platform_finance_trip_settlements.
-            // الكتابة فوقهما بقيم تعويض إلغاء تمحو الخطة والفعلي معاً.
             $finance->update([
-                'status'            => \App\Models\Shared\PlatformFinance::STATUS_PARTIALLY_REFUNDED,
-                'compensation_fee'  => $nominalCompDinar,
-                'refunded_amount'   => round($refundedDinar + $refundToParent, 2),
-                'refunded_at'       => now(),
-                'notes'             => 'تم إلغاء الاشتراك بعد تحرك السائق. صُرف تعويض وقود ورسوم تغيير المواقع للسائق واقتُطعت عمولة المنصة منه، وأُرجع باقي المتبقي في الأمانة لولي الأمر.',
+                'status'            => \App\Models\Shared\PlatformFinance::STATUS_COMPLETED,
+                'compensation_fee'  => $totalDinar,
+                'settled_amount'    => $totalDinar,
+                'settled_at'        => now(),
+                'notes'             => 'تم إلغاء الرحلة من قِبل ولي الأمر. تم رفع المبلغ للسائق وخصم عمولة المنصة.',
             ]);
 
-            \App\Models\Shared\LocationChangeRequest::whereIn('id', $approvedChanges->pluck('id'))->update(['is_settled' => true]);
-
             try {
-                $ledger = app(\App\Services\Shared\FinancialLedgerService::class);
-                if ($refundCents > 0 && $parent) {
-                    $ledger->recordLedgerEntry(
+                if ($driverNetCents > 0 && $driver && $parent) {
+                    $ledgerService->recordLedgerEntry(
                         'parents_escrow_pool',
-                        \App\Services\Shared\FinancialLedgerService::parentAccount($parent),
-                        $refundCents,
-                        'subscription_refund',
+                        \App\Services\Shared\FinancialLedgerService::driverAccount($driver),
+                        $driverNetCents,
+                        'subscription_payment', // Using standard payment since driver gets paid fully
                         0,
-                        (int) $parent->balance,
-                        "REFUND-PARTIAL-{$requestId}",
+                        (int) $driver->balance,
+                        "PAY-DRIVER-CANC-{$requestId}",
                         ['subscription_request_id' => $requestId, 'cancelled_by' => $cancelledBy]
                     );
                 }
-                if ($driverCompCents > 0 && $driver) {
-                    $ledger->recordLedgerEntry(
-                        'parents_escrow_pool',
-                        \App\Services\Shared\FinancialLedgerService::driverAccount($driver),
-                        $driverCompCents,
-                        'driver_fuel_compensation',
-                        0,
-                        (int) $driver->balance,
-                        "COMP-DRIVER-{$requestId}",
-                        ['subscription_request_id' => $requestId, 'location_changes_fee' => $totalChangesFee]
-                    );
-                }
                 if ($commissionCents > 0) {
-                    $ledger->recordLedgerEntry(
+                    $ledgerService->recordLedgerEntry(
                         'parents_escrow_pool',
                         'platform_revenue_pool',
                         $commissionCents,
                         'platform_commission',
                         0,
-                        $commissionCents,
-                        "COMMISSION-COMP-{$requestId}"
+                        $commissionCents, // approximation for log
+                        "COMMISSION-CANC-{$requestId}"
                     );
                 }
             } catch (\Throwable $e) {
-                Log::warning("فشل تسجيل حركات السجل المالي للإلغاء الجزئي ID {$requestId}: " . $e->getMessage());
+                Log::warning("فشل تسجيل حركات السجل المالي للإلغاء من ولي الأمر ID {$requestId}: " . $e->getMessage());
             }
 
             return [
-                'refund_amount'          => $refundToParent,
-                'compensation_fee'       => $nominalCompDinar,
-                'driver_net_pay'         => $driverNetComp,
-                'platform_fee'           => $commissionOnComp,
-                'location_changes_count' => $approvedChanges->count(),
-                'location_changes_fees'  => $totalChangesFee,
-                'status'                 => 'partially_refunded',
-            ];
-        } elseif ($totalChangesFee > 0 && $cancelledBy === 'parent') {
-            // إلغاء من ولي الأمر قبل تحرك السائق ولكن مع وجود طلبات تغيير موقع معتمدة
-            $locationCompDinar = min($totalChangesFee, $totalDinar);
-            $commissionRate = (float) ($finance->platform_commission_rate ?? 8.00);
-            $commissionOnComp = round(($locationCompDinar * $commissionRate) / 100, 2);
-            $driverNetComp = max(0, round($locationCompDinar - $commissionOnComp, 2));
-            $refundToParent = max(0, round($totalDinar - $locationCompDinar, 2));
-
-            $refundCents = (int) round($refundToParent * 100);
-            $driverCompCents = (int) round($driverNetComp * 100);
-            $commissionCents = (int) round($commissionOnComp * 100);
-
-            $vault->decrement('parents_escrow_pool', $totalCents);
-
-            if ($refundCents > 0 && $parent) {
-                $parent->deposit($refundCents);
-            }
-
-            if ($driverCompCents > 0 && $driver) {
-                $driver->deposit($driverCompCents);
-            }
-
-            if ($commissionCents > 0) {
-                $vault->increment('platform_revenue_pool', $commissionCents);
-            }
-
-            $finance->update([
-                'status'            => \App\Models\Shared\PlatformFinance::STATUS_PARTIALLY_REFUNDED,
-                'compensation_fee'  => $locationCompDinar,
-                'refunded_amount'   => round($refundedDinar + $refundToParent, 2),
-                'refunded_at'       => now(),
-                'notes'             => 'تم استرجاع المتبقي في الأمانة لولي الأمر مع خصم رسوم تغيير المواقع المعتمدة لصالح السائق والمنصة.',
-            ]);
-
-            \App\Models\Shared\LocationChangeRequest::whereIn('id', $approvedChanges->pluck('id'))->update(['is_settled' => true]);
-
-            return [
-                'refund_amount'          => $refundToParent,
-                'compensation_fee'       => $locationCompDinar,
-                'driver_net_pay'         => $driverNetComp,
-                'platform_fee'           => $commissionOnComp,
-                'location_changes_count' => $approvedChanges->count(),
-                'location_changes_fees'  => $totalChangesFee,
-                'status'                 => 'partially_refunded',
+                'refund_amount'    => 0.0,
+                'compensation_fee' => $totalDinar,
+                'driver_net_pay'   => (float)$finance->driver_net_amount,
+                'platform_fee'     => (float)$finance->platform_commission_amount,
+                'settled_amount'   => $totalDinar,
+                'status'           => 'completed',
             ];
         } else {
-            // قبل تحرك السائق وبدون رسوم إضافية، أو إلغاء من السائق أو تلقائي:
-            // يُسترجع كامل **المتبقي في الأمانة** لولي الأمر — وليس كامل قيمة
-            // الاشتراك، لأن ما صُرف مقابل رحلات نُفّذت فعلاً لم يعد في الحوض.
+            // Driver or system cancelled: 100% refund to parent
             $vault->decrement('parents_escrow_pool', $totalCents);
 
             if ($parent) {
                 $parent->deposit($totalCents);
             }
 
-            $isFullyRefunded = $settledDinar <= 0;
-
             $finance->update([
-                'status'            => $isFullyRefunded
-                    ? \App\Models\Shared\PlatformFinance::STATUS_REFUNDED
-                    : \App\Models\Shared\PlatformFinance::STATUS_PARTIALLY_REFUNDED,
-                'refunded_amount'   => round($refundedDinar + $totalDinar, 2),
+                'status'            => \App\Models\Shared\PlatformFinance::STATUS_REFUNDED,
+                'refunded_amount'   => $totalDinar,
                 'compensation_fee'  => 0.00,
                 'refunded_at'       => now(),
-                'notes'             => $isFullyRefunded
-                    ? 'تم استرجاع كامل المبلغ لولي الأمر (إلغاء قبل تحرك السائق أو إلغاء من السائق).'
-                    : "تم استرجاع المتبقي في الأمانة ({$totalDinar} د.ل) لولي الأمر بعد صرف {$settledDinar} د.ل مقابل الرحلات المنفّذة.",
+                'notes'             => 'تم استرجاع كامل المبلغ لولي الأمر (إلغاء من السائق أو النظام).',
             ]);
 
-            // القيد جزء من نفس المعاملة: استرجاع بلا قيد يعني مالاً تحرّك بلا أثر.
             if ($parent) {
-                app(\App\Services\Shared\FinancialLedgerService::class)->recordLedgerEntry(
+                $ledgerService->recordLedgerEntry(
                     'parents_escrow_pool',
                     \App\Services\Shared\FinancialLedgerService::parentAccount($parent),
                     $totalCents,
@@ -1111,7 +1232,6 @@ class SubscriptionRequestService
                     [
                         'subscription_request_id' => $requestId,
                         'cancelled_by'            => $cancelledBy,
-                        'already_settled_dinar'   => $settledDinar,
                     ]
                 );
             }
@@ -1121,8 +1241,8 @@ class SubscriptionRequestService
                 'compensation_fee' => 0.00,
                 'driver_net_pay'   => 0.00,
                 'platform_fee'     => 0.00,
-                'settled_amount'   => $settledDinar,
-                'status'           => $isFullyRefunded ? 'refunded' : 'partially_refunded',
+                'settled_amount'   => 0.0,
+                'status'           => 'refunded',
             ];
         }
     }
@@ -1143,31 +1263,30 @@ class SubscriptionRequestService
     {
         $pickupTime  = $req->pickup_time  ?? '07:00:00';
         $dropoffTime = $req->dropoff_time ?? '14:00:00';
-        $parentUserId = $req->parent?->user_id ?? $req->parent_id;
 
         foreach ($req->children as $child) {
-            // ⚠️ عنوان الطفل المسجّل هو المصدر الأوثق للإحداثيات: أعمدة home_lat/home_lng
-            // غير موجودة أصلاً في request_children، فكان pickup_lat يُخزَّن null دائماً،
-            // فتنتقل القيمة الفارغة إلى route_stops ثم trip_stops، وينتهي ولي الأمر
-            // برؤية موقع منزل بلا إحداثيات في شاشة الرحلات القادمة والتتبع.
+            // لقطة العنوان (home_label/home_lat/home_lng) موجودة فقط على مستوى الطلب requests
+            // الآن (واحدة لكل أطفال الطلب)، فهي المصدر الأول قبل العلاقة الحية بعنوان الطفل.
             $childAddress = $child->address ?? null;
             $childSchool  = $child->school  ?? null;
 
-            $pickupLat  = $child->pivot->home_lat   ?? $childAddress?->lat   ?? $req->pickup_lat   ?? null;
-            $pickupLng  = $child->pivot->home_lng   ?? $childAddress?->lng   ?? $req->pickup_lng   ?? null;
-            $pickupLbl  = $child->pivot->home_label ?? $childAddress?->label ?? $req->pickup_label ?? 'الموقع السكني';
+            $pickupLat  = $req->home_lat   ?? $childAddress?->lat   ?? $req->pickup_lat   ?? null;
+            $pickupLng  = $req->home_lng   ?? $childAddress?->lng   ?? $req->pickup_lng   ?? null;
+            $pickupLbl  = $req->home_label ?? $childAddress?->label ?? $req->pickup_label ?? 'الموقع السكني';
 
             $dropoffLat = $child->pivot->school_lat   ?? $childSchool?->lat  ?? $req->school->lat       ?? $req->school->latitude  ?? $req->dropoff_lat ?? null;
             $dropoffLng = $child->pivot->school_lng   ?? $childSchool?->lng  ?? $req->school->lng       ?? $req->school->longitude ?? $req->dropoff_lng ?? null;
             $dropoffLbl = $child->pivot->school_label ?? $childSchool?->name ?? $req->school->name      ?? $req->dropoff_label     ?? 'المدرسة';
 
+            $requestChildId = \App\Models\Shared\RequestChild::where('request_id', $req->id)
+                ->where('child_id', $child->id)
+                ->value('id');
+
             ActiveSubscription::create([
                 'subscription_request_id' => $req->id,
+                'request_child_id'        => $requestChildId,
                 'route_id'                => $route?->id,
                 'status'                  => 'active',
-                'child_id'                => $child->id,
-                'driver_id'               => $req->driver_id,
-                'parent_id'               => $parentUserId,
                 'pickup_lat'              => $pickupLat,
                 'pickup_lng'              => $pickupLng,
                 'pickup_label'            => $pickupLbl,
@@ -1178,15 +1297,28 @@ class SubscriptionRequestService
                 'dropoff_time'            => $dropoffTime,
             ]);
 
-            // زيادة عداد المقاعد المحجوزة لكل slot خاصة بهذا الطفل
-            $childTiming    = $child->pivot->timing ?? $req->timing ?? 'MORNING';
-            $childDirection = $child->pivot->trip_direction ?? $req->direction ?? 'both';
+            // زيادة عداد المقاعد لكل (slot × date) خاصة بهذا الطفل
+            // ⚠️ $req->timing و $req->direction عمودان غير موجودين في جدول requests
+            // (الموجود trip_direction فقط)؛ كانا يساويان null دائماً فيسقط الحجز على
+            // 'MORNING'/'both' الثابتتين. المصدر الصحيح بعد pivot->timing هو تفضيل
+            // الطفل المسجَّل، ثم trip_direction الحقيقي على الطلب.
+            $childTiming    = $child->pivot->timing
+                ?? \App\Models\Driver\DriverSeatSlot::timingFromPreferredSlot($child->preferred_time_slot)
+                ?? 'MORNING';
+            $childDirection = $req->trip_direction ?? 'both';
             $childSlots     = \App\Models\Driver\DriverSeatSlot::resolveSlots($childTiming, $childDirection);
+            $childStart     = \Carbon\Carbon::parse($req->start_date ?? now())->startOfDay();
+            $childEnd       = \Carbon\Carbon::parse($req->end_date ?? $childStart)->startOfDay();
 
-            foreach ($childSlots as $slot) {
-                \App\Models\Driver\DriverSeatSlot::where('driver_id', $req->driver_id)
-                    ->where('slot', $slot)
-                    ->increment('reserved_seats');
+            $cur = $childStart->copy();
+            while ($cur->lte($childEnd)) {
+                if (!$cur->isFriday() && !$cur->isSaturday()) {
+                    $dayStr = $cur->toDateString();
+                    foreach ($childSlots as $slot) {
+                        \App\Models\Driver\DriverSeatSlot::incrementBooked($req->driver_id, $slot, $dayStr);
+                    }
+                }
+                $cur->addDay();
             }
         }
     }
@@ -1239,7 +1371,7 @@ class SubscriptionRequestService
         }
 
         $activeSub = ActiveSubscription::where('id', $activeSubscriptionId)
-            ->where(function ($q) use ($userId, $parent) {
+            ->whereHas('subscriptionRequest', function ($q) use ($userId, $parent) {
                 $q->where('parent_id', $parent->id)
                   ->orWhere('parent_id', $userId);
             })
@@ -1297,7 +1429,7 @@ class SubscriptionRequestService
     public function cancelActiveSubscriptionByDriver(int $activeSubscriptionId, int $driverId, ?string $reason = null): ActiveSubscription
     {
         $activeSub = ActiveSubscription::where('id', $activeSubscriptionId)
-            ->where('driver_id', $driverId)
+            ->forDriver($driverId)
             ->first();
 
         if (!$activeSub) {
@@ -1363,20 +1495,35 @@ class SubscriptionRequestService
             return;
         }
 
-        $childPivot = $subReq->children?->firstWhere('id', $activeSub->child_id)?->pivot;
-        $timing     = $childPivot?->timing ?? $subReq->timing ?? 'MORNING';
-        $direction  = $childPivot?->trip_direction ?? $subReq->direction ?? 'both';
+        // ⚠️ نفس عمودَي $subReq->timing/direction غير الموجودين في requests (راجع
+        // createActiveSubscriptions أعلاه). خطؤهما هنا أخطر: تحرير مقعد بفترة غير
+        // التي حُجزت بها فعلاً يُبقي المقعد الحقيقي محجوزاً للأبد (تسريب مقاعد صامت).
+        $child      = $subReq->children?->firstWhere('id', $activeSub->child_id);
+        $childPivot = $child?->pivot;
+        $timing     = $childPivot?->timing
+            ?? \App\Models\Driver\DriverSeatSlot::timingFromPreferredSlot($child?->preferred_time_slot)
+            ?? 'MORNING';
+        $direction  = $childPivot?->trip_direction ?? $subReq->trip_direction ?? 'both';
 
         $slots = \App\Models\Driver\DriverSeatSlot::resolveSlots(
             $timing,
             $direction
         );
 
-        foreach ($slots as $slot) {
-            \App\Models\Driver\DriverSeatSlot::where('driver_id', $activeSub->driver_id)
-                ->where('slot', $slot)
-                ->where('reserved_seats', '>', 0)
-                ->decrement('reserved_seats');
+        $subReq->loadMissing('children');
+        $childPivotForDates = $subReq->children?->firstWhere('id', $activeSub->child_id)?->pivot;
+        $releaseStart = \Carbon\Carbon::parse($childPivotForDates?->start_date ?? $subReq->start_date ?? now())->startOfDay();
+        $releaseEnd   = \Carbon\Carbon::parse($childPivotForDates?->end_date ?? $subReq->end_date ?? $releaseStart)->startOfDay();
+
+        $cur = $releaseStart->copy();
+        while ($cur->lte($releaseEnd)) {
+            if (!$cur->isFriday() && !$cur->isSaturday()) {
+                $dayStr = $cur->toDateString();
+                foreach ($slots as $slot) {
+                    \App\Models\Driver\DriverSeatSlot::decrementBooked($activeSub->driver_id, $slot, $dayStr);
+                }
+            }
+            $cur->addDay();
         }
     }
 
@@ -1395,7 +1542,7 @@ class SubscriptionRequestService
         $stats = ['cancelled_expired' => 0, 'cancelled_no_seats' => 0, 'healthy' => 0];
 
         $pending = SubscriptionRequest::where('status', SubscriptionRequest::STATUS_PENDING)
-            ->with(['driver.user', 'driver.seatSlots', 'parent.user'])
+            ->with(['driver.user', 'parent.user', 'children'])
             ->get();
 
         foreach ($pending as $req) {
@@ -1412,17 +1559,7 @@ class SubscriptionRequestService
 
             // ── السيناريو 2: لا تتوفر مقاعد كافية خلال فترة الطلب ──────────
             try {
-                $startDate = $req->start_date ?? now()->toDateString();
-                $endDate   = $req->end_date   ?? $startDate;
-                $req->driver->loadMissing('seatSlots');
-                $this->validateSeatAvailabilityForPeriod(
-                    $req->driver,
-                    $req->timing    ?? 'MORNING',
-                    $req->direction ?? 'both',
-                    $req->children_count ?? 1,
-                    $startDate,
-                    $endDate
-                );
+                $this->assertSeatsAvailableForRequest($req);
                 $stats['healthy']++;
             } catch (Exception $e) {
                 $this->autoCancelRequest(
@@ -1499,7 +1636,7 @@ class SubscriptionRequestService
     public function getDriverActiveSubscriptionDetails(int $activeSubscriptionId, int $driverId)
     {
         $activeSub = ActiveSubscription::where('id', $activeSubscriptionId)
-            ->where('driver_id', $driverId)
+            ->forDriver($driverId)
             ->with([
                 'subscriptionRequest',
                 'child.school',
@@ -1608,16 +1745,11 @@ class SubscriptionRequestService
                 'driver.user',
                 'children' => function ($query) {
                     $query->withPivot([
-                        'subscription_type',
-                        'trip_direction',
                         'timing',
-                        'start_date',
-                        'end_date',
-                        'working_days_count',
-                        'distance_km',                    
+                        'distance_km',
                         'price_per_child',
                         'trip_price',
-                        'discount_amount',            
+                        'discount_amount',
                         'total_amount_after_discount',
                         'driver_net_price'
                     ]);
@@ -1690,10 +1822,12 @@ class SubscriptionRequestService
             return false;
         }
 
-        return ActiveSubscription::where(function ($q) use ($userId, $parent) {
-            $q->where('parent_id', $parent->id)
-              ->orWhere('parent_id', $userId);
-        })->where('driver_id', $driverId)
+        return ActiveSubscription::whereHas('subscriptionRequest', function ($q) use ($userId, $parent, $driverId) {
+            $q->where(function ($q2) use ($userId, $parent) {
+                $q2->where('parent_id', $parent->id)
+                   ->orWhere('parent_id', $userId);
+            })->where('driver_id', $driverId);
+        })
           ->whereIn('status', ['active', 'completed', 'cancelled']) // الحالات المطلوبة
           ->exists();
     }
@@ -1717,16 +1851,11 @@ class SubscriptionRequestService
                     'parent.user',
                     'children' => function ($query) {
                         $query->withPivot([
-                            'subscription_type',
-                            'trip_direction',
                             'timing',
-                            'start_date',
-                            'end_date',
-                            'working_days_count',
-                            'distance_km',                    
+                            'distance_km',
                             'price_per_child',
                             'trip_price',
-                            'discount_amount',            
+                            'discount_amount',
                             'total_amount_after_discount',
                             'driver_net_price'
                         ]);
@@ -1743,9 +1872,7 @@ class SubscriptionRequestService
                     $query->whereIn('status', ['accepted', 'active']);
                 } elseif ($filter === 'pending_start') {
                     $query->whereIn('status', ['accepted', 'active'])
-                          ->whereHas('children', function ($q) {
-                              $q->where('request_children.start_date', '>', now()->toDateString());
-                          });
+                          ->where('start_date', '>', now()->toDateString());
                 } elseif ($filter === 'completed') {
                     $query->where('status', 'completed');
                 } elseif ($filter === 'cancelled') {
@@ -1785,11 +1912,13 @@ class SubscriptionRequestService
             return [];
         }
 
-        return ActiveSubscription::where(function ($q) use ($userId, $parent) {
+        return ActiveSubscription::whereHas('subscriptionRequest', function ($q) use ($userId, $parent) {
                 $q->where('parent_id', $parent->id)
                   ->orWhere('parent_id', $userId);
             })
             ->whereIn('status', ['active', 'completed', 'cancelled'])
+            ->with('subscriptionRequest')
+            ->get()
             ->pluck('driver_id')
             ->unique()
             ->values()
@@ -1802,7 +1931,7 @@ class SubscriptionRequestService
 
         // جلب جميع الاشتراكات النشطة لولي الأمر
         $subscriptions = ActiveSubscription::with(['driver.user'])
-            ->where('parent_id', $parentId)
+            ->forParent($parentId)
             ->get();
 
         // دعم إضافي: جلب طلبات الاشتراكات أيضاً في حال كانت تحت الإجراء أو العقد
@@ -1869,7 +1998,7 @@ class SubscriptionRequestService
         $driverId = $driver ? $driver->id : $userId;
 
         $subscriptions = ActiveSubscription::with(['parent'])
-            ->where(function ($q) use ($driverId, $userId) {
+            ->whereHas('subscriptionRequest', function ($q) use ($driverId, $userId) {
                 $q->where('driver_id', $driverId)->orWhere('driver_id', $userId);
             })
             ->get();

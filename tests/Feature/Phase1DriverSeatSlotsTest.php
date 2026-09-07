@@ -4,17 +4,10 @@ namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Database\QueryException;
 use Tests\TestCase;
-use App\Models\User;
-use App\Models\Driver\Driver;
-use App\Models\Driver\DriverSeatSlot;
 
 class Phase1DriverSeatSlotsTest extends TestCase
 {
-    // ⚠️ لا تستخدم RefreshDatabase هنا: بيئة الاختبار متصلة بنفس قاعدة بيانات التطوير/الإنتاج
-    // (راجع phpunit.xml) وRefreshDatabase تنفّذ migrate:fresh فتمسح كل الجداول والبيانات.
-    // DatabaseTransactions تتراجع عن تغييرات كل اختبار بأمان دون حذف أي بيانات قائمة.
     use DatabaseTransactions;
 
     public function test_driver_shifts_columns_exist(): void
@@ -27,56 +20,21 @@ class Phase1DriverSeatSlotsTest extends TestCase
         ]));
     }
 
-    private function makeDriverUser(): User
+    public function test_driver_seat_slots_has_date_and_booked_columns(): void
     {
-        return User::create([
-            'full_name'     => 'سائق اختبار الفترات',
-            'email'         => 'seatslot.' . uniqid() . '@darby.test',
-            'phone_number'  => '091' . rand(1000000, 9999999),
-            'password_hash' => bcrypt('password123'),
-            'role_id'       => 2,
-            'is_active'     => 1,
-        ]);
-    }
-
-    public function test_creates_driver_seat_slot_and_calculates_available_seats(): void
-    {
-        $driver = Driver::create([
-            'user_id' => $this->makeDriverUser()->id,
-            'status' => 'Approved',
-        ]);
-
-        $slot = DriverSeatSlot::create([
-            'driver_id' => $driver->id,
-            'slot' => 'morning_go',
-            'total_seats' => 4,
-            'reserved_seats' => 1,
-        ]);
-
-        $this->assertEquals(3, $slot->available_seats);
-    }
-
-    public function test_enforces_unique_constraint_on_driver_id_and_slot(): void
-    {
-        $driver = Driver::create([
-            'user_id' => $this->makeDriverUser()->id,
-            'status' => 'Approved',
-        ]);
-
-        DriverSeatSlot::create([
-            'driver_id' => $driver->id,
-            'slot' => 'morning_go',
-            'total_seats' => 4,
-            'reserved_seats' => 0,
-        ]);
-
-        $this->expectException(QueryException::class);
-
-        DriverSeatSlot::create([
-            'driver_id' => $driver->id,
-            'slot' => 'morning_go',
-            'total_seats' => 4,
-            'reserved_seats' => 0,
-        ]);
+        $this->assertTrue(Schema::hasColumns('driver_seat_slots', [
+            'driver_id',
+            'slot',
+            'date',
+            'booked',
+        ]));
+        $this->assertFalse(
+            Schema::hasColumn('driver_seat_slots', 'reserved_seats'),
+            'reserved_seats يجب أن يكون محذوفاً في النموذج الجديد'
+        );
+        $this->assertFalse(
+            Schema::hasColumn('driver_seat_slots', 'total_seats'),
+            'total_seats يجب أن يكون محذوفاً في النموذج الجديد'
+        );
     }
 }

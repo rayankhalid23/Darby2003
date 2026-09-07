@@ -5,7 +5,6 @@ namespace App\Http\Resources\Api\Parent;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
-use App\Enums\Shared\SubscriptionDuration;
 
 class ChildResource extends JsonResource
 {
@@ -61,18 +60,8 @@ class ChildResource extends JsonResource
 'logistics' => $this->whenLoaded('logistics', function() {
     return [
         'preferred_time_slot' => $this->logistics->preferred_time_slot,
-        'trip_direction'      => $this->logistics->trip_direction,
         'pickup_time'         => $this->logistics->pickup_time,   // مضاف سابقاً
         'dropoff_time'        => $this->logistics->dropoff_time,  // مضاف سابقاً
-        
-        // الحقول الجديدة التي طلبت إضافتها:
-        'start_date'          => $this->logistics->start_date,
-        'end_date'            => $this->logistics->end_date,
-        'subscription_type'       => $this->logistics->subscription_type,
-        // ✅ التسمية العربية الواضحة (يوم واحد / عدة أيام) بدل القيمة الخام فقط
-        'subscription_type_label' => SubscriptionDuration::tryFrom($this->logistics->subscription_type)?->label()
-                                       ?? $this->logistics->subscription_type,
-
         'is_active'           => (bool) $this->logistics->is_active,
     ];
 }),

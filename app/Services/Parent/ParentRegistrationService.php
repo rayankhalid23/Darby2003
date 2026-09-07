@@ -139,7 +139,7 @@ class ParentRegistrationService
         try {
             return DB::transaction(function () use ($userId, $data) {
                 // 1. جلب بيانات المستخدم
-                $user = User::where('id', $userId)->where('role_id', 3)->firstOrFail();
+                $user = User::findOrFail($userId); // نطاق المسار محمي لولي الأمر بالفعل (لا نعتمد على role_id الثابت)
                 if (!empty($data['avatar_url'])) {
     if (!empty($user->avatar_url) && file_exists(public_path($user->avatar_url))) {
         @unlink(public_path($user->avatar_url));

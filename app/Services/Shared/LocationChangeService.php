@@ -46,9 +46,14 @@ class LocationChangeService
         }
 
         $parentIds = array_values(array_unique(array_filter([$userId, $parent->id])));
-        $addresses = Address::whereIn('parent_id', $parentIds)->orderByDesc('id')->get();
+        // جدول addresses يربط العنوان بالمستخدم عبر user_id لا parent_id — الاستعلام
+        // بـ parent_id كان يسقط بخطأ «Unknown column» ويعطّل شاشة تغيير الموقع بالكامل.
+        $addresses = Address::whereIn('user_id', $parentIds)
+            ->orderByDesc('is_default')
+            ->orderByDesc('id')
+            ->get();
 
-        $activeSubscriptions = ActiveSubscription::where(function ($q) use ($userId, $parent) {
+        $activeSubscriptions = ActiveSubscription::whereHas('subscriptionRequest', function ($q) use ($userId, $parent) {
                 $q->where('parent_id', $parent->id)->orWhere('parent_id', $userId);
             })
             ->where('status', 'active')
@@ -115,7 +120,7 @@ class LocationChangeService
         }
 
         $activeSub = ActiveSubscription::where('id', $activeSubscriptionId)
-            ->where(function ($q) use ($userId, $parent) {
+            ->whereHas('subscriptionRequest', function ($q) use ($userId, $parent) {
                 $q->where('parent_id', $parent->id)->orWhere('parent_id', $userId);
             })
             ->with(['child', 'driver.user', 'route', 'subscriptionRequest'])
@@ -283,7 +288,7 @@ class LocationChangeService
     {
         if ($addressId) {
             $parentIds = array_values(array_unique(array_filter([$userId, $parentId])));
-            $address   = Address::where('id', $addressId)->whereIn('parent_id', $parentIds)->first();
+            $address   = Address::where('id', $addressId)->whereIn('user_id', $parentIds)->first();
             if (!$address) {
                 throw new Exception('العنوان المحدد غير موجود ضمن مواقعك المحفوظة.');
             }
@@ -364,11 +369,11 @@ class LocationChangeService
                 'total_amount_after_discount' => $pivot ? (float) $pivot->total_amount_after_discount : null,
                 'driver_net_price'            => $pivot ? (float) $pivot->driver_net_price : null,
                 'distance_km'                 => $pivot ? (float) $pivot->distance_km : null,
-                'working_days_count'          => $pivot ? (int) $pivot->working_days_count : null,
-                'trip_direction'              => $pivot?->trip_direction,
+                'working_days_count'          => $request?->working_days_count,
+                'trip_direction'              => $request?->trip_direction,
                 'timing'                      => $pivot?->timing,
-                'start_date'                  => $pivot?->start_date,
-                'end_date'                    => $pivot?->end_date,
+                'start_date'                  => $request?->start_date,
+                'end_date'                    => $request?->end_date,
                 'currency'                    => 'د.ل',
             ],
         ];

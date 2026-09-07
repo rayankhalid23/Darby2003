@@ -33,8 +33,6 @@ class Child extends Model
         'preferred_time_slot',
         'pickup_time',
         'dropoff_time',
-        'trip_direction',
-        'subscription_type',
         'is_active',
     ];
 

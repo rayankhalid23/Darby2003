@@ -25,14 +25,19 @@ class DriverPreferenceResource extends JsonResource
                 ];
             })->values();
 
-        // مقاعد كل فترة/اتجاه
+        // ملخص الحجوزات المستقبلية لكل slot (اليوم فما بعد)
         $seatSlotsData = [];
         if ($this->relationLoaded('seatSlots')) {
-            foreach ($this->seatSlots as $slot) {
-                $seatSlotsData[$slot->slot] = [
-                    'total_seats'     => $slot->total_seats,
-                    'reserved_seats'  => $slot->reserved_seats,
-                    'available_seats' => $slot->available_seats,
+            $today = now()->toDateString();
+            $grouped = $this->seatSlots
+                ->where('date', '>=', $today)
+                ->groupBy('slot');
+
+            foreach (\App\Models\Driver\DriverSeatSlot::ALL_SLOTS as $slotKey) {
+                $slotRows = $grouped->get($slotKey, collect());
+                $maxBooked = $slotRows->max('booked') ?? 0;
+                $seatSlotsData[$slotKey] = [
+                    'upcoming_bookings' => (int) $maxBooked,
                 ];
             }
         }

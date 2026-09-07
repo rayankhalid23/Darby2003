@@ -67,13 +67,8 @@ class ParentSubscriptionController extends Controller
                 'driver.user',
                 'children' => function ($query) {
                     $query->withPivot([
-                        'subscription_type',
-                        'trip_direction',
                         'timing',
-                        'start_date',
-                        'end_date',
-                        'working_days_count',
-                        'distance_km',                    
+                        'distance_km',
                         'price_per_child',
                         'trip_price',
                         'discount_amount',            
@@ -109,13 +104,8 @@ class ParentSubscriptionController extends Controller
                 'driver.user',
                 'children' => function ($query) {
                     $query->withPivot([
-                        'subscription_type',
-                        'trip_direction',
                         'timing',
-                        'start_date',
-                        'end_date',
-                        'working_days_count',
-                        'distance_km',                    
+                        'distance_km',
                         'price_per_child',
                         'trip_price',
                         'discount_amount',            
@@ -227,13 +217,8 @@ class ParentSubscriptionController extends Controller
                     'driver.user',
                     'subscriptionRequest.children' => function ($query) {
                         $query->withPivot([
-                            'subscription_type',
-                            'trip_direction',
                             'timing',
-                            'start_date',
-                            'end_date',
-                            'working_days_count',
-                            'distance_km',                    
+                            'distance_km',
                             'price_per_child',
                             'trip_price',
                             'discount_amount',            
@@ -243,10 +228,7 @@ class ParentSubscriptionController extends Controller
                     },
                     'subscriptionRequest.activeSubscriptions'
                 ])
-                ->where(function ($q) use ($parentId, $user) {
-                    $q->where('parent_id', $parentId)
-                      ->orWhere('parent_id', $user->id);
-                })
+                ->forParent($parentId)
                 ->where('id', $id)
                 ->first();
 
@@ -269,13 +251,8 @@ class ParentSubscriptionController extends Controller
                     'driver.user',
                     'children' => function ($query) {
                         $query->withPivot([
-                            'subscription_type',
-                            'trip_direction',
                             'timing',
-                            'start_date',
-                            'end_date',
-                            'working_days_count',
-                            'distance_km',                    
+                            'distance_km',
                             'price_per_child',
                             'trip_price',
                             'discount_amount',            
@@ -409,15 +386,11 @@ class ParentSubscriptionController extends Controller
 
             $parentId = (int) $user->id;
 
-            $query = DB::table('active_subscriptions')
-                ->where(function ($q) use ($parentId, $user) {
-                    $q->where('parent_id', $parentId)
-                      ->orWhere('parent_id', $user->id);
-                })
+            $query = \App\Models\Shared\ActiveSubscription::forParent($parentId)
                 ->whereIn('status', ['active', 'pending', 'completed']);
 
             if ($request->has('driver_id') && !empty($request->driver_id)) {
-                $query->where('driver_id', $request->driver_id);
+                $query->forDriver($request->driver_id);
             }
 
             $hasSubscription = $query->exists();
@@ -447,13 +420,8 @@ class ParentSubscriptionController extends Controller
                 'driver.user',
                 'children' => function ($query) {
                     $query->withPivot([
-                        'subscription_type',
-                        'trip_direction',
                         'timing',
-                        'start_date',
-                        'end_date',
-                        'working_days_count',
-                        'distance_km',                    
+                        'distance_km',
                         'price_per_child',
                         'trip_price',
                         'discount_amount',            

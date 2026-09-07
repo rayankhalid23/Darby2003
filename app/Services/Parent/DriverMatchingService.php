@@ -11,10 +11,16 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
-use Carbon\Carbon;
 
 class DriverMatchingService
 {
+    /**
+     * نوع الاشتراك واتجاه الرحلة لم يعودا مخزّنين على الطفل، بل يُحددان عند إنشاء
+     * طلب الاشتراك (request_children)؛ فنستخدم هنا قيمتين افتراضيتين لتقدير السعر فقط.
+     */
+    private const DEFAULT_TRIP_DIRECTION   = 'go';
+    private const DEFAULT_SUBSCRIPTION_TYPE = 'multi_day';
+
     private function resolveChildren(array $childIds, int $parentId): Collection
     {
         $query = Child::with(['school.zone.subMunicipality', 'address.zone'])
@@ -38,7 +44,7 @@ class DriverMatchingService
             ->whereIn('drivers.status', ['Approved', 'Active'])
             ->whereHas('user', fn($u) => $u->where('is_trusted', true))
             ->where('drivers.license_expiry', '>=', now()->toDateString())
-            ->with(['user', 'vehicles', 'zones', 'seatSlots']);
+            ->with(['user', 'vehicles', 'zones']);
 
         // 3. التحقق من وجود بحث بالاسم أو رقم الهاتف
         $hasSearchQuery = !empty($filters['search_query']);
@@ -60,7 +66,7 @@ class DriverMatchingService
 
         // 4. تطبيق الفلترة الذكية عند عدم وجود بحث نصي
         if ($children->isNotEmpty() && !$hasSearchQuery) {
-            $this->applyChildrenSmartFilters($query, $children);
+            $this->applyChildrenSmartFilters($query, $children, $filters);
         }
 
         // 5. الترتيب والتصفح
@@ -138,7 +144,7 @@ class DriverMatchingService
         });
     }
 
-    private function applyChildrenSmartFilters($query, Collection $children): void
+    private function applyChildrenSmartFilters($query, Collection $children, array $filters = []): void
     {
         $genders = $children->pluck('gender')->unique()->values()->toArray();
         if (count($genders) > 1) {
@@ -147,37 +153,73 @@ class DriverMatchingService
             $query->whereIn('drivers.accepted_gender', [$genders[0] ?? 'both', 'both']);
         }
 
-        $subscriptionTypes = $children->map(fn($c) => optional($c->logistics)->subscription_type)->filter()->unique()->values()->toArray();
-        if (!empty($subscriptionTypes)) {
-            $query->where(function ($q) use ($subscriptionTypes) {
-                $q->where('drivers.subscription_type', 'both');
-                foreach ($subscriptionTypes as $type) {
-                    $q->orWhere('drivers.subscription_type', $type);
-                }
-            });
-        }
-
-        $this->applySeatsAvailabilityFilter($query, $children);
+        $this->applySeatsAvailabilityFilter($query, $children, $filters);
         $this->applyZoneFilter($query, $children);
     }
 
-    private function applySeatsAvailabilityFilter($query, Collection $children): void
+    private function applySeatsAvailabilityFilter($query, Collection $children, array $filters = []): void
     {
+        // فترة البحث تأتي من ولي الأمر؛ غيابها يعني بحثاً ليوم واحد هو اليوم.
+        // ⚠️ قبل تمرير start_date/end_date عبر SearchDriversRequest كان الفلتر يفحص
+        // اليوم الحالي دائماً، فيمر سائق ممتلئ طوال فترة الاشتراك المطلوبة.
+        $startDate = $filters['start_date'] ?? now()->toDateString();
+        $endDate   = $filters['end_date']   ?? $startDate;
+
+        // الاتجاه والفترة يجب أن يكونا نفسهما اللذين سيُحجزان لاحقاً في طلب الاشتراك،
+        // وإلا فُلتِر على رحلة وحُجزت أخرى. الفترة تُشتق من بيانات الطفل الحقيقية
+        // (children.preferred_time_slot) لا من قيمة افتراضية.
+        $direction = $filters['trip_direction'] ?? self::DEFAULT_TRIP_DIRECTION;
+
+        // حساب طلب المقاعد لكل slot
         $slotDemand = [];
         foreach ($children as $child) {
-            $timing = strtoupper($child->logistics?->preferred_time_slot ?? 'MORNING');
-            $direction = $child->logistics?->trip_direction ?? 'go';
-            $slots = DriverSeatSlot::resolveSlots($timing, $direction);
+            $timing = $filters['timing'] ?? DriverSeatSlot::timingFromPreferredSlot($child->preferred_time_slot);
 
-            foreach ($slots as $slot) {
+            if ($timing === null) {
+                continue;
+            }
+
+            foreach (DriverSeatSlot::resolveSlots($timing, $direction) as $slot) {
                 $slotDemand[$slot] = ($slotDemand[$slot] ?? 0) + 1;
             }
         }
 
+        if (empty($slotDemand)) {
+            return;
+        }
+
+        // استبعاد السائقين الغائبين في أي يوم من فترة البحث
+        $query->whereDoesntHave('absences', function ($q) use ($startDate, $endDate) {
+            $q->whereBetween('absence_date', [$startDate, $endDate]);
+        });
+
+        // فلتر المقاعد: لكل slot، تحقق أن السائق لديه طاقة كافية
+        // نستخدم subquery يحسب min(capacity - booked) عبر الفترة
         foreach ($slotDemand as $slot => $needed) {
-            $query->whereHas('seatSlots', function ($q) use ($slot, $needed) {
-                $q->where('slot', $slot)
-                  ->whereRaw('(total_seats - reserved_seats) >= ?', [$needed]);
+            $slotCopy   = $slot;
+            $neededCopy = $needed;
+
+            $query->where(function ($q) use ($slotCopy, $neededCopy, $startDate, $endDate) {
+                // السائق مقبول إذا:
+                // (طاقة مركبته - أكبر حجز في أي يوم لهذا الـ slot) >= needed
+                // أو لا يوجد أي حجز في هذه الفترة (خانة فارغة = متاح كامل)
+                $q->whereHas('vehicles', function ($vq) use ($slotCopy, $neededCopy, $startDate, $endDate) {
+                    $vq->where('status', 'Active')
+                       ->where(function ($sub) use ($slotCopy, $neededCopy, $startDate, $endDate) {
+                           // max booked في الفترة لهذا الـ slot
+                           $sub->whereRaw(
+                               '(vehicles.capacity_manual - COALESCE((
+                                   SELECT MAX(dss.booked)
+                                   FROM driver_seat_slots dss
+                                   WHERE dss.driver_id = drivers.id
+                                     AND dss.slot = ?
+                                     AND dss.date BETWEEN ? AND ?
+                                     AND DAYOFWEEK(dss.date) NOT IN (6, 7)
+                               ), 0)) >= ?',
+                               [$slotCopy, $startDate, $endDate, $neededCopy]
+                           );
+                       });
+                });
             });
         }
     }
@@ -254,10 +296,8 @@ class DriverMatchingService
 
         foreach ($children as $child) {
             $logistics = $child->logistics;
-            $subscriptionType = (strtolower(trim($logistics?->subscription_type ?? 'multi_day')) === 'single_day') ? 'single_day' : 'multi_day';
-            $startDate = $logistics?->start_date ?? null;
-            $endDate   = $logistics?->end_date ?? null;
-            $tripDir   = strtolower(trim($logistics?->trip_direction ?? 'go'));
+            $subscriptionType = self::DEFAULT_SUBSCRIPTION_TYPE;
+            $tripDir          = self::DEFAULT_TRIP_DIRECTION;
 
             $childEntry = [
                 'child_id'            => $child->id,
@@ -279,8 +319,9 @@ class DriverMatchingService
                 'subscription_type'   => $subscriptionType,
                 'preferred_time_slot' => $logistics?->preferred_time_slot ?? 'morning',
                 'trip_direction'      => $tripDir,
-                'start_date'          => $startDate,
-                'end_date'            => $endDate,
+                // تواريخ الاشتراك تُحدد عند إنشاء الطلب (request_children) وليست مخزّنة على الطفل
+                'start_date'          => null,
+                'end_date'            => null,
             ];
 
             if (!$child->address || !$child->school || !$child->address->lat || !$child->school->lat) {
@@ -299,8 +340,8 @@ class DriverMatchingService
             $singleLegPrice    = round($effectiveDistance * $pricePerKm, 2);
             $dailyPrice        = round($singleLegPrice * $tripMultiplier, 2);
 
-            // الأيام: اليومي ينسحب على يوم واحد (1)، والشهري يحسب أيامه الرسمية
-            $workingDays       = ($subscriptionType === 'single_day') ? 1 : $this->calculateWorkingDays($startDate, $endDate);
+            // تقدير سعر البحث يُحتسب ليوم عمل واحد؛ عدد الأيام الفعلي يُحسب عند إنشاء طلب الاشتراك
+            $workingDays       = 1;
 
             // --- الحسابات الخاصة بهذا الطفل بفرده ---
             $childRawSubtotal  = round($dailyPrice * $workingDays, 2);                      // الإجمالي قبل الخصم
@@ -378,28 +419,6 @@ class DriverMatchingService
                 [$lon2, $lat2]
             ]
         ];
-    }
-
-    private function calculateWorkingDays($startDate, $endDate): int
-    {
-        if (empty($startDate) || empty($endDate)) return 1;
-        try {
-            $start = Carbon::parse($startDate)->startOfDay();
-            $end = Carbon::parse($endDate)->startOfDay();
-            if ($end->lessThan($start)) return 1;
-
-            $days = 0;
-            $current = $start->copy();
-            while ($current->lessThanOrEqualTo($end)) {
-                if (!$current->isFriday() && !$current->isSaturday()) {
-                    $days++;
-                }
-                $current->addDay();
-            }
-            return max(1, $days);
-        } catch (\Exception $e) {
-            return 1;
-        }
     }
 
     private function calculateHaversineDistance($lat1, $lon1, $lat2, $lon2): float

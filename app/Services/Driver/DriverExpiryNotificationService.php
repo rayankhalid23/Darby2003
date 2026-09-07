@@ -5,9 +5,11 @@ namespace App\Services\Driver;
 use App\Models\Admin\Admin;
 use App\Models\Driver\Driver;
 use App\Models\Driver\DriverDocument;
+use App\Models\Driver\VehicleDocument;
 use App\Services\Notification\NotificationService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * فحص يومي لتواريخ انتهاء رخصة القيادة ووثيقة التأمين لدى السائقين:
@@ -39,6 +41,10 @@ class DriverExpiryNotificationService
         $stats = [
             'license_reminders'   => 0,
             'license_expired'     => 0,
+            'insurance_reminders' => 0,
+            'insurance_expired'   => 0,
+            'document_reminders'  => 0,
+            'document_expired'    => 0,
         ];
         foreach (array_keys(self::DOCUMENT_EXPIRY_TYPES) as $docKey) {
             $stats["{$docKey}_reminders"] = 0;
@@ -46,11 +52,82 @@ class DriverExpiryNotificationService
         }
 
         $this->processLicenseExpiries($stats);
-        foreach (self::DOCUMENT_EXPIRY_TYPES as $docKey => $config) {
-            $this->processDocumentExpiries($stats, $docKey, $config['doc_type'], $config['column'], $config['label']);
+
+        // 1. فحص جدول vehicle_documents (الجدول الأساسي المطبع)
+        $this->processVehicleDocumentExpiries($stats);
+
+        // 2. دعم رجعي لجدول driver_documents القديم في حال كان موجوداً في بيئة ما
+        if (Schema::hasTable('driver_documents')) {
+            foreach (self::DOCUMENT_EXPIRY_TYPES as $docKey => $config) {
+                $this->processDocumentExpiries($stats, $docKey, $config['doc_type'], $config['column'], $config['label']);
+            }
         }
 
         return $stats;
+    }
+
+    /** فحص وتحديث وثائق المركبات المنتهية الصلاحية من جدول vehicle_documents المطبع */
+    private function processVehicleDocumentExpiries(array &$stats): void
+    {
+        if (!Schema::hasTable('vehicle_documents')) {
+            return;
+        }
+
+        $today = Carbon::today();
+
+        VehicleDocument::whereNotNull('expiry_date')
+            ->with(['vehicle.driver.user'])
+            ->chunkById(100, function ($documents) use ($today, &$stats) {
+                foreach ($documents as $document) {
+                    $driver = $document->vehicle?->driver;
+                    if (!$driver || !$driver->user) {
+                        continue;
+                    }
+
+                    $expiryDate = $document->expiry_date instanceof Carbon
+                        ? $document->expiry_date->format('Y-m-d')
+                        : Carbon::parse($document->expiry_date)->format('Y-m-d');
+
+                    $daysRemaining = $this->daysRemaining($today, $expiryDate);
+                    $docLabel = match ($document->doc_type) {
+                        'INSURANCE'        => 'وثيقة التأمين',
+                        'LOGBOOK'          => 'رخصة السير (الاستمارة)',
+                        'INSPECTION'       => 'الفحص الفني الدوري',
+                        'OPERATING_PERMIT' => 'تصريح التشغيل',
+                        default            => 'الوثيقة الرسمية',
+                    };
+                    $docKey = strtolower($document->doc_type ?? 'document');
+
+                    if ($daysRemaining < 0) {
+                        if ($document->state !== VehicleDocument::STATE_EXPIRED) {
+                            $document->update([
+                                'state'       => VehicleDocument::STATE_EXPIRED,
+                                'is_verified' => false,
+                            ]);
+
+                            $this->notifyDriverExpired($driver->user, $docKey, $docLabel, $expiryDate, $driver->id);
+                            $this->notifyAdminsExpired($driver, $docKey, $docLabel, $expiryDate);
+
+                            if ($document->doc_type === 'INSURANCE') {
+                                $stats['insurance_expired']++;
+                            }
+                            $stats["{$docKey}_expired"] = ($stats["{$docKey}_expired"] ?? 0) + 1;
+                            $stats['document_expired']++;
+                        }
+                        continue;
+                    }
+
+                    $milestone = $this->currentMilestone($daysRemaining);
+                    if ($milestone !== null) {
+                        $this->notifyDriverReminder($driver->user, $docKey, $docLabel, $daysRemaining, $milestone, $expiryDate, $driver->id);
+                        if ($document->doc_type === 'INSURANCE') {
+                            $stats['insurance_reminders']++;
+                        }
+                        $stats["{$docKey}_reminders"] = ($stats["{$docKey}_reminders"] ?? 0) + 1;
+                        $stats['document_reminders']++;
+                    }
+                }
+            });
     }
 
     private function processLicenseExpiries(array &$stats): void
@@ -163,13 +240,18 @@ class DriverExpiryNotificationService
     /** يُعلّم مستند الرخصة كمنتهي ويُنبّه السائق + الإدارة — مرة واحدة فقط بفضل فحص الحالة الحالية */
     private function markLicenseExpired(Driver $driver): bool
     {
-        $document = DriverDocument::where('driver_id', $driver->id)->where('doc_type', 'LICENSE')->first();
-
-        if (!$document || $document->status === 'Expired') {
-            return false; // لا مستند مرتبط، أو أُعلن انتهاؤه مسبقاً
+        if ($driver->license_expiry_notified_milestone === -1) {
+            return false; // أُعلن انتهاؤه مسبقاً
         }
 
-        $document->update(['status' => 'Expired']);
+        if (Schema::hasTable('driver_documents')) {
+            $document = DriverDocument::where('driver_id', $driver->id)->where('doc_type', 'LICENSE')->first();
+            if ($document) {
+                $document->update(['status' => 'Expired']);
+            }
+        }
+
+        $driver->update(['license_expiry_notified_milestone' => -1]);
 
         $this->notifyDriverExpired($driver->user, 'license', 'رخصة القيادة', $driver->license_expiry, $driver->id);
         $this->notifyAdminsExpired($driver, 'license', 'رخصة القيادة', $driver->license_expiry);

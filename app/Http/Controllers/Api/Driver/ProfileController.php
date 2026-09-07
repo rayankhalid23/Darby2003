@@ -389,15 +389,19 @@ public function showLegalData(Request $request)
             'vehicle_id'                       => $document->vehicle_id,
             'doc_type'                         => $document->doc_type,
             'file_url'                         => $fileUrl,
-            'license_expiry_date'              => $document->license_expiry_date,
-            'insurance_expiry_date'            => $document->insurance_expiry_date,
+            'expiry_date'                      => $document->expiry_date ? \Carbon\Carbon::parse($document->expiry_date)->format('Y-m-d') : null,
+            'is_verified'                      => (bool) $document->is_verified,
+            'state'                            => $document->state ?? 'pending',
+            'state_label'                      => $document->state_label ?? 'معلقة',
+            'license_expiry_date'              => $document->license_expiry_date ?? ($document->expiry_date ? \Carbon\Carbon::parse($document->expiry_date)->format('Y-m-d') : null),
+            'insurance_expiry_date'            => $document->insurance_expiry_date ?? ($document->expiry_date ? \Carbon\Carbon::parse($document->expiry_date)->format('Y-m-d') : null),
             'stamp_expiry_date'                => $document->stamp_expiry_date,
             'technical_inspection_expiry_date' => $document->technical_inspection_expiry_date,
-            'document_status'                  => $document->status,
+            'document_status'                  => $document->state ?? ($document->status ?? 'pending'),
             'feedback'                         => $document->feedback,
             'uploaded_at'                      => $document->uploaded_at 
                 ? \Carbon\Carbon::parse($document->uploaded_at)->toDateTimeString() 
-                : null,
+                : ($document->created_at ? $document->created_at->toDateTimeString() : null),
         ];
     });
 

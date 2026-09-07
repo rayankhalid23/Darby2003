@@ -184,6 +184,7 @@ class DriverRegisterService
                         'file_url'    => $docFields['file_url'],
                         'expiry_date' => $docFields['expiry_date'],
                         'is_verified' => false,
+                        'state'       => \App\Models\Driver\VehicleDocument::STATE_PENDING,
                     ]);
                 }
             }

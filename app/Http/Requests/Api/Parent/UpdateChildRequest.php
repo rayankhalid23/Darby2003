@@ -8,7 +8,6 @@ use Carbon\Carbon;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Log;
-use App\Enums\Shared\SubscriptionDuration;
 
 class UpdateChildRequest extends FormRequest
 {
@@ -56,12 +55,8 @@ class UpdateChildRequest extends FormRequest
 
             // البيانات اللوجستية والاشتراك (كلها اختيارية وجزئية)
             'preferred_time_slot' => ['sometimes', 'nullable', Rule::in(['morning', 'evening', 'both'])],
-            'trip_direction'      => ['sometimes', 'nullable', Rule::in(['go', 'return', 'both'])],
             'pickup_time'         => 'sometimes|nullable|date_format:H:i',
             'dropoff_time'        => 'sometimes|nullable|date_format:H:i',
-            'start_date'          => 'sometimes|nullable|date',
-            'end_date'            => 'sometimes|nullable|date',
-            'subscription_type'   => ['sometimes', 'nullable', Rule::in(SubscriptionDuration::childValues())],
             'is_active'           => 'sometimes|nullable|boolean',
         ];
     }
@@ -80,9 +75,37 @@ class UpdateChildRequest extends FormRequest
             'photo.mimes'                => 'صيغة الصورة يجب أن تكون: jpeg, png, jpg, webp, heic, heif.',
             'photo.max'                  => 'حجم الصورة كبير جداً، الحد الأقصى 10 ميجابايت.',
             'preferred_time_slot.in'     => 'الفترة المختارة غير صالحة (morning, evening, both).',
-            'trip_direction.in'          => 'اتجاه الرحلة غير صالح (go, return, both).',
-            'subscription_type.in'       => 'نوع الاشتراك غير صحيح (single_day أو multi_day).',
         ];
+    }
+
+    /**
+     * الطفل مسنَد دائماً للعنوان الرئيسي المفعّل، فلا يُقبل نقله لعنوان ثانوي
+     * عبر تعديل بياناته — تغيير العنوان يتم حصراً من مسار تعيين العنوان الرئيسي.
+     */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($v) {
+            $addressId = $this->input('address_id');
+
+            if (empty($addressId) || !auth()->id()) {
+                return;
+            }
+
+            $defaultAddress = app(\App\Services\Parent\AddressService::class)
+                ->resolveEffectiveDefault(auth()->id());
+
+            if (!$defaultAddress) {
+                $v->errors()->add('address_id', 'لا يوجد عنوان رئيسي مفعّل في حسابك، يرجى إضافة عنوان أولاً.');
+                return;
+            }
+
+            if ((int) $addressId !== (int) $defaultAddress->id) {
+                $v->errors()->add(
+                    'address_id',
+                    'لا يمكن إسناد الطفل إلا للعنوان الرئيسي المفعّل [' . $defaultAddress->label . ']، يرجى تعيين العنوان المطلوب كعنوان رئيسي أولاً.'
+                );
+            }
+        });
     }
 
     protected function failedValidation(Validator $validator)

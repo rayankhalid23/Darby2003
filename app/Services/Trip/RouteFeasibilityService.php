@@ -22,8 +22,8 @@ class RouteFeasibilityService
         $driver = $req->driver;
 
         $firstPivot = $req->children->first()?->pivot;
-        $timing = $firstPivot?->timing ?? $req->timing ?? 'MORNING';
-        $direction = $firstPivot?->trip_direction ?? $firstPivot?->direction ?? $req->direction ?? 'both';
+        $timing = $firstPivot?->timing ?? 'MORNING';
+        $direction = $req->trip_direction ?? 'both';
 
         $slots = DriverSeatSlot::resolveSlots($timing, $direction);
         $childrenCount = $req->children->count() ?: max(1, (int) ($req->children_count ?? 1));
@@ -112,8 +112,8 @@ class RouteFeasibilityService
         $schoolPoints = [];
 
         foreach ($req->children as $child) {
-            $homeLat = (float) ($child->pivot->home_lat ?? $child->address?->lat ?? $child->homeAddress?->lat ?? $child->pickupAddress?->lat ?? 0);
-            $homeLng = (float) ($child->pivot->home_lng ?? $child->address?->lng ?? $child->homeAddress?->lng ?? $child->pickupAddress?->lng ?? 0);
+            $homeLat = (float) ($req->home_lat ?? $child->address?->lat ?? $child->homeAddress?->lat ?? $child->pickupAddress?->lat ?? 0);
+            $homeLng = (float) ($req->home_lng ?? $child->address?->lng ?? $child->homeAddress?->lng ?? $child->pickupAddress?->lng ?? 0);
             $schoolLat = (float) ($child->pivot->school_lat ?? $child->school?->lat ?? $child->school?->latitude ?? 0);
             $schoolLng = (float) ($child->pivot->school_lng ?? $child->school?->lng ?? $child->school?->longitude ?? 0);
 

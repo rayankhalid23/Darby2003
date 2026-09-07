@@ -45,7 +45,10 @@ class DriverRegisterController extends Controller
 
         } catch (Exception $e) {
             Log::error("Account Registration OTP Error: " . $e->getMessage());
-            return response()->json(['status' => false, 'message' => 'فشل إرسال رمز التحقق.'], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getMessage() ?: 'فشل إرسال رمز التحقق، يرجى المحاولة لاحقاً.'
+            ], 400);
         }
     }
 
@@ -82,7 +85,10 @@ class DriverRegisterController extends Controller
 
         } catch (Exception $e) {
             Log::error("OTP Verification & Creation Error: " . $e->getMessage());
-            return response()->json(['status' => false, 'message' => 'فشل التحقق وإنشاء الحساب.'], 500);
+            return response()->json([
+                'status'  => false,
+                'message' => $e->getMessage() ?: 'فشل التحقق وإنشاء الحساب، يرجى المحاولة لاحقاً.'
+            ], 500);
         }
     }
 

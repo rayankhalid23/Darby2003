@@ -1,0 +1,1315 @@
+{
+  "info": {
+    "name": "Darby — دفتر عناوين ولي الأمر (is_default)",
+    "_postman_id": "darby-addresses-0001",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "مجموعة مخصصة لاختبار اندبوينتات العناوين بعد إضافة العنوان الرئيسي is_default.\n\nطريقة الاستخدام:\n1. عدّل المتغير base_url إن لزم.\n2. نفّذ مجلد «0) التجهيز» — يلتقط parent_token و zone_id تلقائياً.\n3. نفّذ مجلد «1) المسار الأساسي» بالترتيب — يلتقط address_id و second_address_id تلقائياً.\n4. مجلد «2) حالات الخطأ» يتحقق من كل رسائل التحقق وأكواد الأخطاء.\n\nقواعد العمل:\n- عنوان رئيسي واحد فقط لكل ولي أمر، وأول عنوان يصبح رئيسياً تلقائياً.\n- كل الأطفال مسنَدون تلقائياً للعنوان الرئيسي.\n- تغيير العنوان الرئيسي مرفوض عند وجود اشتراك مفعّل لأي طفل.\n- بلا اشتراكات مفعّلة وبوجود طلبات معلّقة ⇒ تُلغى كلها تلقائياً ثم يتم التغيير."
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000"
+    },
+    {
+      "key": "parent_token",
+      "value": ""
+    },
+    {
+      "key": "zone_id",
+      "value": ""
+    },
+    {
+      "key": "school_id",
+      "value": ""
+    },
+    {
+      "key": "address_id",
+      "value": ""
+    },
+    {
+      "key": "second_address_id",
+      "value": ""
+    },
+    {
+      "key": "third_address_id",
+      "value": ""
+    },
+    {
+      "key": "child_id",
+      "value": ""
+    },
+    {
+      "key": "start_date",
+      "value": ""
+    },
+    {
+      "key": "end_date",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// توليد تواريخ اشتراك صالحة تلقائياً (تتخطى الجمعة والسبت)",
+          "function nextWorkingDay(d) {",
+          "  while (d.getDay() === 5 || d.getDay() === 6) d.setDate(d.getDate() + 1);",
+          "  return d;",
+          "}",
+          "const s = nextWorkingDay(new Date(Date.now() + 2 * 86400000));",
+          "const e = new Date(s.getTime() + 30 * 86400000);",
+          "const fmt = d => d.toISOString().slice(0, 10);",
+          "pm.collectionVariables.set('start_date', fmt(s));",
+          "pm.collectionVariables.set('end_date', fmt(e));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0) التجهيز (نفّذها أولاً)",
+      "description": "تسجيل الدخول والتقاط التوكن ومعرّف المنطقة تلقائياً في متغيرات المجموعة.",
+      "item": [
+        {
+          "name": "0.1 تسجيل دخول ولي الأمر",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "يلتقط access_token تلقائياً في المتغير parent_token.\n\nالمدخلات الإجبارية: email, password\nالمدخلات الاختيارية: device_name, fcm_token, device_id, platform",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"parent@darby.test\",\n  \"password\": \"Password123\",\n  \"device_name\": \"postman\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "if (j.access_token) {",
+                  "  pm.collectionVariables.set('parent_token', j.access_token);",
+                  "  console.log('parent_token محفوظ');",
+                  "}",
+                  "pm.test('نجاح تسجيل الدخول', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "0.2 جلب المناطق (للحصول على zone_id)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/zones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "zones"
+              ]
+            },
+            "description": "zone_id إجباري عند إضافة عنوان. هذا الطلب يلتقط أول منطقة تلقائياً.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const list = j.data || [];",
+                  "if (list.length) {",
+                  "  pm.collectionVariables.set('zone_id', list[0].id);",
+                  "  console.log('zone_id = ' + list[0].id);",
+                  "}",
+                  "pm.test('نجاح جلب المناطق', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1) المسار الأساسي للعناوين",
+      "description": "نفّذها بالترتيب: عرض ← إضافة رئيسي ← إضافة ثانوي ← تعديل ← تعيين رئيسي ← حذف.",
+      "item": [
+        {
+          "name": "1.1 عرض دفتر العناوين",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "المدخلات: لا شيء.\n\nالمخرجات (200):\n- success (bool)\n- message (string)\n- default_address_id (int|null) ← معرّف العنوان الرئيسي\n- data[] : id, label, zone_id, zone_name, lat, lng, is_default\n\nالترتيب: العنوان الرئيسي أولاً دائماً.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('نجاح', () => pm.response.to.have.status(200));",
+                  "pm.test('يحتوي default_address_id', () => pm.expect(j).to.have.property('default_address_id'));",
+                  "pm.test('العنوان الرئيسي أولاً', () => {",
+                  "  if ((j.data || []).length > 1) pm.expect(j.data[0].is_default).to.eql(true);",
+                  "});",
+                  "if (j.default_address_id) pm.collectionVariables.set('address_id', j.default_address_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 إضافة عنوان (الأول = رئيسي تلقائياً)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "المدخلات الإجبارية:\n- label (string) 2-100 حرفاً، عربي + أرقام + - / فقط، غير مكرر\n- lat (numeric) بين -90 و 90\n- lng (numeric) بين -180 و 180\n- zone_id (integer) موجود في جدول zones\n\nالمدخلات الاختيارية:\n- is_default (boolean)\n\nالمخرجات (201): success, message, data{id,label,zone_id,zone_name,lat,lng,is_default}\n\nملاحظة: أول عنوان لولي الأمر يصبح is_default=true إجبارياً ويُسنَد إليه كل الأطفال.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"المنزل الرئيسي\",\n  \"lat\": 32.885,\n  \"lng\": 13.185,\n  \"zone_id\": \"{{zone_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('تم الإنشاء', () => pm.response.to.have.status(201));",
+                  "if (j.data && j.data.id) {",
+                  "  pm.collectionVariables.set('address_id', j.data.id);",
+                  "  console.log('address_id = ' + j.data.id);",
+                  "}",
+                  "pm.test('أول عنوان رئيسي تلقائياً', () => pm.expect(j.data.is_default).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 إضافة عنوان ثانوي",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "نفس حقول 1.2. بما أنه يوجد عنوان رئيسي مسبقاً، يُنشأ هذا بحالة is_default=false.\n\nالمخرجات (201): message = 'تم إضافة العنوان الجديد بنجاح كعنوان ثانوي.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"منزل الجدة\",\n  \"lat\": 32.889,\n  \"lng\": 13.189,\n  \"zone_id\": \"{{zone_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "pm.test('تم الإنشاء', () => pm.response.to.have.status(201));",
+                  "if (j.data && j.data.id) {",
+                  "  pm.collectionVariables.set('second_address_id', j.data.id);",
+                  "  console.log('second_address_id = ' + j.data.id);",
+                  "}",
+                  "pm.test('ثانوي', () => pm.expect(j.data.is_default).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 إضافة عنوان وجعله رئيسياً مباشرة",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "بإرسال is_default=true يمر الطلب عبر حراسات تبديل العنوان الرئيسي:\n- وجود اشتراك مفعّل ⇒ 422 ولا يُنشأ العنوان إطلاقاً (العملية ذرّية)\n- وجود طلبات معلّقة فقط ⇒ تُلغى كلها ثم يُنشأ العنوان رئيسياً",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"المنزل الجديد\",\n  \"lat\": 32.8911,\n  \"lng\": 13.1911,\n  \"zone_id\": \"{{zone_id}}\",\n  \"is_default\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 أو 422 حسب الاشتراكات', () => pm.expect([201, 422]).to.include(pm.response.code));",
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('third_address_id', j.data.id);",
+                  "else console.log('مرفوض: ' + j.error_code + ' — ' + j.message);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.5 تعديل عنوان (تعديل جزئي)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses/{{second_address_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses",
+                "{{second_address_id}}"
+              ]
+            },
+            "description": "كل الحقول اختيارية — يُعدَّل ما تُرسله فقط:\n- label (string) نفس قيود الإضافة\n- lat (numeric) / lng (numeric)\n- zone_id (integer|null)\n- is_default (boolean): true ⇒ تبديل بكل الحراسات · false ⇒ مرفوض على الرئيسي\n\nالمخرجات (200): success, message, data{...}\n\nالمسار يقبل PATCH و PUT و POST.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"منزل الجدة المعدل\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('نجاح التعديل', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.6 ⭐ تعيين العنوان الرئيسي (set-default)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses/{{second_address_id}}/set-default",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses",
+                "{{second_address_id}}",
+                "set-default"
+              ]
+            },
+            "description": "المدخلات: لا شيء (المعرّف في المسار فقط).\n\nالمخرجات (200):\n- success (bool)\n- message (string)\n- changed (bool) ← false إذا كان العنوان رئيسياً أصلاً\n- cancelled_requests_count (int) ← عدد طلبات الاشتراك الملغاة\n- cancelled_request_ids (int[])\n- reassigned_children_count (int) ← عدد الأطفال المنقولين\n- data{...} العنوان بعد التعيين\n\nالرفض (422): error_code = ADDRESS_HAS_ACTIVE_SUBSCRIPTIONS مع context.children\n\nالمسار يقبل PATCH و PUT و POST.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 أو 422', () => pm.expect([200, 422]).to.include(pm.response.code));",
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 200) {",
+                  "  pm.test('يحتوي عدّاد الإلغاء', () => pm.expect(j).to.have.property('cancelled_requests_count'));",
+                  "  pm.test('يحتوي عدّاد الأطفال', () => pm.expect(j).to.have.property('reassigned_children_count'));",
+                  "  console.log('ألغيت ' + j.cancelled_requests_count + ' طلبات · نُقل ' + j.reassigned_children_count + ' أطفال');",
+                  "} else {",
+                  "  pm.test('كود خطأ الاشتراكات', () => pm.expect(j.error_code).to.eql('ADDRESS_HAS_ACTIVE_SUBSCRIPTIONS'));",
+                  "  console.log(j.message);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.7 حذف عنوان (حذف ناعم)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses/{{address_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses",
+                "{{address_id}}"
+              ]
+            },
+            "description": "المدخلات: لا شيء.\n\nالمخرجات (200): success, message = 'تم حذف العنوان بنجاح.'\n\nالقواعد:\n- عنوان مرتبط بطفل ⇒ 422\n- حذف عنوان رئيسي بلا أطفال ⇒ ينجح ويُرقّى أقدم عنوان متبقٍّ تلقائياً\n- الحذف ناعم: يمكن إعادة إضافة نفس المسمى والإحداثيات لاحقاً",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 أو 422', () => pm.expect([200, 422]).to.include(pm.response.code));",
+                  "if (pm.response.code === 422) console.log(pm.response.json().error_code);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2) حالات الخطأ (كل رسائل التحقق)",
+      "description": "كل طلب هنا يجب أن يفشل — للتأكد من وجود الرسالة الصحيحة وكود الخطأ الصحيح.",
+      "item": [
+        {
+          "name": "2.1 إضافة بلا حقول (كل رسائل الإجباري)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "المتوقع 422 مع errors لكل من: label, lat, lng, zone_id\n\nالرسائل:\n- مسمى العنوان مطلوب.\n- إحداثيات خط العرض مطلوبة.\n- إحداثيات خط الطول مطلوبة.\n- يرجى تحديد المنطقة الجغرافية التابع لها العنوان.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "const j = pm.response.json();",
+                  "pm.test('كود التحقق', () => pm.expect(j.error_code).to.eql('VALIDATION_ERROR'));",
+                  "['label','lat','lng','zone_id'].forEach(f =>",
+                  "  pm.test('خطأ في ' + f, () => pm.expect(j.errors).to.have.property(f)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 مسمى بحروف لاتينية (مرفوض)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "المتوقع 422 — 'مسمى العنوان يجب أن يكون بالعربية (ويمكن أن يتضمن أرقاماً).'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"My Home\",\n  \"lat\": 32.9,\n  \"lng\": 13.2,\n  \"zone_id\": \"{{zone_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('خطأ في label', () => pm.expect(pm.response.json().errors).to.have.property('label'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 إحداثيات خارج النطاق",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "المتوقع 422 — 'إحداثيات خط العرض غير صالحة جغرافياً.' و 'إحداثيات خط الطول غير صالحة جغرافياً.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"عنوان خاطئ\",\n  \"lat\": 999,\n  \"lng\": -999,\n  \"zone_id\": \"{{zone_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "const e = pm.response.json().errors;",
+                  "pm.test('lat', () => pm.expect(e).to.have.property('lat'));",
+                  "pm.test('lng', () => pm.expect(e).to.have.property('lng'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 منطقة غير موجودة",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "المتوقع 422 — 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"عنوان بمنطقة وهمية\",\n  \"lat\": 32.91,\n  \"lng\": 13.21,\n  \"zone_id\": 999999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('خطأ في zone_id', () => pm.expect(pm.response.json().errors).to.have.property('zone_id'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 اسم عنوان مكرر",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "أعد إرسال 1.2 بنفس المسمى. المتوقع 422 — 'اسم العنوان مسجل لديك مسبقاً.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"المنزل الرئيسي\",\n  \"lat\": 32.8999,\n  \"lng\": 13.1999,\n  \"zone_id\": \"{{zone_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 إلغاء تفعيل العنوان الرئيسي (مرفوض)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses/{{address_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses",
+                "{{address_id}}"
+              ]
+            },
+            "description": "المتوقع 422 — error_code = ADDRESS_DEFAULT_CANNOT_BE_UNSET\n'لا يمكن إلغاء تفعيل العنوان الرئيسي مباشرة، يجب تعيين عنوان آخر كعنوان رئيسي بدلاً منه.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_default\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('الكود الصحيح', () => pm.expect(pm.response.json().error_code)",
+                  "  .to.eql('ADDRESS_DEFAULT_CANNOT_BE_UNSET'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.7 حذف عنوان رئيسي مرتبط بأطفال (مرفوض)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses/{{address_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses",
+                "{{address_id}}"
+              ]
+            },
+            "description": "يتطلب وجود طفل مضاف. المتوقع 422 — error_code = ADDRESS_DEFAULT_CANNOT_BE_DELETED\n'لا يمكن حذف العنوان الرئيسي لأن أطفالك مسنَدون إليه، يرجى تعيين عنوان آخر كعنوان رئيسي أولاً ثم إعادة المحاولة.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('كود الحذف الممنوع', () => pm.expect(['ADDRESS_DEFAULT_CANNOT_BE_DELETED','ADDRESS_LINKED_TO_CHILD'])",
+                  "  .to.include(pm.response.json().error_code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.8 تعيين عنوان لا تملكه (حماية IDOR)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses/999999/set-default",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses",
+                "999999",
+                "set-default"
+              ]
+            },
+            "description": "المتوقع 404 — error_code = NOT_FOUND\n'العنصر أو الرابط الذي تحاول الوصول إليه غير موجود أو تم حذفه.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.9 بلا توكن (غير مصرح)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/addresses",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "addresses"
+              ]
+            },
+            "description": "المتوقع 401 — error_code = UNAUTHENTICATED\n'غير مصرح بالوصول، يرجى تسجيل الدخول أولاً.'"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3) أثر العنوان الرئيسي على الأطفال",
+      "description": "الاندبوينتات المتأثرة بقاعدة «كل الأطفال على العنوان الرئيسي».",
+      "item": [
+        {
+          "name": "3.1 إضافة طفل بدون address_id (إسناد تلقائي)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/children",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "children"
+              ]
+            },
+            "description": "address_id لم يعد إجبارياً — يُملأ تلقائياً من العنوان الرئيسي.\n\nالمدخلات الإجبارية:\n- school_id (integer) موجود في schools\n- full_name (string) الاسم الثلاثي، 8-150 حرفاً\n- birth_date (date) العمر بين 6 و 21 سنة\n- gender (male|female)\n- grade (integer) 0-12\n- preferred_time_slot (morning|evening|both)\n- start_date (date) · end_date (date)\n\nالمدخلات الاختيارية:\n- address_id (integer) ← إن أُرسل وجب أن يطابق العنوان الرئيسي\n- photo (image) · medical_notes (string) · notification_radius (100-5000)\n- pickup_time (H:i) · dropoff_time (H:i)\n\nالمخرجات (201): success, message, data{... address_id = العنوان الرئيسي}",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"school_id\": \"{{school_id}}\",\n  \"full_name\": \"محمد علي سالم\",\n  \"birth_date\": \"2015-05-10\",\n  \"gender\": \"male\",\n  \"grade\": 4,\n  \"preferred_time_slot\": \"morning\",\n  \"start_date\": \"{{start_date}}\",\n  \"end_date\": \"{{end_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 أو 422', () => pm.expect([201, 422]).to.include(pm.response.code));",
+                  "const j = pm.response.json();",
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('child_id', j.data.id);",
+                  "  pm.test('أُسنِد للعنوان الرئيسي', () =>",
+                  "    pm.expect(String(j.data.address_id)).to.eql(String(pm.collectionVariables.get('address_id'))));",
+                  "} else { console.log(JSON.stringify(j.errors)); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 إضافة طفل بعنوان ثانوي (مرفوض)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/children",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "children"
+              ]
+            },
+            "description": "المتوقع 422 في مفتاح errors.address_id:\n'لا يمكن إسناد الطفل إلا للعنوان الرئيسي المفعّل [...]، يرجى تعيين العنوان المطلوب كعنوان رئيسي أولاً.'",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"school_id\": \"{{school_id}}\",\n  \"address_id\": \"{{second_address_id}}\",\n  \"full_name\": \"خالد علي سالم\",\n  \"birth_date\": \"2015-05-10\",\n  \"gender\": \"male\",\n  \"grade\": 4,\n  \"preferred_time_slot\": \"morning\",\n  \"start_date\": \"{{start_date}}\",\n  \"end_date\": \"{{end_date}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422', () => pm.response.to.have.status(422));",
+                  "pm.test('خطأ في address_id', () => pm.expect(pm.response.json().errors).to.have.property('address_id'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 عرض الأطفال (للتأكد من الإسناد)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/children",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "children"
+              ]
+            },
+            "description": "بعد أي عملية set-default يجب أن يكون address_id لكل الأطفال = العنوان الرئيسي الجديد.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const def = String(pm.collectionVariables.get('address_id'));",
+                  "const kids = pm.response.json().data || [];",
+                  "pm.test('كل الأطفال على العنوان الرئيسي', () => {",
+                  "  kids.forEach(k => pm.expect(String(k.address_id)).to.eql(def));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 جلب المدارس (للحصول على school_id)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/parent/schools",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "parent",
+                "schools"
+              ]
+            },
+            "description": "school_id إجباري عند إضافة طفل. هذا الطلب يلتقط أول مدرسة تلقائياً.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{parent_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const j = pm.response.json();",
+                  "const list = j.data || [];",
+                  "if (list.length) {",
+                  "  pm.collectionVariables.set('school_id', list[0].id);",
+                  "  console.log('school_id = ' + list[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

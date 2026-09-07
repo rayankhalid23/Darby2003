@@ -31,7 +31,7 @@ class DriverProfileService
     public function updateDriverProfile(int $userId, array $data): array
     {
         return DB::transaction(function () use ($userId, $data) {
-            $user = User::where('id', $userId)->where('role_id', 4)->firstOrFail();
+            $user = User::findOrFail($userId); // يعتمد على علاقة $user->driver لا على role_id الثابت
             $driver = $user->driver;
 
             if (!$driver) {
@@ -147,7 +147,7 @@ class DriverProfileService
     public function approveEmailChange(int $userId): bool
     {
         return DB::transaction(function () use ($userId) {
-            $user = User::where('id', $userId)->where('role_id', 4)->firstOrFail();
+            $user = User::findOrFail($userId); // يعتمد على علاقة $user->driver لا على role_id الثابت
             
             $newEmail = request()->query('new_email') ?? \Illuminate\Support\Facades\Cache::get("driver_email_change_{$userId}");
 
@@ -218,7 +218,7 @@ class DriverProfileService
      */
     public function getDriverStatus(int $userId): array
     {
-        $user = User::where('id', $userId)->where('role_id', 4)->firstOrFail();
+        $user = User::findOrFail($userId); // يعتمد على علاقة $user->driver لا على role_id الثابت
         $driver = $user->driver;
 
         if (!$driver) {
@@ -255,7 +255,7 @@ class DriverProfileService
     {
         return DB::transaction(function () use ($userId, $data) {
             // 1. التحقق من وجود المستخدم وصلاحية السائق
-            $user = User::where('id', $userId)->where('role_id', 4)->first();
+            $user = User::find($userId); // يعتمد على علاقة $user->driver لا على role_id الثابت
 
             if (!$user) {
                 throw new \Exception("المستخدم غير موجود أو لا يملك صلاحية سائق.", 404);
@@ -268,7 +268,10 @@ class DriverProfileService
             }
 
             // 2. تجميد جلب البيانات القديمة للوثائق والمستندات قبل إجراء أي تحديث للربط الدقيق
-            $existingDocs = DriverDocument::where('driver_id', $driver->id)->get()->keyBy('doc_type');
+            $hasDriverDocs = \Illuminate\Support\Facades\Schema::hasTable('driver_documents');
+            $existingDocs = $hasDriverDocs
+                ? DriverDocument::where('driver_id', $driver->id)->get()->keyBy('doc_type')
+                : collect();
 
             $oldValues = [
                 'national_id'                   => $driver->national_id,
@@ -299,10 +302,12 @@ class DriverProfileService
             if (array_key_exists('license_expiry', $data)) {
                 $driverUpdate['license_expiry_notified_milestone'] = null;
 
-                DriverDocument::where('driver_id', $driver->id)
-                    ->where('doc_type', 'LICENSE')
-                    ->where('status', 'Expired')
-                    ->update(['status' => 'Pending']);
+                if ($hasDriverDocs) {
+                    DriverDocument::where('driver_id', $driver->id)
+                        ->where('doc_type', 'LICENSE')
+                        ->where('status', 'Expired')
+                        ->update(['status' => 'Pending']);
+                }
             }
 
             if (!empty($driverUpdate)) {
@@ -328,6 +333,16 @@ class DriverProfileService
                 'TECHNICAL_INSPECTION' => ['input' => 'technical_inspection_expiry',  'column' => 'technical_inspection_expiry_date'],
             ];
 
+            $vehicle = $driver->vehicles()->first();
+            $vehicleDocTypeMap = [
+                'LICENSE'                  => null, // رخصة القيادة تُحفظ في جدول drivers
+                'VEHICLE_LOGBOOK'          => 'LOGBOOK',
+                'INSURANCE'                => 'INSURANCE',
+                'TECHNICAL_INSPECTION'     => 'INSPECTION',
+                'STAMP'                    => 'OPERATING_PERMIT',
+                'BOOKLET_PERSONAL_PAGE'    => 'OPERATING_PERMIT',
+            ];
+
             foreach ($docMap as $pathKey => $docType) {
                 if (!empty($data[$pathKey])) {
                     $updateFields = [
@@ -336,18 +351,40 @@ class DriverProfileService
                         'uploaded_at' => now(),
                     ];
 
+                    $docExpiry = null;
                     if (isset($expiryFieldMap[$docType])) {
                         $updateFields['expiry_notified_milestone'] = null;
                         $expiryInput = $expiryFieldMap[$docType]['input'];
                         if (array_key_exists($expiryInput, $data)) {
                             $updateFields[$expiryFieldMap[$docType]['column']] = $data[$expiryInput];
+                            $docExpiry = $data[$expiryInput];
                         }
                     }
 
-                    DriverDocument::updateOrCreate(
-                        ['driver_id' => $driver->id, 'doc_type' => $docType],
-                        $updateFields
-                    );
+                    if (\Illuminate\Support\Facades\Schema::hasTable('driver_documents')) {
+                        DriverDocument::updateOrCreate(
+                            ['driver_id' => $driver->id, 'doc_type' => $docType],
+                            $updateFields
+                        );
+                    }
+
+                    // تحديث الوثيقة المحددة في جدول vehicle_documents وإسناد حالتها إلى "معلقة" (Pending)
+                    $targetVehicleDocType = $vehicleDocTypeMap[$docType] ?? null;
+                    if ($vehicle && $targetVehicleDocType) {
+                        $vDocData = [
+                            'file_url'    => $data[$pathKey],
+                            'is_verified' => false,
+                            'state'       => \App\Models\Driver\VehicleDocument::STATE_PENDING,
+                        ];
+                        if ($docExpiry) {
+                            $vDocData['expiry_date'] = $docExpiry;
+                        }
+
+                        \App\Models\Driver\VehicleDocument::updateOrCreate(
+                            ['vehicle_id' => $vehicle->id, 'doc_type' => $targetVehicleDocType],
+                            $vDocData
+                        );
+                    }
                 }
             }
 
@@ -355,13 +392,26 @@ class DriverProfileService
             foreach ($expiryFieldMap as $docType => $map) {
                 $pathKey = array_search($docType, $docMap, true);
                 if (array_key_exists($map['input'], $data) && empty($data[$pathKey])) {
-                    DriverDocument::where('driver_id', $driver->id)
-                        ->where('doc_type', $docType)
-                        ->update([
-                            $map['column']              => $data[$map['input']],
-                            'expiry_notified_milestone' => null,
-                            'status'                    => 'Pending',
-                        ]);
+                    if (\Illuminate\Support\Facades\Schema::hasTable('driver_documents')) {
+                        DriverDocument::where('driver_id', $driver->id)
+                            ->where('doc_type', $docType)
+                            ->update([
+                                $map['column']              => $data[$map['input']],
+                                'expiry_notified_milestone' => null,
+                                'status'                    => 'Pending',
+                            ]);
+                    }
+
+                    $targetVehicleDocType = $vehicleDocTypeMap[$docType] ?? null;
+                    if ($vehicle && $targetVehicleDocType) {
+                        \App\Models\Driver\VehicleDocument::where('vehicle_id', $vehicle->id)
+                            ->where('doc_type', $targetVehicleDocType)
+                            ->update([
+                                'expiry_date' => $data[$map['input']],
+                                'is_verified' => false,
+                                'state'       => \App\Models\Driver\VehicleDocument::STATE_PENDING,
+                            ]);
+                    }
                 }
             }
 
@@ -416,7 +466,7 @@ class DriverProfileService
     public function updateVehicleDetails(int $userId, int $vehicleId, array $data): Vehicle
     {
         return DB::transaction(function () use ($userId, $vehicleId, $data) {
-            $user = User::where('id', $userId)->where('role_id', 4)->firstOrFail();
+            $user = User::findOrFail($userId); // يعتمد على علاقة $user->driver لا على role_id الثابت
             $driver = $user->driver;
 
             if (!$driver) {

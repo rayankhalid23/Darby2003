@@ -98,11 +98,12 @@ class ComplaintService
         $driverUserId = $driver->user_id;
 
         // فحص وجود اشتراك سابق أو حالي في أي من الجداول (ActiveSubscription, SubscriptionRequest)
-        $hasSubscription = \App\Models\Shared\ActiveSubscription::where(function ($q) use ($parentId, $parentUserId) {
-                $q->where('parent_id', $parentId)->orWhere('parent_id', $parentUserId);
-            })
-            ->where(function ($q) use ($realDriverId, $driverUserId) {
-                $q->where('driver_id', $realDriverId)->orWhere('driver_id', $driverUserId);
+        $hasSubscription = \App\Models\Shared\ActiveSubscription::whereHas('subscriptionRequest', function ($q) use ($parentId, $parentUserId, $realDriverId, $driverUserId) {
+                $q->where(function ($q2) use ($parentId, $parentUserId) {
+                    $q2->where('parent_id', $parentId)->orWhere('parent_id', $parentUserId);
+                })->where(function ($q3) use ($realDriverId, $driverUserId) {
+                    $q3->where('driver_id', $realDriverId)->orWhere('driver_id', $driverUserId);
+                });
             })
             ->exists()
             || \App\Models\Shared\SubscriptionRequest::where(function ($q) use ($parentId, $parentUserId) {

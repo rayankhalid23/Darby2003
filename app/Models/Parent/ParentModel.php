@@ -5,6 +5,7 @@ namespace App\Models\Parent;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -72,9 +73,21 @@ class ParentModel extends User
         return \App\Models\User::class;
     }
 
+    /**
+     * جدول addresses يربط العنوان بصاحبه عبر user_id لا parent_id —
+     * المفتاح الخاطئ كان يُسقط كل استعلام للعلاقة بخطأ «Unknown column».
+     */
     public function addresses(): HasMany
     {
-        return $this->hasMany(Address::class, 'parent_id');
+        return $this->hasMany(Address::class, 'user_id');
+    }
+
+    /**
+     * العنوان الرئيسي المفعّل لولي الأمر (واحد فقط، وكل الأطفال مسنَدون إليه).
+     */
+    public function defaultAddress(): HasOne
+    {
+        return $this->hasOne(Address::class, 'user_id')->where('is_default', true);
     }
 
     public function children(): HasMany

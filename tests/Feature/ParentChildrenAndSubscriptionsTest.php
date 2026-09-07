@@ -152,12 +152,8 @@ class ParentChildrenAndSubscriptionsTest extends TestCase
             'medical_notes'       => 'حساسية من الغبار',
             'notification_radius' => 500,
             'preferred_time_slot' => 'morning',
-            'trip_direction'      => 'both',
             'pickup_time'         => '07:15',
             'dropoff_time'        => '13:30',
-            'start_date'          => now()->addDays(2)->format('Y-m-d'),
-            'end_date'            => now()->addMonths(3)->format('Y-m-d'),
-            'subscription_type'   => 'multi_day',
         ];
 
         $response = $this->actingAs($this->parentUser, 'sanctum')

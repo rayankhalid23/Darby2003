@@ -146,6 +146,11 @@ class DriverSubscriptionController extends Controller
         $request->validate([
             'status'           => 'required|in:accepted,rejected',
             'rejection_reason' => 'required_if:status,rejected|nullable|string|max:500',
+        ], [
+            'status.required'           => 'حالة القرار مطلوبة.',
+            'status.in'                 => 'الحالة يجب أن تكون قبول (accepted) أو رفض (rejected).',
+            'rejection_reason.required_if' => 'سبب الرفض مطلوب عند رفض الطلب.',
+            'rejection_reason.max'      => 'سبب الرفض يجب ألا يتجاوز 500 حرف.',
         ]);
 
         $driver = $this->getAuthenticatedDriver($request);
@@ -210,13 +215,8 @@ class DriverSubscriptionController extends Controller
                     'subscriptionRequest.parent.user',
                     'subscriptionRequest.children' => function ($query) {
                         $query->withPivot([
-                            'subscription_type',
-                            'trip_direction',
                             'timing',
-                            'start_date',
-                            'end_date',
-                            'working_days_count',
-                            'distance_km',                    
+                            'distance_km',
                             'price_per_child',
                             'trip_price',
                             'discount_amount',            
@@ -226,7 +226,7 @@ class DriverSubscriptionController extends Controller
                     },
                     'subscriptionRequest.activeSubscriptions'
                 ])
-                ->where('driver_id', $driver->id)
+                ->forDriver($driver->id)
                 ->where('id', $id)
                 ->first();
 
@@ -249,13 +249,8 @@ class DriverSubscriptionController extends Controller
                     'parent.user',
                     'children' => function ($query) {
                         $query->withPivot([
-                            'subscription_type',
-                            'trip_direction',
                             'timing',
-                            'start_date',
-                            'end_date',
-                            'working_days_count',
-                            'distance_km',                    
+                            'distance_km',
                             'price_per_child',
                             'trip_price',
                             'discount_amount',            
@@ -319,12 +314,7 @@ class DriverSubscriptionController extends Controller
                 'driver.user',
                 'children' => function ($query) {
                     $query->withPivot([
-                        'subscription_type',
-                        'trip_direction',
                         'timing',
-                        'start_date',
-                        'end_date',
-                        'working_days_count',
                         'distance_km',
                         'price_per_child',
                         'trip_price',
@@ -380,7 +370,7 @@ class DriverSubscriptionController extends Controller
         $tripDetails = [
             'request_id'   => $subscriptionRequest->id,
             'status'       => $subscriptionRequest->status,
-            'trip_type'    => $subscriptionRequest->direction ?? 'two_way',
+            'trip_type'    => $subscriptionRequest->trip_direction ?? 'two_way',
             'pickup_time'  => $subscriptionRequest->pickup_time  ?? null,
             'dropoff_time' => $subscriptionRequest->dropoff_time ?? null,
             'parent'       => [
@@ -398,9 +388,9 @@ class DriverSubscriptionController extends Controller
                 'id'           => $child->id,
                 'name'         => $child->full_name ?? $child->name ?? 'طفل',
                 'gender'       => $child->gender ?? null,
-                'home_address' => $child->pivot?->home_label ?? $child->address?->label ?? $child->address?->address ?? 'العنوان غير محدد',
-                'latitude'     => (float) ($child->pivot?->home_lat  ?? $child->address?->lat  ?? $child->latitude  ?? 0),
-                'longitude'    => (float) ($child->pivot?->home_lng ?? $child->address?->lng ?? $child->longitude ?? 0),
+                'home_address' => $subscriptionRequest->home_label ?? $child->address?->label ?? $child->address?->address ?? 'العنوان غير محدد',
+                'latitude'     => (float) ($subscriptionRequest->home_lat  ?? $child->address?->lat  ?? $child->latitude  ?? 0),
+                'longitude'    => (float) ($subscriptionRequest->home_lng ?? $child->address?->lng ?? $child->longitude ?? 0),
                 'notes'        => $child->pivot?->child_notes ?? $child->notes ?? null,
             ])
         ];

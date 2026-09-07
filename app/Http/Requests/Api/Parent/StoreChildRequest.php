@@ -9,7 +9,6 @@ use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Log;
 use App\Enums\Shared\SchoolStage;
-use App\Enums\Shared\SubscriptionDuration;
 
 class StoreChildRequest extends FormRequest
 {
@@ -26,8 +25,10 @@ class StoreChildRequest extends FormRequest
         return [
             // جعلنا parent_id اختياري هنا لأن الكنترولر يجذبه تلقائياً من التوكن (auth)
             'parent_id'           => 'nullable|exists:users,id',
-            'school_id'           => 'required|exists:schools,id',
-            'address_id'          => 'required|exists:addresses,id',
+            'school_id'           => 'required|integer|exists:schools,id',
+            // اختياري: كل أطفال ولي الأمر يُسنَدون تلقائياً للعنوان الرئيسي المفعّل،
+            // فإن أُغفل الحقل يُملأ من العنوان الرئيسي، وإن أُرسل وجب أن يطابقه.
+            'address_id'          => 'nullable|integer|exists:addresses,id',
             'full_name'           => ['required', 'string', 'min:8', 'max:150', 'regex:/^[\p{L}]+([\s]+[\p{L}]+){2,}$/u'],
             'birth_date'          => "required|date|after_or_equal:{$minDate}|before_or_equal:{$maxDate}",
             'gender'              => ['required', Rule::in(['male', 'female'])],
@@ -39,151 +40,110 @@ class StoreChildRequest extends FormRequest
 
             // البيانات اللوجستية والاشتراك
             'preferred_time_slot' => ['required', Rule::in(['morning', 'evening', 'both'])],
-            'trip_direction'      => ['required', Rule::in(['go', 'return', 'both'])],
             'pickup_time'         => 'nullable|date_format:H:i',
             'dropoff_time'        => 'nullable|date_format:H:i',
-            'start_date'          => 'required|date',
-            'end_date'            => 'required|date',
-            'subscription_type'   => ['required', Rule::in(SubscriptionDuration::childValues())],
         ];
     }
 
     public function messages(): array
     {
         return [
-            // رسائل التحقق من الوجود في قاعدة البيانات (تمنع ظهور validation.exists للفرنت)
-            'parent_id.exists'           => 'حساب ولي الأمر غير موجود بالنظام.',
-            'school_id.required'         => 'يرجى تحديد المدرسة.',
-            'school_id.exists'           => 'المدرسة المختارة غير مسجلة في النظام.',
-            'address_id.required'        => 'يرجى تحديد عنوان التوصيل.',
-            'address_id.exists'          => 'العنوان المختار غير موجود بالنظام.',
+            // التحقق من الوجود بالمنظومة
+            'parent_id.exists'             => 'حساب ولي الأمر غير مسجل في النظام.',
+            'school_id.required'           => 'يرجى تحديد المدرسة.',
+            'school_id.integer'            => 'معرف المدرسة غير صالح.',
+            'school_id.exists'             => 'المدرسة المختارة غير مسجلة في النظام.',
+            'address_id.integer'           => 'معرف العنوان غير صالح.',
+            'address_id.exists'            => 'العنوان المختار غير موجود بالنظام.',
 
-            // البيانات الأساسية
-            'full_name.required'         => 'الاسم الثلاثي مطلوب.',
-            'full_name.regex'            => 'يرجى إدخال الاسم الثلاثي باللغة العربية بشكل صحيح.',
-            'birth_date.required'        => 'تاريخ الميلاد مطلوب.',
-            'birth_date.after_or_equal'  => 'عمر الطفل لا يمكن أن يتجاوز 21 سنة.',
-            'birth_date.before_or_equal' => 'عمر الطفل لا يمكن أن يقل عن 6 سنوات.',
-            'gender.required'            => 'يرجى تحديد جنس الطفل.',
-            'gender.in'                  => 'يرجى تحديد جنس الطفل (ذكر أو أنثى).',
-            'grade.required'             => 'يرجى تحديد الصف الدراسي.',
-            'photo.image'                => 'يجب أن يكون الملف المرفوع صورة صالحة.',
-            'photo.max'                  => 'حجم الصورة كبير جداً، الحد الأقصى 2 ميجابايت.',
+            // البيانات الأساسية للطفل
+            'full_name.required'           => 'الاسم الثلاثي للطفل مطلوب.',
+            'full_name.string'             => 'اسم الطفل يجب أن يكون نصاً.',
+            'full_name.min'                => 'اسم الطفل يجب ألا يقل عن 8 أحرف (الاسم الثلاثي).',
+            'full_name.max'                => 'اسم الطفل يجب ألا يتجاوز 150 حرفاً.',
+            'full_name.regex'              => 'يرجى إدخال الاسم الثلاثي للطفل بشكل صحيح.',
+
+            'birth_date.required'          => 'تاريخ ميلاد الطفل مطلوب.',
+            'birth_date.date'              => 'صيغة تاريخ الميلاد غير صحيحة.',
+            'birth_date.after_or_equal'    => 'عمر الطفل لا يمكن أن يتجاوز 21 سنة.',
+            'birth_date.before_or_equal'   => 'عمر الطفل لا يمكن أن يقل عن 6 سنوات.',
+
+            'gender.required'              => 'يرجى تحديد جنس الطفل.',
+            'gender.in'                    => 'جنس الطفل يجب أن يكون ذكر أو أنثى.',
+
+            'grade.required'               => 'يرجى تحديد الصف الدراسي.',
+            'grade.integer'                => 'الصف الدراسي يجب أن يكون رقماً صحيحاً.',
+            'grade.min'                    => 'الصف الدراسي يجب أن يكون بين 0 (روضة) و 12 (ثانوي).',
+            'grade.max'                    => 'الصف الدراسي يجب أن يكون بين 0 (روضة) و 12 (ثانوي).',
+
+            'photo.image'                  => 'الملف المرفوع يجب أن يكون صورة.',
+            'photo.mimes'                  => 'صيغة الصورة يجب أن تكون jpeg أو png أو jpg.',
+            'photo.max'                    => 'حجم الصورة لا يجب أن يتجاوز 2 ميجابايت.',
+
+            'medical_notes.string'         => 'الملاحظات الصحية يجب أن تكون نصاً.',
+            'medical_notes.max'            => 'الملاحظات الصحية لا يمكن أن تتجاوز 1000 حرف.',
+
+            'notification_radius.integer'   => 'نطاق الإشعار يجب أن يكون رقماً صحيحاً.',
+            'notification_radius.min'       => 'نطاق الإشعار لا يقل عن 100 متر.',
+            'notification_radius.max'       => 'نطاق الإشعار لا يتجاوز 5000 متر.',
             
             // اللوجستيات
-            'preferred_time_slot.required' => 'يجب اختيار الفترة الزمنية المفضلة.',
-            'preferred_time_slot.in'       => 'الفترة المختارة غير صالحة.',
-            'trip_direction.required'      => 'يجب تحديد اتجاه الرحلة.',
-            'trip_direction.in'            => 'اتجاه الرحلة غير صالح.',
-            'pickup_time.date_format'      => 'صيغة وقت الالتقاط يجب أن تكون HH:MM.',
-            'dropoff_time.date_format'     => 'صيغة وقت التوصيل يجب أن تكون HH:MM.',
-            
-            // الاشتراكات
-            'start_date.required'        => 'تاريخ بدء الاشتراك مطلوب.',
-            'start_date.date'            => 'تاريخ البدء غير صالح.',
-            'end_date.required'          => 'تاريخ انتهاء الاشتراك مطلوب.',
-            'end_date.date'              => 'تاريخ الانتهاء غير صالح.',
-            'subscription_type.required' => 'يجب اختيار نوع الاشتراك.',
-            'subscription_type.in'       => 'نوع الاشتراك غير صحيح (يجب أن يكون single_day أو multi_day).',
+            'preferred_time_slot.required' => 'يجب اختيار الفترة المفضلة (صباحي، مسائي، كلاهما).',
+            'preferred_time_slot.in'       => 'الفترة المفضلة المختارة غير صالحة.',
+
+            'pickup_time.date_format'      => 'وقت الالتقاط يجب أن يكون بصيغة HH:MM.',
+            'dropoff_time.date_format'     => 'وقت التوصيل يجب أن يكون بصيغة HH:MM.',
         ];
     }
 
     /**
-     * التحقق من شروط التواريخ ونوع الاشتراك
+     * التحقق من سلامة العنوان ومنع تكرار الطفل
      */
     public function withValidator($validator): void
     {
         $validator->after(function ($v) {
             $data  = $this->input();
-            $type  = $data['subscription_type'] ?? null;
-            $start = isset($data['start_date']) ? Carbon::parse($data['start_date'])->startOfDay() : null;
-            $end   = isset($data['end_date'])   ? Carbon::parse($data['end_date'])->startOfDay()   : null;
-            $now   = Carbon::now();
 
-            if (!$start || !$end) {
-                return;
-            }
-
-            // ── 1. لا تواريخ ماضية ──────────────────────────────────
-            if ($start->lt($now->copy()->startOfDay())) {
-                $v->errors()->add('start_date', 'لا يمكن اختيار تاريخ في الماضي.');
-                return;
-            }
-
-            // ── 2. حد الإغلاق الليلي ──────────────────────────────
-            // بعد الساعة 22:00 لا يُقبل الحجز لليوم القادم
-            $minStart = $now->copy()->addDay()->startOfDay();
-            if ($now->hour >= 22) {
-                $minStart->addDay();
-            }
-            // تخطّ عطلة نهاية الأسبوع لأول يوم عمل صالح
-            while ($minStart->isFriday() || $minStart->isSaturday()) {
-                $minStart->addDay();
-            }
-
-            if ($start->lt($minStart)) {
-                $msg = $now->hour >= 22
-                    ? 'بعد الساعة 10 مساءً لا يُقبل الحجز إلا من بعد غد على الأقل.'
-                    : 'يجب أن يكون تاريخ البدء غداً على الأقل (لإشعار السائق مسبقاً).';
-                $v->errors()->add('start_date', $msg);
-                return;
-            }
-
-            // ── 3. بداية في يوم عمل فعلي ───────────────────────────
-            if ($start->isFriday() || $start->isSaturday()) {
-                $v->errors()->add('start_date', 'لا يمكن أن يبدأ الاشتراك في يوم عطلة (جمعة أو سبت).');
-                return;
-            }
-
-            // ── 4. حد أقصى للحجز المسبق: 60 يوماً ─────────────────
-            if ($start->gt($now->copy()->addDays(60)->startOfDay())) {
-                $v->errors()->add('start_date', 'لا يمكن الحجز لأكثر من 60 يوماً مقدماً.');
-                return;
-            }
-
-            // ── 5. تاريخ الانتهاء لا يسبق البدء ───────────────────
-            if ($end->lt($start)) {
-                $v->errors()->add('end_date', 'تاريخ الانتهاء لا يمكن أن يكون قبل تاريخ البدء.');
-                return;
-            }
-
-            // ── 6. single_day: البداية = النهاية ───────────────────
-            if ($type === SubscriptionDuration::SINGLE_DAY->value && !$start->eq($end)) {
-                $v->errors()->add('end_date', 'اشتراك يوم واحد يجب أن يكون تاريخ البدء والانتهاء في نفس اليوم.');
-                return;
-            }
-
-            // ── 7. multi_day: يجب أن تحتوي على يومي عمل على الأقل ─
-            if ($type === SubscriptionDuration::MULTI_DAY->value) {
-                if ($start->eq($end)) {
-                    $v->errors()->add('end_date', 'اشتراك عدة أيام يجب أن يكون تاريخ الانتهاء بعد تاريخ البدء.');
-                    return;
-                }
-
-                // عدّ أيام العمل بين البداية والنهاية
-                $workingDays = 0;
-                $cur = $start->copy();
-                while ($cur->lte($end)) {
-                    if (!$cur->isFriday() && !$cur->isSaturday()) {
-                        $workingDays++;
-                    }
-                    $cur->addDay();
-                }
-                if ($workingDays < 2) {
-                    $v->errors()->add('end_date', 'اشتراك عدة أيام يجب أن يحتوي على يومي عمل على الأقل (غير جمعة وسبت).');
-                    return;
-                }
-
-                // ── 8. حد أقصى لمدة الاشتراك: 120 يوماً ──────────
-                if ($end->gt($start->copy()->addDays(120))) {
-                    $v->errors()->add('end_date', 'مدة الاشتراك لا يمكن أن تتجاوز 120 يوماً (4 أشهر).');
+            // ── 0. منع إسناد طفل إلى عنوان محذوف ────────────────────
+            if (!empty($data['address_id'])) {
+                $address = \App\Models\Parent\Address::withTrashed()->find($data['address_id']);
+                if ($address && $address->trashed()) {
+                    $v->errors()->add('address_id', 'العنوان المختار تم حذفه، لا يمكن إسناد طفل لعنوان محذوف.');
                 }
             }
+
+            // ── 0-أ. الطفل يُسنَد حصراً للعنوان الرئيسي المفعّل ─────────
+            $ownerId        = auth()->id();
+            $defaultAddress = $ownerId
+                ? app(\App\Services\Parent\AddressService::class)->resolveEffectiveDefault($ownerId)
+                : null;
+
+            if ($ownerId && !$defaultAddress) {
+                $v->errors()->add('address_id', 'لا يوجد عنوان رئيسي مفعّل في حسابك، يرجى إضافة عنوان أولاً قبل إضافة طفل.');
+            } elseif ($defaultAddress && !empty($data['address_id'])
+                && (int) $data['address_id'] !== (int) $defaultAddress->id) {
+                $v->errors()->add(
+                    'address_id',
+                    'لا يمكن إسناد الطفل إلا للعنوان الرئيسي المفعّل [' . $defaultAddress->label . ']، يرجى تعيين العنوان المطلوب كعنوان رئيسي أولاً.'
+                );
+            }
+
+            // ── 0.1 منع تكرار إضافة طفل مضاف مسبقاً لنفس ولي الأمر ────
+            $parentId = auth()->id() ?? ($data['parent_id'] ?? null);
+            if ($parentId && !empty($data['full_name'])) {
+                $duplicateExists = \App\Models\Parent\Child::where('parent_id', $parentId)
+                    ->where('full_name', $data['full_name'])
+                    ->exists();
+                if ($duplicateExists) {
+                    $v->errors()->add('full_name', 'هذا الطفل مضاف مسبقاً في حسابك.');
+                }
+            }
+
         });
     }
 
     /**
-     * معالجة أخطاء الفلترة: تسجيلها بالـ Log وإعادة رد واضح للفرنت إند
+     * معالجة أخطاء الفلترة: تسجيلها بالـ Log وإعادة رد واضح ودقيق للفرنت إند
      */
     protected function failedValidation(Validator $validator)
     {
@@ -194,10 +154,10 @@ class StoreChildRequest extends FormRequest
             'payload_sent'   => $this->except(['photo']),
         ]);
 
-        // 2. إرجاع استجابة مرتبة للفرنت إند كـ JSON بكود 422
+        // 2. إرجاع استجابة مرتبة للفرنت إند كـ JSON بكود 422 مع الرسالة الدقيقة المباشرة
         throw new HttpResponseException(response()->json([
             'success' => false,
-            'message' => 'بيانات مدخلة غير صالحة، يرجى مراجعة الحقول.',
+            'message' => $validator->errors()->first() ?: 'بيانات مدخلة غير صالحة، يرجى مراجعة الحقول.',
             'errors'  => $validator->errors()
         ], 422));
     }

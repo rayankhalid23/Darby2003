@@ -103,8 +103,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::prefix('addresses')->group(function () {
         Route::get('/', [AddressController::class, 'index']);
         Route::post('/', [AddressController::class, 'store']);
-        Route::match(['post', 'put', 'patch'], '/{address}', [AddressController::class, 'update'])->withTrashed(); 
-        Route::delete('/{address}', [AddressController::class, 'destroy'])->withTrashed(); 
+        // تعيين العنوان الرئيسي المفعّل (يُسجَّل قبل مسار {address} حتى لا يبتلعه)
+        Route::match(['post', 'put', 'patch'], '/{address}/set-default', [AddressController::class, 'setDefault']);
+        Route::match(['post', 'put', 'patch'], '/{address}', [AddressController::class, 'update'])->withTrashed();
+        Route::delete('/{address}', [AddressController::class, 'destroy'])->withTrashed();
     });
     
     // اقتراح مدرسة جديدة من قبل ولي الأمر

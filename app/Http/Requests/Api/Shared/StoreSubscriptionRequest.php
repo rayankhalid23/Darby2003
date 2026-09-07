@@ -20,24 +20,28 @@ class StoreSubscriptionRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
-        if ($this->has('children') && is_array($this->children)) {
-            $children = collect($this->children)->map(function ($child) {
-                // تحويل القيم المبعوثة للاتجاه إلى القيم المعتمدة (go, return, both)
-                if (isset($child['trip_direction']) || isset($child['direction'])) {
-                    $dir = strtolower($child['trip_direction'] ?? $child['direction']);
-                    
-                    $child['trip_direction'] = match ($dir) {
-                        'go', 'morning', 'one_way_morning'     => 'go',
-                        'return', 'evening', 'one_way_evening' => 'return',
-                        'both', 'two_way'                      => 'both',
-                        default                                => $dir,
-                    };
-                }
+        // تطبيع اتجاه الرحلة على مستوى الطلب (حقل مشترك)
+        if ($this->has('trip_direction') || $this->has('direction')) {
+            $dir = strtolower($this->trip_direction ?? $this->direction ?? '');
+            $normalized = match ($dir) {
+                'go', 'morning', 'one_way_morning'     => 'go',
+                'return', 'evening', 'one_way_evening' => 'return',
+                'both', 'two_way'                      => 'both',
+                default                                => $dir,
+            };
+            $this->merge(['trip_direction' => $normalized]);
+        }
 
-                return $child;
-            })->toArray();
-
-            $this->merge(['children' => $children]);
+        // تطبيع الفترة (صباحي/مسائي/كلاهما). غيابها ليس خطأً: تُشتق لكل طفل من
+        // children.preferred_time_slot في الخدمة، فلا نضع هنا قيمة افتراضية.
+        if ($this->filled('timing')) {
+            $timing = strtoupper(trim((string) $this->timing));
+            $this->merge(['timing' => match ($timing) {
+                'MORNING'              => 'MORNING',
+                'EVENING', 'AFTERNOON' => 'EVENING',
+                'BOTH'                 => 'BOTH',
+                default                => $timing,
+            }]);
         }
     }
 
@@ -48,138 +52,106 @@ class StoreSubscriptionRequest extends FormRequest
      */
     public function rules(): array
     {
+        $parentId = $this->user()?->id;
+
         return [
+            // ─── السائق ─────────────────────────────────────────────────────────
             'driver_id' => [
                 'required',
                 'integer',
                 'exists:drivers,id',
             ],
-            
-            // مصفوفة الأطفال المطلوبة للاشتراك
+
+            // ─── الحقول المشتركة على مستوى الطلب بأكمله ───────────────────────
+
+            // نوع الاشتراك
+            'subscription_type' => [
+                'required',
+                'string',
+                'in:single_day,multi_day',
+            ],
+
+            // اتجاه الرحلة
+            'trip_direction' => [
+                'required',
+                'string',
+                'in:go,return,both',
+            ],
+
+            // الفترة (صباحي/مسائي/كلاهما).
+            // اختيارية للتوافق مع العملاء الحاليين؛ عند غيابها تُشتق لكل طفل من
+            // تفضيله المسجَّل. ⚠️ كانت مثبَّتة على BOTH لكل طلب، فكان الطفل الصباحي
+            // يحجز مقعداً في الفترة المسائية أيضاً ويستهلك ضعف طاقة السائق.
+            'timing' => [
+                'nullable',
+                'string',
+                'in:MORNING,EVENING,BOTH',
+            ],
+
+            // تاريخ البداية
+            'start_date' => [
+                'required',
+                'date',
+                function ($attribute, $value, $fail) {
+                    $startDate = Carbon::parse($value)->startOfDay();
+                    $today     = Carbon::today();
+
+                    if ($startDate->lt($today)) {
+                        $fail('تاريخ بدء الاشتراك لا يمكن أن يكون في الماضي.');
+                    }
+                },
+            ],
+
+            // تاريخ النهاية
+            'end_date' => [
+                'required',
+                'date',
+                'after_or_equal:start_date',
+            ],
+
+            // عنوان المنزل المشترك
+            'home_address'       => ['required', 'array'],
+            'home_address.lat'   => ['required', 'numeric', 'between:-90,90'],
+            'home_address.lng'   => ['required', 'numeric', 'between:-180,180'],
+            'home_address.label' => ['nullable', 'string', 'max:255'],
+
+            // ─── الأطفال ─────────────────────────────────────────────────────────
             'children' => [
                 'required',
                 'array',
                 'min:1',
             ],
+
+            // كل طفل يحتاج child_id فقط — باقي التفاصيل تُؤخذ من بياناته في DB
             'children.*.child_id' => [
                 'required',
                 'integer',
                 'exists:children,id',
-            ],
-            'children.*.subscription_type' => [
-                'required',
-                'string',
-                'in:single_day,multi_day',
-            ],
-            'children.*.trip_direction' => [
-                'required',
-                'string',
-                'in:go,return,both',
-            ],
-            'children.*.timing' => [
-                'nullable',
-                'string',
-                'max:50',
-            ],
-            
-            // حقول التسعير والمسافة (تأتي عادة من دالة حساب السعر)
-            'children.*.distance_km' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-            'children.*.trip_price' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-            'children.*.price_per_child' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-            
-            // موقع المنزل والمدرسة — اختيارية بالكامل. عند إغفالها تُعبأ تلقائياً في
-            // SubscriptionRequestService من عنوان الطفل ومدرسته المربوطين به.
-            // وجودها هنا ضروري لأن validated() يُسقِط أي مفتاح بلا قاعدة تحقّق.
-            'children.*.home_label' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
-            'children.*.home_lat' => [
-                'nullable',
-                'numeric',
-                'between:-90,90',
-            ],
-            'children.*.home_lng' => [
-                'nullable',
-                'numeric',
-                'between:-180,180',
-            ],
-            'children.*.school_label' => [
-                'nullable',
-                'string',
-                'max:255',
-            ],
-            'children.*.school_lat' => [
-                'nullable',
-                'numeric',
-                'between:-90,90',
-            ],
-            'children.*.school_lng' => [
-                'nullable',
-                'numeric',
-                'between:-180,180',
-            ],
-
-            'children.*.start_date' => [
-                'required',
-                'date',
-                function ($attribute, $value, $fail) {
-                    $startDate = Carbon::parse($value)->startOfDay();
-                    $today = Carbon::today();
-                    $tomorrow = Carbon::tomorrow();
-
-                    if ($startDate->lt($today)) {
-                        $fail('تاريخ بدء الاشتراك لا يمكن أن يكون في الماضي.');
-                        return;
-                    }
-
-                    if ($startDate->equalTo($tomorrow)) {
-                        $now = Carbon::now();
-                        if ($now->greaterThanOrEqualTo($today->copy()->endOfDay())) {
-                            $fail('عذراً، تم إغلاق استقبال طلبات التوصيل لغدٍ عند الساعة 12:00 منتصف الليل.');
+                // التحقق من أن الطفل ينتمي لولي الأمر المُسجَّل دخوله
+                function ($attribute, $value, $fail) use ($parentId) {
+                    if ($parentId && !empty($value)) {
+                        $exists = \App\Models\Parent\Child::where('id', $value)
+                            ->where('parent_id', $parentId)
+                            ->exists();
+                        if (!$exists) {
+                            $fail('أحد الأطفال المحددين لا ينتمي لحسابك.');
                         }
                     }
                 },
             ],
-            'children.*.end_date' => [
-                'required',
-                'date',
-                'after_or_equal:children.*.start_date',
-            ],
-            'children.*.days_of_week' => [
-                'nullable',
-                'array',
-            ],
-            'children.*.days_of_week.*' => [
-                'string',
-                'in:Sunday,Monday,Tuesday,Wednesday,Thursday,Friday,Saturday',
-            ],
 
-            // السعر الإجمالي الكلي اختياري (لأنه يحسب في Service)
-            'total_price' => [
-                'nullable',
-                'numeric',
-                'min:0',
-            ],
-
-            // الحقول العامة للاشتراك
+            // ─── الحقول العامة الاختيارية ────────────────────────────────────────
             'notes' => [
                 'nullable',
                 'string',
                 'max:1000',
+            ],
+
+            // السعر الإجمالي اختياري (يُحسب في Service)
+            'total_price' => [
+                'nullable',
+                'numeric',
+                'min:0',
             ],
         ];
     }
@@ -192,28 +164,46 @@ class StoreSubscriptionRequest extends FormRequest
     public function messages(): array
     {
         return [
+            // السائق
             'driver_id.required' => 'يرجى تحديد السائق المطلوب.',
-            'driver_id.exists'   => 'السائق المحدد غير موجود بالمنظومة.',
+            'driver_id.integer'  => 'معرف السائق يجب أن يكون رقماً صحيحاً.',
+            'driver_id.exists'   => 'السائق المحدد غير موجود في المنظومة.',
 
-            'children.required'  => 'يجب إضافة طفل واحد على الأقل للاشتراك.',
-            'children.array'     => 'صيغة بيانات الأطفال غير صحيحة.',
-            'children.min'       => 'يجب تحديد طفل واحد على الأقل.',
+            // نوع الاشتراك
+            'subscription_type.required' => 'نوع الاشتراك مطلوب.',
+            'subscription_type.in'       => 'نوع الاشتراك غير صالح، القيم المقبولة: single_day أو multi_day.',
 
-            'children.*.child_id.required'           => 'معرف الطفل مطلوب.',
-            'children.*.child_id.exists'             => 'أحد الأطفال المحددین غير موجود.',
+            // الاتجاه
+            'trip_direction.required' => 'اتجاه الرحلة مطلوب.',
+            'trip_direction.in'       => 'اتجاه الرحلة غير صالح (go للذهاب، return للإياب، both للاتجاهين).',
+            'timing.in'               => 'الفترة غير صالحة (MORNING صباحي، EVENING مسائي، BOTH كلاهما).',
 
-            'children.*.subscription_type.required' => 'نوع الاشتراك مطلوب لكل طفل.',
-            'children.*.subscription_type.in'       => 'نوع الاشتراك غير صالح (مسموح فقط: single_day أو multi_day).',
-            'children.*.trip_direction.required'    => 'اتجاه الرحلة مطلوب لكل طفل.',
-            'children.*.trip_direction.in'          => 'اتجاه الرحلة غير صالح (مسموح فقط: go للذهاب، return للإياب، both للاتجاهين).',
+            // تواريخ
+            'start_date.required'       => 'تاريخ بدء الاشتراك مطلوب.',
+            'start_date.date'           => 'صيغة تاريخ البدء غير صحيحة.',
+            'end_date.required'         => 'تاريخ نهاية الاشتراك مطلوب.',
+            'end_date.date'             => 'صيغة تاريخ النهاية غير صحيحة.',
+            'end_date.after_or_equal'   => 'تاريخ النهاية يجب أن يكون مساوياً أو بعد تاريخ البدء.',
 
-            'children.*.start_date.required' => 'تاريخ بدء الاشتراك مطلوب لكل طفل.',
-            'children.*.start_date.date'     => 'صيغة تاريخ بدء الاشتراك غير صحيحة.',
+            // عنوان المنزل
+            'home_address.required'         => 'عنوان المنزل مطلوب لإتمام الاشتراك.',
+            'home_address.array'            => 'صيغة بيانات عنوان المنزل غير صحيحة.',
+            'home_address.lat.required'     => 'خط العرض (lat) لعنوان المنزل مطلوب.',
+            'home_address.lat.numeric'      => 'خط العرض يجب أن يكون رقماً.',
+            'home_address.lat.between'      => 'خط العرض يجب أن يكون بين -90 و 90.',
+            'home_address.lng.required'     => 'خط الطول (lng) لعنوان المنزل مطلوب.',
+            'home_address.lng.numeric'      => 'خط الطول يجب أن يكون رقماً.',
+            'home_address.lng.between'      => 'خط الطول يجب أن يكون بين -180 و 180.',
 
-            'children.*.end_date.required'       => 'تاريخ نهاية الاشتراك مطلوب لكل طفل.',
-            'children.*.end_date.date'           => 'صيغة تاريخ نهاية الاشتراك غير صحيحة.',
-            'children.*.end_date.after_or_equal' => 'تاريخ النهاية يجب أن يكون مساوياً أو بعد تاريخ البدء.',
+            // الأطفال
+            'children.required'          => 'يجب إضافة طفل واحد على الأقل للاشتراك.',
+            'children.array'             => 'صيغة بيانات الأطفال غير صحيحة.',
+            'children.min'               => 'يجب تحديد طفل واحد على الأقل.',
+            'children.*.child_id.required' => 'معرف الطفل مطلوب.',
+            'children.*.child_id.integer'  => 'معرف الطفل يجب أن يكون رقماً صحيحاً.',
+            'children.*.child_id.exists'   => 'أحد الأطفال المحددين غير موجود في النظام.',
 
+            // السعر
             'total_price.numeric' => 'يجب أن يكون السعر الإجمالي رقماً.',
             'total_price.min'     => 'لا يمكن أن يكون السعر الإجمالي أقل من صفر.',
         ];

@@ -33,27 +33,44 @@ class RegisterAccountRequest extends FormRequest
     public function messages(): array
     {
         return [
+            // الاسم الكامل
             'full_name.required'     => 'الاسم الكامل مطلوب.',
-            'full_name.min'          => 'يرجى إدخال الاسم الثلاثي على الأقل.',
+            'full_name.string'       => 'اسم السائق يجب أن يكون نصاً صالحاً.',
+            'full_name.min'          => 'يرجى إدخال الاسم الثلاثي على الأقل (10 أحرف كحد أدنى).',
+            'full_name.max'          => 'اسم السائق لا يمكن أن يتجاوز 100 حرف.',
+
+            // البريد الإلكتروني
             'email.required'         => 'البريد الإلكتروني مطلوب.',
-            'email.email'            => 'تنسيق البريد الإلكتروني غير صحيح.',
-            'email.unique'           => 'البريد الإلكتروني مسجل بالفعل، يرجى استخدام بريد آخر',
+            'email.email'            => 'تنسيق البريد الإلكتروني غير صحيح، يرجى كتابته بشكل سليم.',
+            'email.unique'           => 'البريد الإلكتروني مسجل بالفعل، يرجى استخدام بريد آخر.',
+
+            // رقم الهاتف
             'phone_number.required'  => 'رقم الهاتف مطلوب.',
             'phone_number.digits'    => 'يجب أن يتكون رقم الهاتف من 10 أرقام.',
-            'phone_number.unique'    => 'رقم الهاتف هذا مستخدم من قبل سائق آخر.',
-            'phone_number.regex'     => 'يجب أن يبدأ رقم الهاتف بـ 09 (مثال: 0910000000).',
+            'phone_number.unique'    => 'رقم الهاتف هذا مستخدم من قبل سائق آخر بالفعل.',
+            'phone_number.regex'     => 'يجب أن يبدأ رقم الهاتف بـ 09 ويتكون من 10 أرقام (مثال: 0910000000).',
+
+            // الجنس
             'gender.required'        => 'يرجى تحديد الجنس.',
-            'gender.in'              => 'القيمة المختارة للجنس غير صحيحة.',
+            'gender.in'              => 'القيمة المختارة للجنس غير صحيحة، يجب أن تكون male أو female.',
+
+            // كلمة المرور
             'password.required'      => 'كلمة المرور مطلوبة.',
+            'password.string'        => 'كلمة المرور يجب أن تكون نصاً.',
             'password.min'           => 'يجب ألا تقل كلمة المرور عن 6 أحرف.',
             'password.regex'         => 'كلمة المرور يجب أن تحتوي على حرف إنجليزي ورقم على الأقل.',
+
+            // الصورة الشخصية
             'avatar_url.image'       => 'الملف المرفوع يجب أن يكون صورة.',
             'avatar_url.mimes'       => 'يسمح فقط بالصور بصيغ jpeg, png, jpg.',
             'avatar_url.max'         => 'حجم الصورة يجب ألا يتجاوز 2 ميجابايت.',
-            'alternative_phone.min'  => 'رقم الهاتف الاحتياطي يجب ألا يقل عن 7 أرقام.',
-            'device_name.string'     => 'اسم الجهاز يجب أن يكون نصاً صالحاً.',
-            'platform.string'        => 'نوع المنصة يجب أن يكون نصاً صالحاً.',
-            'fcm_token.string'       => 'رمز الإشعارات (FCM Token) يجب أن يكون نصاً صالحاً.',
+
+            // الهاتف الاحتياطي وبيانات الجهاز
+            'alternative_phone.string' => 'رقم الهاتف الاحتياطي يجب أن يكون نصاً صالحاً.',
+            'alternative_phone.min'    => 'رقم الهاتف الاحتياطي يجب ألا يقل عن 7 أرقام.',
+            'device_name.string'       => 'اسم الجهاز يجب أن يكون نصاً صالحاً.',
+            'platform.string'          => 'نوع المنصة يجب أن يكون نصاً صالحاً.',
+            'fcm_token.string'         => 'رمز الإشعارات (FCM Token) يجب أن يكون نصاً صالحاً.',
         ];
     }
 
@@ -61,7 +78,7 @@ class RegisterAccountRequest extends FormRequest
     {
         throw new HttpResponseException(response()->json([
             'status'  => false,
-            'message' => '',
+            'message' => $validator->errors()->first() ?: 'خطأ في البيانات المدخلة، يرجى مراجعة الحقول.',
             'errors'  => $validator->errors()
         ], 422));
     }

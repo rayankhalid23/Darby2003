@@ -48,8 +48,6 @@ return new class extends Migration
             $table->enum('preferred_time_slot', ['morning', 'evening', 'both'])->default('both')->comment('الفترة المفضلة: صباحي، مسائي، كلاهما');
             $table->time('pickup_time')->nullable()->comment('وقت الانطلاق من البيت');
             $table->time('dropoff_time')->nullable()->comment('وقت النزول من المدرسة');
-            $table->enum('trip_direction', ['go', 'return', 'both'])->default('both')->comment('اتجاه الرحلة: ذهاب، عودة، كلاهما');
-            $table->enum('subscription_type', ['daily', 'monthly', 'seasonal'])->default('monthly')->comment('نوع الاشتراك المفضل');
             $table->boolean('is_active')->default(true)->comment('حالة تفعيل الطفل للنقل');
 
             $table->timestamps();

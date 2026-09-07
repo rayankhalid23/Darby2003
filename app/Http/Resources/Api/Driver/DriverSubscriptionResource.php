@@ -49,17 +49,11 @@ class DriverSubscriptionResource extends JsonResource
             ? $this->resource->resolveState()
             : ['state' => 'active', 'status' => 'active', 'state_label' => 'ساري ومفعل', 'status_text' => 'اشتراك نشط وساري', 'is_active' => true];
 
-        // ملخّص على مستوى الطلب لعرضه في قوائم السائق: أبكر تاريخ بدء بين الأطفال
-        // وأكبر عدد أيام عمل، حتى يظهر شيء منطقي حتى لو اختلفت فترات الأطفال.
         $firstPivot = $this->relationLoaded('children') && $this->children
             ? $this->children->first()?->pivot
             : null;
-        $summaryStartDate = $this->relationLoaded('children') && $this->children
-            ? $this->children->pluck('pivot.start_date')->filter()->sort()->first()
-            : ($firstPivot->start_date ?? null);
-        $summaryWorkingDays = $this->relationLoaded('children') && $this->children
-            ? (int) $this->children->max('pivot.working_days_count')
-            : (int) ($firstPivot->working_days_count ?? 0);
+        $summaryStartDate = $this->start_date ?? null;
+        $summaryWorkingDays = (int) ($this->working_days_count ?? 0);
 
         return [
             'id'                      => $this->id,
@@ -105,7 +99,13 @@ class DriverSubscriptionResource extends JsonResource
             })(),
 
             'children' => $this->whenLoaded('children', function () {
-                return $this->children->map(function ($child) {
+                $reqStartDate = $this->start_date;
+                $reqEndDate = $this->end_date;
+                $reqSubType = $this->subscription_type;
+                $reqTripDirection = $this->trip_direction;
+                $reqWorkingDays = $this->working_days_count;
+
+                return $this->children->map(function ($child) use ($reqStartDate, $reqEndDate, $reqSubType, $reqTripDirection, $reqWorkingDays) {
                     $pivot   = $child->pivot ?? null;
                     $school  = optional($child->school);
                     $address = optional($child->address);
@@ -167,14 +167,14 @@ class DriverSubscriptionResource extends JsonResource
                         ],
 
                         'subscription_period' => [
-                            'start_date'         => $pivot->start_date ?? null,
-                            'end_date'           => $pivot->end_date ?? null,
-                            'working_days_count' => (int) ($pivot->working_days_count ?? 0),
+                            'start_date'         => $reqStartDate,
+                            'end_date'           => $reqEndDate,
+                            'working_days_count' => (int) ($reqWorkingDays ?? 0),
                         ],
 
                         'trip_details' => [
-                            'subscription_type' => $pivot->subscription_type ?? 'monthly',
-                            'trip_direction'    => $pivot->trip_direction ?? 'two_way',
+                            'subscription_type' => $reqSubType ?? 'monthly',
+                            'trip_direction'    => $reqTripDirection ?? 'two_way',
                             'timing'            => $pivot->timing ?? null,
                         ],
 

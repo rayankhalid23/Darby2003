@@ -31,8 +31,6 @@ class FinancialLedgerService
     }
 
     // شروط ومحددات النظام المالي
-    public const FIXED_SERVICE_FEE = 100; // 1 دينار (100 قرش) رسوم خدمة ثابتة
-    public const MAX_PARENT_BALANCE = 500000; // 5,000 دينار (500,000 قرش) الحد الأعلى لرصيد محفظة ولي الأمر
     /**
      * الحد الأدنى لسحب السائق بالقروش.
      *
@@ -618,11 +616,6 @@ class FinancialLedgerService
         });
     }
 
-    public function settleMonthlyContract($subscription): array
-    {
-        return $this->settleMonthlySubscription($subscription);
-    }
-
     /**
      * الإلغاء المبكر للاشتراك في منتصف الشهر (Mid-Month Termination)
      *
@@ -660,11 +653,6 @@ class FinancialLedgerService
                 'settlement_status'  => $refundResult['status'] ?? 'no_held_funds',
             ]);
         });
-    }
-
-    public function terminateContractMidMonth($subscription, string $terminatedBy, bool $isArbitraryByParent = false): array
-    {
-        return $this->terminateSubscriptionMidMonth($subscription, $terminatedBy, $isArbitraryByParent);
     }
 
     /**
@@ -849,11 +837,6 @@ class FinancialLedgerService
             'cancellation_fee'   => $cancellationFee,
             'refunded_to_parent' => $refundToParent,
         ];
-    }
-
-    public function previewContractTermination($subscription, string $terminatedBy, bool $isArbitraryByParent = false): array
-    {
-        return $this->previewSubscriptionTermination($subscription, $terminatedBy, $isArbitraryByParent);
     }
 
     /**

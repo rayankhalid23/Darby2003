@@ -439,7 +439,6 @@ class Driver4TripsAndFinancialSeeder extends Seeder
                 [
                     'status'                      => 'accepted',
                     'children_count'              => $childrenCount,
-                    'children_acceptance_mode'    => 'all',
                     'pickup_time'                 => '07:00:00',
                     'dropoff_time'                => '13:30:00',
                     'max_waiting_time'            => 5,

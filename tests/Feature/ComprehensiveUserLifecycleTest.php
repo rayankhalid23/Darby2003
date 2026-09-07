@@ -374,8 +374,6 @@ class ComprehensiveUserLifecycleTest extends TestCase
 
     public function test_children_crud_and_validations_lifecycle(): void
     {
-        [$validStart, $validEnd] = $this->getValidWorkingDates(30);
-
         // 1. أخطاء التحقق عند ترك الحقول فارغة
         $resEmpty = $this->actingAs($this->parentUser, 'sanctum')->postJson('/api/parent/children', []);
         $resEmpty->assertStatus(422)
@@ -390,10 +388,6 @@ class ComprehensiveUserLifecycleTest extends TestCase
             'gender' => 'male',
             'grade' => 3,
             'preferred_time_slot' => 'morning',
-            'trip_direction' => 'both',
-            'subscription_type' => 'multi_day',
-            'start_date' => $validStart,
-            'end_date' => $validEnd,
         ]);
         $resShortName->assertStatus(422);
 
@@ -406,29 +400,8 @@ class ComprehensiveUserLifecycleTest extends TestCase
             'gender' => 'male',
             'grade' => 1,
             'preferred_time_slot' => 'morning',
-            'trip_direction' => 'both',
-            'subscription_type' => 'multi_day',
-            'start_date' => $validStart,
-            'end_date' => $validEnd,
         ]);
         $resInvalidAge->assertStatus(422);
-
-        // 4. خطأ: تاريخ البدء في يوم عطلة (جمعة أو سبت)
-        $fridayDate = Carbon::now()->next(Carbon::FRIDAY)->toDateString();
-        $resFriday = $this->actingAs($this->parentUser, 'sanctum')->postJson('/api/parent/children', [
-            'full_name' => 'أحمد علي محمود التاجوري',
-            'school_id' => $this->testSchool->id,
-            'address_id' => $this->testAddress->id,
-            'birth_date' => '2016-05-15',
-            'gender' => 'male',
-            'grade' => 3,
-            'preferred_time_slot' => 'morning',
-            'trip_direction' => 'both',
-            'subscription_type' => 'multi_day',
-            'start_date' => $fridayDate,
-            'end_date' => $validEnd,
-        ]);
-        $resFriday->assertStatus(422);
 
         // 5. نجاح إضافة الطفل مع كافة البيانات الإجبارية والاختيارية والصورة
         $childPhoto = UploadedFile::fake()->image('student_photo.jpg', 300, 300);
@@ -441,10 +414,6 @@ class ComprehensiveUserLifecycleTest extends TestCase
             'gender' => 'male',
             'grade' => 3,
             'preferred_time_slot' => 'morning',
-            'trip_direction' => 'both',
-            'subscription_type' => 'multi_day',
-            'start_date' => $validStart,
-            'end_date' => $validEnd,
             'pickup_time' => '07:15',
             'dropoff_time' => '13:45',
             'medical_notes' => 'حساسية طفيفة من البنسلين',

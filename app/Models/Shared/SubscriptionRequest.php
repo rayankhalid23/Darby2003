@@ -34,19 +34,10 @@ class SubscriptionRequest extends Model
     const STATUS_REJECTED  = 'rejected';
     const STATUS_CANCELLED = 'cancelled';
 
-    const ACCEPTANCE_MODE_ALL        = 'all';
-    const ACCEPTANCE_MODE_INDIVIDUAL = 'individual';
-
     /**
-     * ⚠️ الأعمدة التالية أُزيلت من جدول requests في مهاجرة 2026_08_26_131258 وانتقلت
-     * إلى مستوى الطفل في جدول request_children (لأن كل طفل قد يكون له مدرسة وتوقيت
-     * وفترة اشتراك مختلفة عن أخيه):
-     *   school_id · subscription_type · direction · timing
-     *   start_date · end_date · days_count · distance_km · trip_price
-     *
-     * بقاؤها هنا كان يجعل كل عملية إنشاء طلب اشتراك تحاول الكتابة في أعمدة غير
-     * موجودة فتفشل بخطأ «Unknown column». اقرأها دائماً من pivot الطفل
-     * ($request->children->first()->pivot) لا من الطلب نفسه.
+     * الحقول المشتركة لكل الطلب (نوع الاشتراك، الاتجاه، المدة، عنوان المنزل) موجودة
+     * هنا فقط منذ تطبيع 2026_09 — request_children يحمل فقط ما يختلف فعلاً باختلاف
+     * الطفل (المدرسة، المسافة، السعر، التوقيت المفضّل).
      */
     protected $fillable = [
         'parent_id',
@@ -59,21 +50,32 @@ class SubscriptionRequest extends Model
         'rejection_reason',
         'notes',
         'children_count',
-        'children_acceptance_mode',
         'pickup_time',
         'dropoff_time',
         'responded_at',
+        // الحقول المشتركة على مستوى الطلب (مُضافة في 2026_09_06)
+        'subscription_type',
+        'trip_direction',
+        'start_date',
+        'end_date',
+        'working_days_count',
+        'home_label',
+        'home_lat',
+        'home_lng',
     ];
 
     protected $casts = [
-        // start_date / end_date لم يعودا أعمدة في هذا الجدول — تحويلهما هنا بلا معنى
-        // وقد يُوهم بوجودهما. تواريخ الاشتراك تُقرأ من pivot الطفل.
         'total_price'                 => 'decimal:2',
         'discount_amount'             => 'decimal:2',
         'total_amount_after_discount' => 'decimal:2',
         'created_at'                  => 'datetime',
         'updated_at'                  => 'datetime',
         'responded_at'                => 'datetime',
+        // الحقول المشتركة الجديدة
+        'start_date'                  => 'date',
+        'end_date'                    => 'date',
+        'home_lat'                    => 'float',
+        'home_lng'                    => 'float',
     ];
 
     // ============================================================
@@ -84,19 +86,13 @@ class SubscriptionRequest extends Model
     {
         return $this->belongsToMany(Child::class, 'request_children', 'request_id', 'child_id')
                     ->withPivot([
-                        'subscription_type',
-                        'trip_direction',
                         'timing',
-                        'start_date',
-                        'end_date',
-                        'working_days_count',
                         'distance_km',
-                        // لقطة اسم وإحداثيات المنزل والمدرسة لحظة إنشاء الطلب.
-                        // مصدرها التلقائي بيانات الطفل (address / school) في SubscriptionRequestService::createRequest،
+                        // لقطة اسم وإحداثيات المدرسة لحظة إنشاء الطلب.
+                        // مصدرها التلقائي بيانات الطفل (school) في SubscriptionRequestService::createRequest،
                         // وتُقرأ منها لاحقاً بدل العلاقة الحية حتى لا يُعيد تغيير العنوان كتابة تاريخ الطلبات القديمة.
-                        'home_label',
-                        'home_lat',
-                        'home_lng',
+                        // ملاحظة: home_label/home_lat/home_lng انتقلت لتكون فقط على مستوى الطلب (requests)
+                        // لأنها متطابقة لكل أطفال نفس الطلب — تُقرأ الآن من $subscriptionRequest مباشرة.
                         'school_label',
                         'school_lat',
                         'school_lng',
@@ -213,16 +209,6 @@ class SubscriptionRequest extends Model
             'term'       => 'اشتراك فصل دراسي',
             'yearly'     => 'اشتراك سنوي',
             default      => $this->subscription_type ?? 'غير محدد',
-        };
-    }
-
-    public function getTimingTextAttribute(): string
-    {
-        return match($this->timing) {
-            self::TIMING_MORNING => 'صباحي',
-            self::TIMING_EVENING => 'مسائي',
-            self::TIMING_BOTH    => 'صباحي ومسائي',
-            default              => $this->timing ?? 'غير محدد',
         };
     }
 

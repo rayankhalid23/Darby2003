@@ -135,9 +135,9 @@ $user = $this->registrationService->registerParent($data);
             
             $isEmailPending = isset($user->email_change_pending) && $user->email_change_pending === true;
 
-            $message = $isEmailPending 
-                ? 'Profile updated successfully. Please verify your new email.' 
-                : 'Profile updated successfully.';
+            $message = $isEmailPending
+                ? 'تم تحديث الملف الشخصي بنجاح. يرجى تأكيد بريدك الإلكتروني الجديد.'
+                : 'تم تحديث الملف الشخصي بنجاح.';
 
             $emailVerificationData = $isEmailPending ? [
                 'status'    => 'pending',

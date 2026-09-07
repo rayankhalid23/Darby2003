@@ -40,7 +40,9 @@ class StoreAddressRequest extends FormRequest
                 'numeric',
                 'between:-90,90',
                 Rule::unique('addresses', 'lat')->where(function ($query) use ($parentId) {
-                    return $query->where('user_id', $parentId)->where('lng', $this->lng);
+                    return $query->where('user_id', $parentId)
+                        ->where('lng', $this->lng)
+                        ->whereNull('deleted_at');
                 })
             ],
 
@@ -51,11 +53,19 @@ class StoreAddressRequest extends FormRequest
                 'between:-180,180'
             ],
 
-            // المنطقة الجغرافية التابع لها العنوان (اختياري)
+            // المنطقة الجغرافية التابع لها العنوان (إجباري)
             'zone_id' => [
-                'nullable',
+                'required',
                 'integer',
                 'exists:zones,id'
+            ],
+
+            // تعيين العنوان الجديد كعنوان رئيسي مفعّل (اختياري).
+            // أول عنوان لولي الأمر يصبح رئيسياً تلقائياً بغض النظر عن هذه القيمة.
+            'is_default' => [
+                'sometimes',
+                'nullable',
+                'boolean'
             ],
         ];
     }
@@ -83,8 +93,12 @@ class StoreAddressRequest extends FormRequest
             'lng.between'  => 'إحداثيات خط الطول غير صالحة جغرافياً.',
 
             // المنطقة الجغرافية (Zone)
-            'zone_id.integer' => 'معرف المنطقة يجب أن يكون رقماً صحيحاً.',
-            'zone_id.exists'  => 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.',
+            'zone_id.required' => 'يرجى تحديد المنطقة الجغرافية التابع لها العنوان.',
+            'zone_id.integer'  => 'معرف المنطقة يجب أن يكون رقماً صحيحاً.',
+            'zone_id.exists'   => 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.',
+
+            // العنوان الرئيسي
+            'is_default.boolean' => 'قيمة تفعيل العنوان الرئيسي يجب أن تكون true أو false.',
         ];
     }
 
