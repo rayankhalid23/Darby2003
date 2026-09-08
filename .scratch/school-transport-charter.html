@@ -1,0 +1,568 @@
+<title>ميثاق النقل المدرسي</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --surface-2: #eceef2;
+    --text: #1b2330;
+    --text-muted: #5a6472;
+    --border: #dde1e7;
+    --accent: #1f4b5f;
+    --accent-strong: #123340;
+    --accent-tint: #e6eef1;
+    --warn: #a05a1e;
+    --warn-tint: #faf1e6;
+    --warn-border: #e3c69a;
+    --note-bg: #eef1f4;
+    --note-border: #c7ced7;
+    --shadow: 0 1px 2px rgba(20,30,40,.06), 0 8px 24px rgba(20,30,40,.06);
+  }
+
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg: #10151b;
+      --surface: #171e26;
+      --surface-2: #1e2630;
+      --text: #e7ecf1;
+      --text-muted: #9aa6b3;
+      --border: #2b3540;
+      --accent: #6fb0c4;
+      --accent-strong: #9ecbdb;
+      --accent-tint: #1a2e35;
+      --warn: #e0a45f;
+      --warn-tint: #2c2115;
+      --warn-border: #4a3521;
+      --note-bg: #1c232b;
+      --note-border: #323c47;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg: #10151b;
+    --surface: #171e26;
+    --surface-2: #1e2630;
+    --text: #e7ecf1;
+    --text-muted: #9aa6b3;
+    --border: #2b3540;
+    --accent: #6fb0c4;
+    --accent-strong: #9ecbdb;
+    --accent-tint: #1a2e35;
+    --warn: #e0a45f;
+    --warn-tint: #2c2115;
+    --warn-border: #4a3521;
+    --note-bg: #1c232b;
+    --note-border: #323c47;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ background: var(--bg); }
+  body{
+    color: var(--text);
+    font-family: "IBM Plex Sans Arabic", "Noto Kufi Arabic", system-ui, sans-serif;
+    line-height: 1.85;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    direction: rtl;
+  }
+
+  .page{
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 40px 20px 90px;
+  }
+
+  h1,h2,h3{ font-family: "Noto Kufi Arabic", system-ui, sans-serif; text-wrap: balance; }
+
+  /* ===== Masthead ===== */
+  .masthead{
+    background: var(--accent-strong);
+    color: #f2f6f7;
+    border-radius: 18px;
+    padding: 36px 30px;
+    margin-bottom: 28px;
+    box-shadow: var(--shadow);
+  }
+  .masthead .eyebrow{
+    font-size: 13px;
+    letter-spacing: .04em;
+    color: #bcd8de;
+    margin: 0 0 10px;
+    font-weight: 600;
+  }
+  .masthead h1{
+    font-size: 30px;
+    margin: 0 0 8px;
+    font-weight: 700;
+    color: #ffffff;
+  }
+  .masthead p{
+    margin: 0;
+    color: #cfe3e8;
+    font-size: 15px;
+    max-width: 56ch;
+  }
+  .masthead .meta{
+    display: flex;
+    gap: 18px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #a9c9d0;
+    border-top: 1px solid rgba(255,255,255,.15);
+    padding-top: 14px;
+  }
+  .masthead .meta b{ color: #eef7f9; font-weight: 600; }
+
+  /* ===== Editor note ===== */
+  .editor-note{
+    background: var(--note-bg);
+    border: 1px dashed var(--note-border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    font-size: 13.5px;
+    color: var(--text-muted);
+    margin-bottom: 30px;
+  }
+  .editor-note b{ color: var(--text); }
+
+  /* ===== TOC ===== */
+  .toc{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 34px;
+    box-shadow: var(--shadow);
+  }
+  .toc h2{
+    font-size: 14px;
+    margin: 0 0 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: .03em;
+  }
+  .toc ol{
+    margin: 0;
+    padding-inline-start: 20px;
+    columns: 2;
+    column-gap: 24px;
+  }
+  .toc li{ break-inside: avoid; margin-bottom: 6px; }
+  .toc a{
+    color: var(--text);
+    text-decoration: none;
+    font-size: 14px;
+  }
+  .toc a:hover{ color: var(--accent); text-decoration: underline; }
+
+  /* ===== Articles ===== */
+  section.article{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 30px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+    scroll-margin-top: 20px;
+  }
+  section.article .num{
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 8px;
+    background: var(--accent-tint);
+    color: var(--accent-strong);
+    font-weight: 700;
+    font-size: 14px;
+    margin-inline-end: 10px;
+  }
+  section.article h2{
+    font-size: 19px;
+    font-weight: 700;
+    margin: 0 0 16px;
+    display: flex;
+    align-items: center;
+    color: var(--text);
+  }
+  section.article h3{
+    font-size: 15.5px;
+    font-weight: 600;
+    margin: 18px 0 8px;
+    color: var(--accent-strong);
+  }
+  section.article p{ margin: 0 0 12px; max-width: 66ch; }
+  section.article ol.clauses{
+    margin: 0 0 6px;
+    padding-inline-start: 22px;
+    display: grid;
+    gap: 10px;
+  }
+  section.article ol.clauses > li{ max-width: 64ch; }
+  section.article ol.clauses ol{
+    margin-top: 8px;
+    padding-inline-start: 20px;
+    display: grid;
+    gap: 8px;
+    list-style: lower-alpha;
+  }
+  .fill{
+    display: inline-block;
+    background: var(--surface-2);
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    padding: 0 8px;
+    color: var(--text-muted);
+    font-size: .92em;
+  }
+
+  .callout{
+    background: var(--warn-tint);
+    border: 1px solid var(--warn-border);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin: 14px 0;
+  }
+  .callout .tag{
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--warn);
+    letter-spacing: .03em;
+    margin-bottom: 6px;
+  }
+  .callout p{ margin: 0; color: var(--text); }
+
+  /* ===== Signature block ===== */
+  .signoff{
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 26px 30px;
+    margin: 30px 0;
+    box-shadow: var(--shadow);
+  }
+  .signoff h2{ font-size: 17px; margin: 0 0 14px; }
+  .sign-grid{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  .sign-box{
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    background: var(--surface-2);
+  }
+  .sign-box .role{ font-weight: 700; font-size: 13.5px; margin-bottom: 6px; }
+  .sign-box .line{
+    margin-top: 22px;
+    border-top: 1px solid var(--text-muted);
+    font-size: 12px;
+    color: var(--text-muted);
+    padding-top: 4px;
+  }
+  @media (max-width: 560px){
+    .sign-grid{ grid-template-columns: 1fr; }
+    .toc ol{ columns: 1; }
+    section.article{ padding: 22px 18px; }
+    .masthead{ padding: 26px 20px; }
+  }
+
+  /* ===== Appendix ===== */
+  .appendix-divider{
+    text-align: center;
+    margin: 46px 0 26px;
+    color: var(--text-muted);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .appendix-divider::before,
+  .appendix-divider::after{
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  .appendix{
+    background: var(--note-bg);
+    border: 1px solid var(--note-border);
+    border-radius: 16px;
+    padding: 28px 30px;
+    margin-bottom: 18px;
+  }
+  .appendix h2{
+    font-size: 18px;
+    margin: 0 0 4px;
+  }
+  .appendix > .sub{
+    color: var(--text-muted);
+    font-size: 13.5px;
+    margin: 0 0 20px;
+  }
+  .gap-item{
+    border-inline-start: 3px solid var(--warn);
+    padding-inline-start: 14px;
+    margin-bottom: 18px;
+  }
+  .gap-item h3{
+    font-size: 14.5px;
+    margin: 0 0 6px;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .gap-item p{
+    margin: 0 0 6px;
+    font-size: 14px;
+    color: var(--text);
+    max-width: 68ch;
+  }
+  .gap-item .src{
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    direction: ltr;
+    display: inline-block;
+    unicode-bidi: isolate;
+  }
+</style>
+
+<div class="page" dir="rtl" lang="ar">
+
+  <header class="masthead">
+    <p class="eyebrow">وثيقة تعاقدية — تُعرض عند التسجيل</p>
+    <h1>ميثاق النقل المدرسي</h1>
+    <p>الشروط والأحكام الخاصة باستخدام منصة <span class="fill">[اسم المنصة]</span> لتنظيم اشتراكات النقل المدرسي بين أولياء الأمور والسائقين المستقلين.</p>
+    <div class="meta">
+      <span>الإصدار: <b>1.0 (مسودة نقاش)</b></span>
+      <span>تاريخ الإعداد: <b>08 سبتمبر 2026</b></span>
+      <span>يُلزم: <b>ولي الأمر + السائق</b></span>
+    </div>
+  </header>
+
+  <div class="editor-note">
+    <b>ملاحظة إعداد:</b> هذه مسودة أولى قابلة للتعديل قبل اعتمادها رسمياً. الحقول المؤطرة بخط متقطع مثل <span class="fill">[X أيام]</span> تحتاج قراراً منكم (رقماً أو مدة محددة) قبل النشر النهائي للمستخدمين. صيغت البنود بناءً على فحص فعلي لآلية الدفع في الكود الحالي — التفاصيل التقنية في الملحق أسفل الوثيقة.
+  </div>
+
+  <nav class="toc">
+    <h2>فهرس المواد</h2>
+    <ol>
+      <li><a href="#m1">تعريفات ونطاق الميثاق</a></li>
+      <li><a href="#m2">طبيعة دور المنصة</a></li>
+      <li><a href="#m3">آلية الدفع والتحويل المالي</a></li>
+      <li><a href="#m4">التزامات السائق عند الغياب</a></li>
+      <li><a href="#m5">التزامات السائق عند إلغاء الاشتراك</a></li>
+      <li><a href="#m6">تعطل المركبة أثناء الرحلة</a></li>
+      <li><a href="#m7">إخلاء مسؤولية المنصة المالية</a></li>
+      <li><a href="#m8">التوثيق والتسوية الودية</a></li>
+      <li><a href="#m9">الإجراءات الإدارية بحق المخالف</a></li>
+      <li><a href="#m10">الإقرار والموافقة الإلزامية</a></li>
+      <li><a href="#m11">أحكام ختامية</a></li>
+    </ol>
+  </nav>
+
+  <section class="article" id="m1">
+    <h2><span class="num">1</span>تعريفات ونطاق الميثاق</h2>
+    <p>يُقصد بـ"المنصة" في هذا الميثاق التطبيق والخدمات التقنية المرتبطة به التي تتيح لولي الأمر البحث عن سائق وإرسال طلب اشتراك، وتتيح للسائق قبول الطلب أو رفضه وتنفيذ رحلات النقل المدرسي المتفق عليها.</p>
+    <p>يسري هذا الميثاق على كل ولي أمر وكل سائق يُتم عملية التسجيل في المنصة، ويُعد قبوله شرطاً إلزامياً وسابقاً لأي استخدام فعلي للخدمة، بصرف النظر عن نوع الاشتراك (يوم واحد، عدة أيام، شهري، فصلي، سنوي).</p>
+  </section>
+
+  <section class="article" id="m2">
+    <h2><span class="num">2</span>طبيعة دور المنصة</h2>
+    <p>المنصة أداة تقنية للربط والتنظيم فقط؛ وهي ليست ناقلاً ولا مشغّلاً لأي مركبة، ولا طرفاً في عقد تقديم خدمة النقل المدرسي.</p>
+    <p>بمجرد قبول السائق لطلب الاشتراك عبر المنصة، تنعقد علاقة تعاقدية مباشرة لتنفيذ خدمة النقل بين ولي الأمر والسائق وحدهما، وتقتصر مسؤولية المنصة على الجوانب التقنية والمالية المحددة صراحة في هذا الميثاق.</p>
+  </section>
+
+  <section class="article" id="m3">
+    <h2><span class="num">3</span>آلية الدفع والتحويل المالي</h2>
+    <p>يقر ولي الأمر والسائق بأنهما اطّلعا على الآلية التالية وقبلا بها كشرط أساسي لاستخدام المنصة، باعتبارها الأساس الذي تُبنى عليه الالتزامات الواردة في المواد 4 و5 و6:</p>
+    <ol class="clauses">
+      <li><b>اشتراك اليوم الواحد:</b> يُحجز المبلغ المدفوع من ولي الأمر في حساب أمانة لدى المنصة (مسبح ضمان)، ولا يُصرف للسائق نهائياً إلا عند إتمام الرحلة أو تسويتها.</li>
+      <li><b>الاشتراكات متعددة الأيام (الشهري / الفصلي / السنوي):</b> تقوم المنصة بتحويل كامل صافي مستحقات السائق (بعد خصم عمولتها) إلى محفظته <b>فور قبول طلب الاشتراك</b>، أي قبل تنفيذ أي رحلة فعلية على أرض الواقع.</li>
+    </ol>
+    <div class="callout">
+      <span class="tag">أثر مباشر يجب إدراكه</span>
+      <p>نتيجة لذلك، لا تحتفظ المنصة — في حالة الاشتراكات متعددة الأيام تحديداً — بأي رصيد محجوز يمكنها الرجوع إليه لإرجاع مبلغ لولي الأمر إذا توقفت الخدمة لاحقاً خلال مدة الاشتراك (غياب أو إلغاء من السائق). المبلغ يكون قد وصل فعلاً إلى محفظة السائق.</p>
+    </div>
+  </section>
+
+  <section class="article" id="m4">
+    <h2><span class="num">4</span>التزامات السائق عند الغياب</h2>
+    <ol class="clauses">
+      <li>عند تعذّر قيام السائق برحلة أو أكثر ضمن اشتراك نشط، يلتزم بأحد الخيارين التاليين بالتنسيق المباشر مع ولي الأمر:
+        <ol>
+          <li>توفير سائق بديل مناسب لتغطية الرحلات المتأثرة بنفس مستوى الأمان والجودة المتفق عليه، أو</li>
+          <li>في حال تعذّر توفير بديل، تعويض ولي الأمر مالياً عن قيمة الرحلات غير المنفذة، بالتناسب مع عدد أيام الغياب من إجمالي مدة الاشتراك المدفوعة.</li>
+        </ol>
+      </li>
+      <li>يلتزم السائق بتسجيل غيابه عبر المنصة فور علمه به وبأقصى إشعار مسبق ممكن، بصرف النظر عن الحل الذي سيعتمده.</li>
+      <li>يُحسب مبلغ التعويض المشار إليه في البند (1-ب) وفق المعادلة: <span class="fill">(عدد أيام/رحلات الغياب غير المعوَّضة ببديل ÷ إجمالي أيام/رحلات الاشتراك) × القيمة الصافية التي استلمها السائق عن هذا الطفل</span>.</li>
+      <li>يقر ولي الأمر بأن تسجيل الغياب عبر المنصة إخطار إعلامي فقط، ولا يُنشئ التزاماً على المنصة بإيجاد بديل أو ضمان استمرارية الخدمة أو استرجاع أي مبلغ مالي من طرفها.</li>
+    </ol>
+  </section>
+
+  <section class="article" id="m5">
+    <h2><span class="num">5</span>التزامات السائق عند إلغاء الاشتراك من طرفه</h2>
+    <ol class="clauses">
+      <li>يحق للسائق إلغاء اشتراك نشط قبل نهاية مدته، شريطة إشعار ولي الأمر بمهلة لا تقل عن <span class="fill">[X أيام]</span> لتمكينه من ترتيب بديل، إلا في حالات الطوارئ الموثقة.</li>
+      <li>في حالات الاشتراكات متعددة الأيام التي يكون السائق قد استلم مستحقاتها كاملة عند القبول (المادة 3)، يلتزم السائق — عند إلغائه للاشتراك — بإرجاع قيمة الأيام غير المنفذة والمتبقية من مدة الاشتراك مباشرة إلى ولي الأمر.</li>
+      <li>تُحسب القيمة الواجب إرجاعها وفق المعادلة: <span class="fill">(عدد الأيام/الرحلات المتبقية غير المنفذة ÷ إجمالي أيام/رحلات الاشتراك) × القيمة الصافية التي استلمها السائق</span>.</li>
+      <li>يتم السداد مباشرة بين السائق وولي الأمر خارج النظام المالي للمنصة، ولا تتدخل المنصة في تحصيله أو ضمانه أو التحقق من إتمامه.</li>
+      <li>في حالة اشتراك اليوم الواحد فقط، تسترجع المنصة تلقائياً كامل المبلغ المحجوز في حساب الأمانة إلى محفظة ولي الأمر عند إلغاء السائق، دون حاجة لأي إجراء إضافي بين الطرفين.</li>
+    </ol>
+  </section>
+
+  <section class="article" id="m6">
+    <h2><span class="num">6</span>تعطل المركبة أثناء الرحلة (الطوارئ الحيّة)</h2>
+    <ol class="clauses">
+      <li>في حال تعطل مركبة السائق فجأة أثناء تنفيذ رحلة جارية فعلياً ووجود أطفال على متنها، يلتزم السائق بالإبلاغ الفوري عبر المنصة، التي تبادر تلقائياً بالبحث عن أقرب سائق بديل مؤهل (سعة متاحة، وثائق سارية، مسار متوافق زمنياً ومكانياً) وبث طلب إنقاذ عاجل له؛ ولا يُتاح قبول المهمة لأكثر من سائق بديل واحد — أول سائق يقبلها تُقفل المهمة تلقائياً في وجه بقية المرشحين.</li>
+      <li>عند قبول أحد السائقين البدلاء للمهمة وإتمامه فعلياً لإيصال الأطفال المتأثرين إلى وجهتهم بأمان، تتولى المنصة <b>بنفسها</b>، ودون أي إجراء إضافي من ولي الأمر أو السائق الأصلي، تحويل قيمة تلك الرحلة من محفظة السائق الأصلي إلى محفظة السائق البديل. لا يتأثر ولي الأمر مالياً أو إجرائياً بهذا الحادث بتاتاً.</li>
+      <li>يقر السائق الأصلي ويوافق على أن قيمة الرحلة المحوَّلة للسائق البديل (البند 2) قد تُخصم من محفظته حتى لو تجاوزت رصيده المتاح لحظتها، فينتج عن ذلك رصيد سالب (مديونية تجاه المنصة). تُسوَّى هذه المديونية تلقائياً من مستحقاته المالية اللاحقة (اشتراكات أو رحلات قادمة)، ولا يحق له طلب سحب أي مبلغ من محفظته طالما بقي رصيده سالباً أو غير كافٍ.</li>
+      <li>في حال تعذّر على المنصة إيجاد أي سائق بديل متاح، أو رفض جميع السائقين المرشحين للمهمة صراحةً، يتحمل السائق الأصلي وحده مسؤولية استكمال إيصال الأطفال إلى بر الأمان، وذلك عبر:
+        <ol>
+          <li>التواصل الفوري مع أولياء الأمور المعنيين وتزويدهم بموقع المركبة المتوقفة لاستلام أبنائهم مباشرة، و</li>
+          <li>في حال تعذّر ذلك عليه لأي سبب، ترتيب بديل شخصي على نفقته ومسؤوليته الخاصة.</li>
+        </ol>
+      </li>
+      <li>لا تتحمل المنصة، في حالة عدم توفر بديل (البند 4 أعلاه)، أي التزام بتعويض ولي الأمر عن الرحلة غير المكتملة؛ ويُطبَّق في هذه الحالة تحديداً نفس مبدأ التسوية المباشرة بين السائق وولي الأمر الوارد في المادتين 4 و5، فيما يخص فقط قيمة تلك الرحلة اليومية المتأثرة.</li>
+      <li>يلتزم السائق بالرد الفوري (قبولاً أو رفضاً صريحاً) على أي طلب إنقاذ يصله بصفته مرشحاً؛ فعدم الرد لا يُعفيه من نتائج تعطّل الرحلة إن لم يستجب أحد غيره، لحين استكمال المنصة لآلية انتهاء المهلة الزمنية تلقائياً <span class="fill">[قيد الإنجاز التقني]</span>.</li>
+      <li>آلية البحث عن بديل والتحويل المالي التلقائي الموضحة في البندين 1 و2 مخصصة حصراً لحالات العطل الفجائي أثناء رحلة جارية فعلياً، ولا تُعد بديلاً عن التزام تسجيل الغياب المسبق (المادة 4) في حال علم السائق مسبقاً بعدم قدرة مركبته على العمل ليوم أو أيام قادمة (كتعطل يستوجب إصلاحاً في الورشة، مثلاً) — تلك الحالة تبقى خاضعة لأحكام المادة 4 لا لهذه المادة.</li>
+    </ol>
+  </section>
+
+  <section class="article" id="m7">
+    <h2><span class="num">7</span>إخلاء مسؤولية المنصة المالية</h2>
+    <ol class="clauses">
+      <li>لا تتحمل المنصة أي مسؤولية مالية عن عدم التزام السائق بتوفير بديل أو بسداد التعويض المستحق لولي الأمر وفق المادتين 4 و5، أو وفق البند 4 من المادة 6.</li>
+      <li>يقتصر التزام المنصة المالي على استرجاع المبالغ المحجوزة فعلياً في حسابها كأمانة (حالة اشتراك اليوم الواحد فقط وفق المادة 5-5)، ولا يمتد إلى أي مبلغ سبق تحويله فعلياً لمحفظة السائق.</li>
+      <li>لا يجوز لولي الأمر مطالبة المنصة بأي تعويض مالي ناشئ عن غياب السائق أو إلغائه للاشتراك؛ وتنحصر مطالبته في السائق مباشرة، مع إمكانية اللجوء للجهات القانونية المختصة إن تعذّر الاتفاق الودي.</li>
+      <li>يُستثنى من هذا الإخلاء صراحة ما ورد في البندين 1 و2 من المادة 6: إذ تتولى المنصة بنفسها تنفيذ التحويل المالي بين السائق الأصلي والسائق البديل عند نجاح إيجاد بديل للعطل الحي، بصفتها الجهة المشغِّلة لآلية الإنقاذ الطارئ الخاصة بها، لا بصفتها ضامناً مالياً للعلاقة التعاقدية بين ولي الأمر والسائق.</li>
+    </ol>
+  </section>
+
+  <section class="article" id="m8">
+    <h2><span class="num">8</span>التوثيق والتسوية الودية</h2>
+    <ol class="clauses">
+      <li>يُشجَّع الطرفان على التسوية المباشرة والودية لأي خلاف حول التعويض خلال مهلة <span class="fill">[X أيام]</span> من تاريخ الواقعة.</li>
+      <li>يجوز لولي الأمر تقديم شكوى موثقة (وقائع، تواريخ، إثباتات) إلى إدارة المنصة، تقوم بدراستها واتخاذ الإجراء الإداري المناسب بحق السائق دون أن يُلزمها ذلك بدفع أي تعويض من طرفها.</li>
+      <li>سجل الإشعارات وتواريخ الغياب وحالات الطلبات المحفوظة في المنصة تُعد وسيلة إثبات مرجعية يمكن لأي من الطرفين الاستناد إليها أمام الجهات المختصة عند الاقتضاء.</li>
+    </ol>
+  </section>
+
+  <section class="article" id="m9">
+    <h2><span class="num">9</span>الإجراءات الإدارية بحق السائق المخالف</h2>
+    <p>يُعرّض عدم الالتزام المتكرر بأحكام هذا الميثاق (تراكم الغيابات دون بديل أو تعويض، إلغاء متكرر للاشتراكات، إثبات عدم تعويض ولي الأمر، تكرار حالات العطل غير المبلَّغ عنها بصدق) السائق لإجراءات تصاعدية تقررها إدارة المنصة، تشمل على سبيل المثال لا الحصر: إنذاراً رسمياً، خفض التقييم، تعليقاً مؤقتاً للحساب، أو إيقافاً نهائياً من المنصة.</p>
+  </section>
+
+  <section class="article" id="m10">
+    <h2><span class="num">10</span>الإقرار والموافقة الإلزامية عند التسجيل</h2>
+    <ol class="clauses">
+      <li>يُقرّ كل من ولي الأمر والسائق، بالنقر على "أوافق" أثناء التسجيل، بأنه قرأ وفهم مضمون هذا الميثاق كاملاً ووافق عليه بإرادته الحرة كشرط لازم لاستخدام خدمات المنصة.</li>
+      <li>يقر السائق تحديداً بعلمه بآلية الصرف الفوري لمستحقاته في الاشتراكات متعددة الأيام (المادة 3)، وبما يترتب عليها من التزامات مالية تجاه ولي الأمر عند توقف الخدمة (المواد 4 و5).</li>
+      <li>يقر ولي الأمر تحديداً بأن التزام المنصة المالي تجاهه محدود بالمبالغ المحجوزة فعلياً كأمانة، وأنه يتحمل بنفسه متابعة استرجاع مستحقاته مباشرة من السائق فيما عدا ذلك، باستثناء حالة العطل الحي مع توفر بديل (المادة 6) التي تديرها المنصة مالياً بنفسها.</li>
+      <li>يقر الطرفان بعلمهما بآلية الطوارئ الحية عند تعطل المركبة (المادة 6)، وبالتفريق الجوهري بينها وبين حالة الغياب المسبق (المادة 4): ففي الأولى تتدخل المنصة مالياً بين السائقين مباشرة، وفي الثانية تبقى التسوية بالكامل بين السائق وولي الأمر.</li>
+      <li>يقر السائق تحديداً بأن رصيد محفظته لدى المنصة قد يصبح سالباً إذا كان "سائقاً أصلياً" في حادثة عطل حي واستُدعي بديل لإنقاذ الأطفال (المادة 6-3)، وبأنه لا يحق له سحب أي مبلغ من محفظته إلى أن يعود رصيده موجباً عبر مستحقاته اللاحقة.</li>
+    </ol>
+  </section>
+
+  <section class="article" id="m11">
+    <h2><span class="num">11</span>أحكام ختامية</h2>
+    <p>تحتفظ المنصة بحق تعديل بنود هذا الميثاق مستقبلاً، على أن يُعاد عرضه على المستخدمين للموافقة عليه من جديد قبل سريان أي تعديل جوهري. يخضع هذا الميثاق لأحكام التشريع الجزائري الساري، وتُحال أي نزاعات يتعذر حلها ودياً إلى الجهات القضائية المختصة.</p>
+  </section>
+
+  <div class="signoff">
+    <h2>موافقة الأطراف</h2>
+    <div class="sign-grid">
+      <div class="sign-box">
+        <div class="role">ولي الأمر</div>
+        <div>أقر بأنني قرأت هذا الميثاق ووافقت على جميع بنوده.</div>
+        <div class="line">الاسم / التاريخ / التوقيع الإلكتروني</div>
+      </div>
+      <div class="sign-box">
+        <div class="role">السائق</div>
+        <div>أقر بأنني قرأت هذا الميثاق ووافقت على جميع بنوده.</div>
+        <div class="line">الاسم / التاريخ / التوقيع الإلكتروني</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="appendix-divider">ملحق للمطوّر — لا يُعرض على المستخدم النهائي</div>
+
+  <div class="appendix">
+    <h2>ثغرات ونقاط تحتاج قراراً قبل الاعتماد</h2>
+    <p class="sub">مستخرجة من فحص فعلي لسلوك النظام الحالي (Laravel) — وليست افتراضات نظرية.</p>
+
+    <div class="gap-item">
+      <h3>1. "السائق البديل" وعد بلا آلية تقنية فعلية</h3>
+      <p>الكود الحالي عند تسجيل الغياب يكتفي بفصل السائق عن الرحلات المحددة وإرسال إشعار نصّه "جارٍ تدبير سائق بديل"، لكن لا توجد أي دالة أو جدول فعلي يُسنِد سائقاً بديلاً أو يتتبع حالة إيجاده. صياغة المادة 4 يجب أن تبقى بصيغة التزام على السائق شخصياً (وليس التزاماً ضمنياً من المنصة)، وإلا وقعت المنصة تحت التزام لا تستطيع تقنياً الوفاء به.</p>
+      <p class="src">app/Services/Trip/TripLifecycleService.php — setDriverAbsence()</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>2. غياب سقف/تعريف كمّي لـ"الغياب المستوجب للتعويض"</h3>
+      <p>يمكن للسائق تسجيل غياب يوم بيوم بلا حد أقصى في عدد المرات أو الأيام المتتالية. الميثاق الحالي ترك "عدد أيام الغياب" مفتوحاً — يُستحسن تحديد عتبة (مثلاً: بعد اليوم الثالث من الغياب غير المعوَّض ببديل خلال الشهر) لتفادي نزاعات تفسيرية لاحقاً.</p>
+      <p class="src">app/Models/Driver/DriverAbsence.php</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>3. تفاوت جوهري بين اشتراك اليوم الواحد والاشتراك الشهري في الاسترجاع الآلي</h3>
+      <p>عند إلغاء السائق لاشتراك يوم واحد، تسترجع المنصة تلقائياً 100% للمحفظة الأم (لأن المبلغ ما زال في حالة "محجوز" HELD). أما في الاشتراكات الشهرية/الفصلية/السنوية، فالمبلغ يكون بالفعل بحالة "مكتمل الصرف" منذ لحظة القبول، فلا يجد إجراء الاسترجاع التلقائي أي شيء يسترجعه — ولي الأمر لا يستعيد شيئاً آلياً. هذا التفاوت غير المُفصَح عنه سابقاً هو السبب المباشر لضرورة المادة 3 والإقرار الصريح في المادة 9، ويجب عرضه بوضوح شديد عند التسجيل تجنباً لأي طعن لاحق بالتضليل أو الشرط التعسفي.</p>
+      <p class="src">app/Services/Shared/SubscriptionRequestService.php — performRefundHeldFundsOnCancellation() / holdSubscriptionFundsOnAcceptance()</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>4. لا توثيق داخل المنصة للتعويض اليدوي بين الطرفين</h3>
+      <p>بما أن التسوية (بديل أو تعويض) تتم خارج النظام المالي للمنصة، لا يوجد أي سجل أو حقل لتأكيد أن السائق قد سدّد فعلاً. عند أي نزاع لاحق، لا تملك المنصة دليلاً رقمياً على ما جرى فعلياً بين الطرفين سوى الشكاوى المكتوبة. يُقترح مستقبلاً إضافة ميزة بسيطة (تأكيد يدوي من ولي الأمر بأنه استلم التعويض) لتقوية موقف المنصة عند التحكيم الإداري — هذا اقتراح تطوير مستقبلي وليس تعديلاً مطلوباً الآن.</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>5. عدم تحديد مهلة إشعار مسبق رقمياً لإلغاء السائق</h3>
+      <p>لا يوجد في الكود أي قيد زمني (بالساعات/الأيام) يمنع السائق من إلغاء اشتراك نشط في اللحظة الأخيرة. "مهلة معقولة" غير كافية قانونياً — المادة 5 هنا تركت الرقم كـ<span class="fill">[X أيام]</span> بانتظار قراركم.</p>
+      <p class="src">app/Http/Controllers/Api/Driver/DriverSubscriptionController.php — cancelActiveSubscription()</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>6. حالة رفض السائق الكامل للتعويض</h3>
+      <p>لا يوجد حالياً أي آلية اقتطاع أو ضمان مالي (Escrow/Deposit) خاص بالسائق يمكن اللجوء إليه إذا رفض تماماً تعويض ولي الأمر. الحل الوحيد المتاح فعلياً هو الإجراء الإداري (تعليق/إيقاف الحساب) + الإحالة القضائية الخارجية المذكورة في المادة 8-2. يجب أن يكون هذا واضحاً لولي الأمر منذ التسجيل حتى لا يتوقع تدخلاً مالياً تلقائياً من المنصة في كل الحالات.</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>7. حالة العطل الحي مبنية فعلياً بالكامل — والتحويل المالي يقع عند إتمام الرحلة لا عند مجرد القبول</h3>
+      <p>خلافاً لحالتي الغياب والإلغاء (وعد بلا تنفيذ)، آلية تعطل المركبة أثناء رحلة جارية منفّذة بالكامل في الكود. تتبعت تسلسل الاستدعاء كاملاً: <span class="src">acceptBreakdownDispatch()</span> عند القبول لا يحوّل أي مال — فقط يضم الأطفال لمسار السائق البديل. التحويل الفعلي (<span class="src">settleBreakdownFinancialTransfer()</span>) يُستدعى فقط من <span class="src">TripLifecycleService::completeTrip()</span> (أو ما يعادلها) عند وسم رحلة السائق البديل كـ"مكتملة" فعلياً — أي بعد إنزال الأطفال بأمان، لا فور القبول. صححت صياغة المادة 6-2 على هذا الأساس؛ وهو في الواقع أفضل مما افترضته أول مرة: المال لا يتحرك إلا بعد تأكد إتمام الخدمة.</p>
+      <p class="src">app/Services/Trip/EmergencyBreakdownService.php — settleBreakdownFinancialTransfer() / app/Services/Trip/TripLifecycleService.php:552-570 (completeTrip) و:831 (settleEmergencyBreakdownDispatchesForTrip)</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>8. الرصيد السالب: مؤكَّد ومقصود في تصميم الكود — وله آلية تسوية ذاتية تلقائية</h3>
+      <p>تحققت من التعريف الكامل لـ<span class="src" style="direction:ltr">forceWithdraw</span> في مصدر الحزمة نفسها (السائق يستخدم Trait <span class="src">HasWallet</span> من حزمة <span class="src">bavix/laravel-wallet</span>). الفرق مؤكد وموثّق في تعليقات الحزمة نفسها: <span class="src">withdraw()</span> يستدعي فحص الرصيد (<span class="src">checkPotential</span>) ثم ينفّذ <span class="src">forceWithdraw()</span> داخلياً؛ أما <span class="src">forceWithdraw()</span> فيتجاوز هذا الفحص تماماً ويسمح بالرصيد السالب عمداً — وهذا موثّق صراحة في تعليق دالة <span class="src">forceTransfer</span> المجاورة: "can result in negative balances". هذا تصميم مقصود وليس خللاً: يضمن دفع السائق البديل فوراً دون تعطّل بسبب رصيد السائق الأصلي. <b>ووجدت أيضاً</b> أن <span class="src">WithdrawalService::requestWithdrawal()</span> (app/Services/Driver/WithdrawalService.php:37) يرفض تلقائياً أي طلب سحب يتجاوز الرصيد المتاح — فإن كان الرصيد سالباً، يُرفض أي طلب سحب مهما صغر. النتيجة: مديونية السائق الأصلي "مقفلة" تلقائياً من السحب، وتُسوَّى ذاتياً كل ما استلم دفعات لاحقة (كل <span class="src">deposit()</span> يقلّص الرقم السالب). لا حاجة لتعديل كودي هنا — فقط الإفصاح عنها للسائق في المادة 6-3 والمادة 10، وهو ما أضفته.</p>
+      <p class="src">vendor/bavix/laravel-wallet/src/Traits/HasWallet.php:308-389 · app/Services/Driver/WithdrawalService.php:29-41</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>9. ثغرة تشغيلية حقيقية: لا يوجد أي "كنّاس" (sweep) لانتهاء مهلة البث — عدم الرد الصامت لا يُشغّل البديل الاحتياطي</h3>
+      <p>الحالة <span class="src">STATUS_EXPIRED</span> مُعرَّفة ويُتحقق منها في <span class="src">acceptBreakdownDispatch()</span>، لكنها <b>لا تُضبط في أي مكان بالكود</b> — بحثت في كامل مجلد <span class="src">app/Console</span> ولا يوجد أمر مجدوَل (scheduled command) يفحص المهام منتهية المهلة. حقل <span class="src">expires_at</span> يُستخدم فقط لتصفية قائمة السائق (<span class="src">getAvailableBreakdownDispatches</span>) فتختفي من عرضه، لكن سجل الطلب نفسه يبقى بحالة <span class="src">broadcasted</span> إلى الأبد، و<span class="src">triggerFallbackParentPickup()</span> لا يُستدعى إلا في حالتين فقط: عدم وجود مرشحين من الأساس، أو رفض جميعهم صراحةً. إذا تجاهل كل المرشحين الإشعار دون رفض صريح (السيناريو الأكثر واقعية)، يبقى الأطفال بلا أي إجراء بديل تلقائي إلى ما لا نهاية. هذه ثغرة تقنية حقيقية يجب سدها (مهمة مجدولة كل دقيقة/دقيقتين تفحص المهام منتهية المهلة بحالة broadcasted وتُفعّل triggerFallbackParentPickup) قبل الاعتماد على صياغة المادة 6-4/6-6 كما هي — عدّلت الميثاق ليقر بذلك صراحة بدل الإيحاء بضمان تلقائي غير موجود فعلياً.</p>
+      <p class="src">app/Services/Trip/EmergencyBreakdownService.php — rejectBreakdownDispatch() / triggerFallbackParentPickup() · لا يوجد ملف مطابق في app/Console/Commands</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>10. تأكيد: منع تعدد القبول (سباق السائقين) محمي فعلياً وبشكل صحيح</h3>
+      <p>تتبعت <span class="src">acceptBreakdownDispatch()</span> بالكامل: الدالة مغلّفة في <span class="src">DB::transaction()</span> وتقفل صف الطلب بـ<span class="src">lockForUpdate()</span> <b>قبل</b> أي قراءة لحالته، ثم تتحقق من الحالة داخل نفس القفل. هذا هو النمط الصحيح والمعياري لمنع "تعدد القبول المتزامن": إذا حاول سائقان القبول في نفس اللحظة، يُحجز أحدهما الصف أولاً ويكمل معاملته، بينما يُجبر الآخر على الانتظار حتى تنتهي المعاملة الأولى، فيقرأ عندها الحالة الحقيقية المحدَّثة (<span class="src">accepted</span>) ويُرفض تلقائياً برسالة 409 واضحة ("تم قبول هذه المهمة بالفعل"). طبقة العرض متّسقة مع هذا: قائمة المهام المتاحة (<span class="src">getAvailableBreakdownDispatches</span>) تُصفّي فقط الحالة <span class="src">broadcasted</span> وتستثني من رفض سابقاً، فتختفي المهمة المقبولة تلقائياً من شاشات بقية السائقين عند أول تحديث، والسائقين المرفوضين يتلقون إشعاراً صريحاً بأن المهمة أُسندت لغيرهم. <b>لا حاجة لأي تعديل هنا — تحقّق فقط، لا ثغرة.</b></p>
+      <p class="src">app/Services/Trip/EmergencyBreakdownService.php:272-328 (acceptBreakdownDispatch) · app/Http/Controllers/Api/Trip/DriverTripController.php:852-875 (getAvailableBreakdownDispatches)</p>
+    </div>
+
+    <div class="gap-item">
+      <h3>11. مصير المبلغ المحجوز لولي الأمر عند فشل إيجاد بديل غير مؤكد تقنياً</h3>
+      <p>عند تفعيل سيناريو "لا بديل متاح" (triggerFallbackParentPickup)، لا تُنفَّذ أي حركة مالية إطلاقاً في الدالة نفسها — لا استرجاع لولي الأمر، ولا خصم من السائق. لم أتتبع منطق تسوية الرحلة الفاشلة بالكامل عبر باقي النظام (قد يقع في خدمة مالية أخرى لم تُفحص). لهذا صيغت المادة 6-5 على مبدأ "التسوية المباشرة" العام بين الطرفين بدل افتراض استرجاع تلقائي غير مؤكد — يُستحسن التحقق التقني من هذا المسار تحديداً قبل الاعتماد النهائي.</p>
+      <p class="src">app/Services/Trip/EmergencyBreakdownService.php — triggerFallbackParentPickup()</p>
+    </div>
+  </div>
+
+</div>

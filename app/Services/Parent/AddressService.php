@@ -71,43 +71,15 @@ class AddressService
     /**
      * تحديث عنوان موجود (يدعم التعديل الجزئي الصارم مع الحماية الكاملة).
      */
-    public function updateAddress(Address $address, int $parentId, array $data): Address
+    public function updateAddress(Address $address, int $parentId, array $data): array
     {
-        // 1. فحص تكرار الاسم (Label) فقط إذا تم إرساله وكان مختلفاً عن الاسم الحالي
-        if (array_key_exists('label', $data) && $data['label'] !== $address->label) {
-            $labelExists = Address::where('user_id', $parentId)
-                ->where('label', $data['label'])
-                ->where('id', '!=', $address->id)
-                ->exists();
-
-            if ($labelExists) {
-                throw new AddressOperationException(
-                    "تعذر التعديل: لديك عنوان آخر مسجل مسبقاً باسم '" . $data['label'] . "'.",
-                    'ADDRESS_LABEL_DUPLICATED'
-                );
-            }
-        }
-
-        // 2. فحص تكرار الموقع الجغرافي فقط إذا أُرسلت إحداثيات جديدة وكانت مختلفة عن الحالية
         $newLat = $data['lat'] ?? $address->lat;
         $newLng = $data['lng'] ?? $address->lng;
+        $newZoneId = $data['zone_id'] ?? $address->zone_id;
 
-        if ((array_key_exists('lat', $data) || array_key_exists('lng', $data)) &&
-            ($newLat != $address->lat || $newLng != $address->lng)) {
-
-            $locationExists = Address::where('user_id', $parentId)
-                ->where('lat', $newLat)
-                ->where('lng', $newLng)
-                ->where('id', '!=', $address->id)
-                ->exists();
-
-            if ($locationExists) {
-                throw new AddressOperationException(
-                    'تعذر التعديل: هذا الموقع الجغرافي يتطابق مع موقع عنوان آخر مضاف لديك بالفعل.',
-                    'ADDRESS_LOCATION_DUPLICATED'
-                );
-            }
-        }
+        $locationChanged = (array_key_exists('lat', $data) && $newLat != $address->lat) || 
+                           (array_key_exists('lng', $data) && $newLng != $address->lng);
+        $zoneChanged = (array_key_exists('zone_id', $data) && $newZoneId != $address->zone_id);
 
         $addressId = $address->id;
 
@@ -118,7 +90,40 @@ class AddressService
             unset($data['is_default']);
         }
 
-        return DB::transaction(function () use ($address, $parentId, $data, $addressId, $defaultRequested) {
+        return DB::transaction(function () use ($address, $parentId, $data, $addressId, $defaultRequested, $locationChanged, $zoneChanged) {
+            $cancelledIds = [];
+            $message = 'تم تحديث بيانات العنوان بنجاح.';
+
+            // إذا تم تغيير الإحداثيات أو المنطقة الجغرافية
+            if ($locationChanged || $zoneChanged) {
+                $children = Child::where('address_id', $addressId)->get();
+
+                if ($children->isNotEmpty()) {
+                    // الحارس 1: اشتراكات مفعّلة أو مجدولة -> رفض قاطع
+                    $blockingChildren = $this->childrenWithActiveSubscriptions($children);
+
+                    if ($blockingChildren->isNotEmpty()) {
+                        throw new AddressOperationException(
+                            'لا يمكن تعديل الموقع أو المنطقة الجغرافية: يوجد اشتراكات مفعّلة للأطفال ('
+                                . $blockingChildren->implode('، ')
+                                . ') على هذا العنوان. لا يُسمح بتعديل العنوان إلا إذا لم يكن لدى هؤلاء الأطفال اشتراك قائم.',
+                            'ADDRESS_HAS_ACTIVE_SUBSCRIPTIONS',
+                            422,
+                            ['children' => $blockingChildren->values()->all()]
+                        );
+                    }
+                }
+
+                // الحارس 2: طلبات معلقة -> إلغاء تلقائي للطلبات المرتبطة بهذا العنوان
+                $cancelledIds = $this->cancelPendingRequestsForAddress($addressId, $parentId, $address);
+
+                if (!empty($cancelledIds)) {
+                    $message = 'تم تحديث بيانات العنوان بنجاح. تم إلغاء طلبات الاشتراك المعلقة المرتبطة بهذا العنوان (عددها '
+                        . count($cancelledIds)
+                        . ') بسبب تغيير الموقع أو المنطقة الجغرافية.';
+                }
+            }
+
             // 3-أ. تنفيذ التعديل الجزئي لباقي الحقول
             if (!empty($data)) {
                 $address->update($data);
@@ -126,16 +131,26 @@ class AddressService
 
             // 3-ب. تبديل العنوان الرئيسي عبر نفس الحراسات المركزية
             if ($defaultRequested === true) {
-                $this->setDefaultAddress($address->refresh(), $parentId);
+                $defaultResult = $this->setDefaultAddress($address->refresh(), $parentId);
+                // دمج رسائل التبديل إذا حدثت
+                if ($defaultResult['cancelled_requests_count'] > 0) {
+                    $cancelledIds = array_unique(array_merge($cancelledIds, $defaultResult['cancelled_request_ids']));
+                    $message = $defaultResult['message'];
+                }
             } elseif ($defaultRequested === false && $address->refresh()->is_default) {
-                // إلغاء التفعيل المباشر ممنوع: لا يجوز أن يبقى ولي الأمر بلا عنوان رئيسي.
+                // إلغاء التفعيل المباشر ممنوع
                 throw new AddressOperationException(
                     'لا يمكن إلغاء تفعيل العنوان الرئيسي مباشرة، يجب تعيين عنوان آخر كعنوان رئيسي بدلاً منه.',
                     'ADDRESS_DEFAULT_CANNOT_BE_UNSET'
                 );
             }
 
-            return Address::with('zone')->withTrashed()->findOrFail($addressId);
+            return [
+                'address'                  => Address::with('zone')->withTrashed()->findOrFail($addressId),
+                'message'                  => $message,
+                'cancelled_requests_count' => count($cancelledIds),
+                'cancelled_request_ids'    => $cancelledIds,
+            ];
         });
     }
 
@@ -419,6 +434,64 @@ class AddressService
             } catch (\Throwable $e) {
                 Log::warning('Failed to cancel pending request #' . $request->id
                     . ' during default-address switch for parent #' . $parentId . ': ' . $e->getMessage());
+            }
+        }
+
+        return $cancelledIds;
+    }
+
+    /**
+     * إلغاء كل طلبات الاشتراك المعلّقة المرتبطة بهذا العنوان تحديداً.
+     */
+    private function cancelPendingRequestsForAddress(int $addressId, int $parentId, Address $address): array
+    {
+        // نجلب الطلبات المعلقة التي أُرسلت من هذا العنوان
+        $pendingRequests = SubscriptionRequest::where('parent_id', $parentId)
+            ->where('home_address_id', $addressId)
+            ->whereIn('status', [
+                SubscriptionRequest::STATUS_PENDING,
+                SubscriptionRequest::STATUS_ACQUIRED,
+            ])
+            ->get();
+
+        if ($pendingRequests->isEmpty()) {
+            return [];
+        }
+
+        $subscriptionRequestService = app(SubscriptionRequestService::class);
+        $reason = 'تم إلغاء الطلب تلقائياً بسبب تعديل ولي الأمر لإحداثيات أو منطقة العنوان [' . $address->label . '].';
+
+        $cancelledIds = [];
+
+        foreach ($pendingRequests as $request) {
+            try {
+                $request->update([
+                    'status'           => SubscriptionRequest::STATUS_CANCELLED,
+                    'rejection_reason' => $reason,
+                ]);
+
+                // استرجاع المبالغ المحجوزة
+                $subscriptionRequestService->refundHeldFundsOnCancellation($request->id, 'parent');
+
+                $cancelledIds[] = (int) $request->id;
+
+                // إشعار السائق
+                $driverUser = $request->driver?->user;
+                if ($driverUser) {
+                    try {
+                        app(NotificationService::class)->sendToUser(
+                            $driverUser,
+                            'إلغاء طلب اشتراك',
+                            'تم إلغاء طلب الاشتراك رقم #' . $request->id . ' بسبب تعديل ولي الأمر لإحداثيات أو منطقة العنوان.',
+                            'subscription_request_cancelled',
+                            (string) $request->id
+                        );
+                    } catch (\Throwable $notifEx) {
+                        // تجاهل
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Failed to cancel pending request #' . $request->id . ' during address modification: ' . $e->getMessage());
             }
         }
 

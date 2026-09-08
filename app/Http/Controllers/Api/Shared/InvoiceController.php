@@ -20,7 +20,11 @@ class InvoiceController extends Controller
     {
         $user = auth()->user();
 
-        if ($user->driver) {
+        if ($user->admin) {
+            $invoices = $this->financialService->getAllInvoices(
+                request()->only(['status', 'type', 'driver_id'])
+            );
+        } elseif ($user->driver) {
             $invoices = $this->financialService->getDriverInvoices(
                 $user->driver->id,
                 request()->only(['status'])

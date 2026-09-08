@@ -43,6 +43,7 @@ class SubscriptionRequestService
         $sharedStartDate        = $data['start_date']        ?? null;
         $sharedEndDate          = $data['end_date']          ?? $sharedStartDate;
         $sharedHomeAddress      = $data['home_address']      ?? [];
+        $sharedHomeAddressId    = $data['home_address_id']   ?? null;
         // الفترة اختيارية على مستوى الطلب؛ غيابها يعني «افترض تفضيل كل طفل المسجَّل».
         $sharedTiming           = $data['timing']            ?? null;
 
@@ -61,7 +62,7 @@ class SubscriptionRequestService
         $subscriptionRequest = DB::transaction(function () use (
             $data, $user,
             $sharedSubscriptionType, $sharedTripDirection,
-            $sharedStartDate, $sharedEndDate, $sharedHomeAddress, $sharedTiming
+            $sharedStartDate, $sharedEndDate, $sharedHomeAddress, $sharedHomeAddressId, $sharedTiming
         ) {
             $parentId = null;
 
@@ -77,6 +78,20 @@ class SubscriptionRequestService
 
             if (!$parentId) {
                 throw new \InvalidArgumentException("حساب ولي الأمر (Parent Profile) غير مكتمل أو غير موجود لهذا المستخدم.");
+            }
+
+            // عنوان محفوظ (home_address_id) له الأولوية على الإحداثيات الخام
+            if ($sharedHomeAddressId) {
+                $savedAddress = \App\Models\Parent\Address::where('id', $sharedHomeAddressId)
+                    ->where('user_id', $parentId)
+                    ->first();
+                if ($savedAddress) {
+                    $sharedHomeAddress = [
+                        'label' => $savedAddress->label,
+                        'lat'   => $savedAddress->lat,
+                        'lng'   => $savedAddress->lng,
+                    ];
+                }
             }
 
             // 0. تحميل بيانات الأطفال مع مدارسهم (المنزل أصبح مشتركاً من $sharedHomeAddress)
@@ -208,12 +223,13 @@ class SubscriptionRequestService
                 'home_label'                  => $sharedHomeAddress['label'] ?? null,
                 'home_lat'                    => isset($sharedHomeAddress['lat']) ? (float) $sharedHomeAddress['lat'] : null,
                 'home_lng'                    => isset($sharedHomeAddress['lng']) ? (float) $sharedHomeAddress['lng'] : null,
+                'home_address_id'             => $sharedHomeAddressId,
             ]);
 
             // 3. ربط الأطفال بجدول الـ Pivot
             $subscriptionRequest->children()->sync($childrenPivotData);
 
-            return $subscriptionRequest->load(['children.school', 'parent.user', 'driver.user']);
+            return $subscriptionRequest->load(['children.school', 'parent', 'driver.user', 'driver.vehicle']);
         });
 
         // 🔔 إرسال إشعار لحظي للسائق بوجود طلب اشتراك جديد
@@ -1743,10 +1759,14 @@ class SubscriptionRequestService
         $query = SubscriptionRequest::query()
             ->with([
                 'driver.user',
+                'driver.vehicle',
                 'children' => function ($query) {
                     $query->withPivot([
                         'timing',
                         'distance_km',
+                        'school_label',
+                        'school_lat',
+                        'school_lng',
                         'price_per_child',
                         'trip_price',
                         'discount_amount',
@@ -1848,11 +1868,14 @@ class SubscriptionRequestService
 
             $query = SubscriptionRequest::query()
                 ->with([
-                    'parent.user',
+                    'parent',
                     'children' => function ($query) {
                         $query->withPivot([
                             'timing',
                             'distance_km',
+                            'school_label',
+                            'school_lat',
+                            'school_lng',
                             'price_per_child',
                             'trip_price',
                             'discount_amount',

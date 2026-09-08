@@ -270,6 +270,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/{id}/close', [\App\Http\Controllers\Api\Admin\SupportTicketController::class, 'close']);
     });
 
+    // --- 📜 مسارات إدارة الشروط والأحكام (نسخ + مواد + نشر + إحصاء الموافقات) ---
+    Route::prefix('terms')->middleware('permission:content.manage_terms')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'index']);
+        Route::post('/', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'store']);
+        Route::get('/{id}', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'show']);
+        Route::put('/{id}', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'update']);
+        Route::post('/{id}', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'update']);
+        Route::delete('/{id}', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'destroy']);
+        Route::post('/{id}/publish', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'publish']);
+        Route::get('/{id}/acceptance-stats', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'acceptanceStats']);
+
+        Route::post('/{versionId}/articles', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'storeArticle']);
+        Route::put('/{versionId}/articles/{articleId}', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'updateArticle']);
+        Route::post('/{versionId}/articles/{articleId}', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'updateArticle']);
+        Route::delete('/{versionId}/articles/{articleId}', [\App\Http\Controllers\Api\Admin\AdminTermsController::class, 'destroyArticle']);
+    });
+
     // --- 💰 مسارات الإدارة المالية الشاملة للأدمن ---
     Route::prefix('financial')->group(function () {
         Route::match(['get', 'post', 'put'], '/pricing-settings', [\App\Http\Controllers\Api\Admin\PricingSettingController::class, 'manage'])

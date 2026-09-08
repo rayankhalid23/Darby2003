@@ -62,6 +62,7 @@ class SubscriptionRequest extends Model
         'home_label',
         'home_lat',
         'home_lng',
+        'home_address_id',
     ];
 
     protected $casts = [

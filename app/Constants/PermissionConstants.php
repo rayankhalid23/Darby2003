@@ -60,6 +60,11 @@ class PermissionConstants
     public const REPORTS_VIEW             = 'reports.view';
     public const REPORTS_EXPORT           = 'reports.export';
 
+    // ==========================================
+    // 📜 المحتوى القانوني (Legal Content)
+    // ==========================================
+    public const CONTENT_MANAGE_TERMS     = 'content.manage_terms';
+
     /**
      * إرجاع شجرة الصلاحيات الكاملة مع المسميات العربية لسهولة عرضها في واجهة المستخدم (UI)
      */
@@ -248,6 +253,17 @@ class PermissionConstants
                     ],
                 ]
             ],
+            [
+                'group_key'   => 'legal_content',
+                'group_name'  => 'المحتوى القانوني (الشروط والأحكام)',
+                'permissions' => [
+                    [
+                        'key'         => self::CONTENT_MANAGE_TERMS,
+                        'name'        => 'إدارة الشروط والأحكام',
+                        'description' => 'إنشاء وتعديل ونشر نسخ الشروط والأحكام الخاصة بأولياء الأمور والسائقين',
+                    ],
+                ]
+            ],
         ];
     }
 
@@ -292,6 +308,7 @@ class PermissionConstants
                 self::DRIVER_REVIEWS_MANAGE,
                 self::DRIVERS_VIEW,
                 self::NOTIFICATIONS_BROADCAST,
+                self::CONTENT_MANAGE_TERMS,
             ],
 
             // 5. المشرف المالي ومسؤول الخزينة (Finance Officer)

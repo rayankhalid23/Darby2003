@@ -74,6 +74,9 @@ class ParentRegisterRequest extends FormRequest
                 'digits:6'
             ],
 
+            // موافقة إلزامية على الشروط والأحكام — بلا هذا الحقل لا يُنشأ الحساب أصلاً
+            'terms_accepted' => ['required', 'accepted'],
+
             // بيانات إضافية
             'device_name' => ['nullable', 'string'],
             'platform'    => ['nullable', 'string'],
@@ -121,6 +124,10 @@ class ParentRegisterRequest extends FormRequest
             'avatar.image' => 'الملف يجب أن يكون صورة.',
             'avatar.mimes' => 'صيغة الصورة غير مدعومة.',
             'avatar.max'   => 'حجم الصورة يتجاوز الحد المسموح (2 ميجابايت).',
+
+            // الموافقة على الشروط
+            'terms_accepted.required' => 'يجب الموافقة على الشروط والأحكام لإتمام التسجيل.',
+            'terms_accepted.accepted' => 'يجب الموافقة على الشروط والأحكام لإتمام التسجيل.',
         ];
     }
 

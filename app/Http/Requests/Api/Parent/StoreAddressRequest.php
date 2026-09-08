@@ -29,21 +29,13 @@ class StoreAddressRequest extends FormRequest
                 // مسميات العناوين الواقعية تتضمن أرقاماً مثل «شقة 5» و«مبنى 12-ب»،
                 // وكان تقييدها بالحروف العربية وحدها يرفض عناوين مشروعة تماماً.
                 'regex:/^[\p{Arabic}\p{N}\s\-\/]+$/u',
-                Rule::unique('addresses', 'label')->where(function ($query) use ($parentId) {
-                    return $query->where('user_id', $parentId)->whereNull('deleted_at');
-                })
             ],
 
             // إحداثيات خط العرض
             'lat' => [
                 'required',
                 'numeric',
-                'between:-90,90',
-                Rule::unique('addresses', 'lat')->where(function ($query) use ($parentId) {
-                    return $query->where('user_id', $parentId)
-                        ->where('lng', $this->lng)
-                        ->whereNull('deleted_at');
-                })
+                'between:-90,90'
             ],
 
             // إحداثيات خط الطول
@@ -79,13 +71,11 @@ class StoreAddressRequest extends FormRequest
             'label.min'      => 'مسمى العنوان يجب ألا يقل عن حرفين.',
             'label.max'      => 'مسمى العنوان يجب ألا يتجاوز 100 حرف.',
             'label.regex'    => 'مسمى العنوان يجب أن يكون بالعربية (ويمكن أن يتضمن أرقاماً).',
-            'label.unique'   => 'اسم العنوان مسجل لديك مسبقاً.',
 
             // خط العرض (Lat)
             'lat.required' => 'إحداثيات خط العرض مطلوبة.',
             'lat.numeric'  => 'إحداثيات خط العرض يجب أن تكون رقماً.',
             'lat.between'  => 'إحداثيات خط العرض غير صالحة جغرافياً.',
-            'lat.unique'   => 'هذا الموقع الجغرافي مسجل لديك مسبقاً.',
 
             // خط الطول (Lng)
             'lng.required' => 'إحداثيات خط الطول مطلوبة.',

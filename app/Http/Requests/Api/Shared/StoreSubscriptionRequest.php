@@ -109,10 +109,26 @@ class StoreSubscriptionRequest extends FormRequest
                 'after_or_equal:start_date',
             ],
 
-            // عنوان المنزل المشترك
-            'home_address'       => ['required', 'array'],
-            'home_address.lat'   => ['required', 'numeric', 'between:-90,90'],
-            'home_address.lng'   => ['required', 'numeric', 'between:-180,180'],
+            // عنوان المنزل المشترك — إما مرجع لعنوان محفوظ (الأفضل) أو إحداثيات خام
+            'home_address_id' => [
+                'required_without:home_address',
+                'nullable',
+                'integer',
+                function ($attribute, $value, $fail) use ($parentId) {
+                    if (!$value) {
+                        return;
+                    }
+                    $exists = \App\Models\Parent\Address::where('id', $value)
+                        ->where('user_id', $parentId)
+                        ->exists();
+                    if (!$exists) {
+                        $fail('العنوان المحدد غير موجود أو لا ينتمي لحسابك.');
+                    }
+                },
+            ],
+            'home_address'       => ['required_without:home_address_id', 'nullable', 'array'],
+            'home_address.lat'   => ['required_with:home_address', 'numeric', 'between:-90,90'],
+            'home_address.lng'   => ['required_with:home_address', 'numeric', 'between:-180,180'],
             'home_address.label' => ['nullable', 'string', 'max:255'],
 
             // ─── الأطفال ─────────────────────────────────────────────────────────
@@ -186,12 +202,13 @@ class StoreSubscriptionRequest extends FormRequest
             'end_date.after_or_equal'   => 'تاريخ النهاية يجب أن يكون مساوياً أو بعد تاريخ البدء.',
 
             // عنوان المنزل
-            'home_address.required'         => 'عنوان المنزل مطلوب لإتمام الاشتراك.',
+            'home_address_id.required_without' => 'يرجى تحديد عنوان محفوظ أو إرسال إحداثيات المنزل.',
+            'home_address.required_without'    => 'عنوان المنزل مطلوب لإتمام الاشتراك.',
             'home_address.array'            => 'صيغة بيانات عنوان المنزل غير صحيحة.',
-            'home_address.lat.required'     => 'خط العرض (lat) لعنوان المنزل مطلوب.',
+            'home_address.lat.required_with' => 'خط العرض (lat) لعنوان المنزل مطلوب.',
             'home_address.lat.numeric'      => 'خط العرض يجب أن يكون رقماً.',
             'home_address.lat.between'      => 'خط العرض يجب أن يكون بين -90 و 90.',
-            'home_address.lng.required'     => 'خط الطول (lng) لعنوان المنزل مطلوب.',
+            'home_address.lng.required_with' => 'خط الطول (lng) لعنوان المنزل مطلوب.',
             'home_address.lng.numeric'      => 'خط الطول يجب أن يكون رقماً.',
             'home_address.lng.between'      => 'خط الطول يجب أن يكون بين -180 و 180.',
 

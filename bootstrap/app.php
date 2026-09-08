@@ -54,7 +54,8 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
         $middleware->alias([
-            'permission' => \App\Http\Middleware\CheckAdminPermission::class,
+            'permission'      => \App\Http\Middleware\CheckAdminPermission::class,
+            'terms.accepted'  => \App\Http\Middleware\EnsureTermsAccepted::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

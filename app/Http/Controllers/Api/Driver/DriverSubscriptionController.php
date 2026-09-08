@@ -102,29 +102,8 @@ class DriverSubscriptionController extends Controller
                 $request->query('filter')
             );
 
-            // تفكيك الاشتراكات ليتم عرض كل طفل باشتراكه المستقل
-            $childSubscriptions = collect();
-            foreach ($activeSubscriptions as $subscriptionRequest) {
-                if ($subscriptionRequest->children && $subscriptionRequest->children->isNotEmpty()) {
-                    foreach ($subscriptionRequest->children as $child) {
-                        $matchingActiveSub = optional($subscriptionRequest->activeSubscriptions)->firstWhere('child_id', $child->id);
-                        $activeSubId = $matchingActiveSub ? $matchingActiveSub->id : $subscriptionRequest->id;
-                        $childSubscriptions->push([
-                            'subscriptionRequest' => $subscriptionRequest,
-                            'child'               => $child,
-                            'activeSubId'         => $activeSubId,
-                        ]);
-                    }
-                } else {
-                    $childSubscriptions->push([
-                        'subscriptionRequest' => $subscriptionRequest,
-                        'child'               => null,
-                        'activeSubId'         => $subscriptionRequest->id,
-                    ]);
-                }
-            }
-
-            return \App\Http\Resources\Api\Driver\DriverActiveChildSubscriptionResource::collection($childSubscriptions)->additional([
+            // إرجاع الطلبات الكلية بحيث يحتوي كل طلب على مصفوفة بكل أطفاله الذين لديهم اشتراكات نشطة
+            return \App\Http\Resources\Api\Driver\DriverGroupedActiveSubscriptionResource::collection($activeSubscriptions)->additional([
                 'status'  => true,
                 'success' => true,
                 'message' => 'تم جلب الاشتراكات النشطة بنجاح',
@@ -211,15 +190,17 @@ class DriverSubscriptionController extends Controller
                 ->with([
                     'child.school',
                     'child.address',
-                    'driver.user',
-                    'subscriptionRequest.parent.user',
+                    'subscriptionRequest.parent',
                     'subscriptionRequest.children' => function ($query) {
                         $query->withPivot([
                             'timing',
                             'distance_km',
+                            'school_label',
+                            'school_lat',
+                            'school_lng',
                             'price_per_child',
                             'trip_price',
-                            'discount_amount',            
+                            'discount_amount',
                             'total_amount_after_discount',
                             'driver_net_price'
                         ]);
@@ -310,12 +291,14 @@ class DriverSubscriptionController extends Controller
         // تستخدم 'success' دائماً. نلتقطها هنا لنُبقي الشكل موحداً على العميل.
         $subscriptionRequest = SubscriptionRequest::query()
             ->with([
-                'parent.user',
-                'driver.user',
+                'parent',
                 'children' => function ($query) {
                     $query->withPivot([
                         'timing',
                         'distance_km',
+                        'school_label',
+                        'school_lat',
+                        'school_lng',
                         'price_per_child',
                         'trip_price',
                         'discount_amount',

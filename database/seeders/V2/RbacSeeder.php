@@ -71,6 +71,7 @@ class RbacSeeder extends Seeder
         'support_supervisor' => [
             'dashboard.view_stats', 'complaints.view', 'complaints.resolve',
             'driver_reviews.manage', 'drivers.view', 'notifications.broadcast',
+            'content.manage_terms',
         ],
         'finance_officer' => [
             'dashboard.view_stats', 'financial.view_summary', 'financial.view_ledger',

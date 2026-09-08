@@ -6,12 +6,16 @@ use App\Http\Resources\Concerns\BuildsSubscriptionPayload;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class SubscriptionRequestDetailsResource extends JsonResource
+class DriverGroupedActiveSubscriptionResource extends JsonResource
 {
     use BuildsSubscriptionPayload;
 
     public function toArray(Request $request): array
     {
+        if (!$this->resource) {
+            return [];
+        }
+
         /** @var \App\Models\Shared\SubscriptionRequest $req */
         $req = $this->resource;
 
@@ -19,11 +23,40 @@ class SubscriptionRequestDetailsResource extends JsonResource
 
         $commissionTotal = 0.0;
         $driverNetTotal  = 0.0;
+        
+        $childrenArray = [];
         if ($req->relationLoaded('children')) {
             foreach ($req->children as $child) {
                 $childPayload = $this->buildChildPayload($child, forDriver: true);
                 $commissionTotal += $childPayload['pricing']['platform_commission_amount'];
                 $driverNetTotal  += $childPayload['pricing']['driver_net_price'];
+
+                // جلب بيانات الاشتراك النشط (المسار والأوقات) الخاصة بهذا الطفل
+                $matchingActiveSub = optional($req->activeSubscriptions)->firstWhere('child_id', $child->id);
+                if ($matchingActiveSub) {
+                    $childResolvedState = $req->resolveState($child, $matchingActiveSub);
+                    
+                    $childPayload['active_subscription'] = [
+                        'id'           => $matchingActiveSub->id,
+                        'status'       => $childResolvedState['status'],
+                        'status_label' => $childResolvedState['state_label'],
+                        'route_id'     => $matchingActiveSub->route_id,
+                        'pickup_time'  => $matchingActiveSub->pickup_time,
+                        'dropoff_time' => $matchingActiveSub->dropoff_time,
+                    ];
+
+                    if ($childResolvedState['status'] === 'cancelled') {
+                        $childPayload['active_subscription']['cancellation'] = [
+                            'cancelled_at' => $matchingActiveSub->cancelled_at,
+                            'cancelled_by' => $matchingActiveSub->cancelled_by,
+                            'reason'       => $matchingActiveSub->cancellation_reason,
+                        ];
+                    }
+                } else {
+                    $childPayload['active_subscription'] = null;
+                }
+
+                $childrenArray[] = $childPayload;
             }
         }
 
@@ -48,12 +81,11 @@ class SubscriptionRequestDetailsResource extends JsonResource
                 'driver_net_total'            => round($driverNetTotal, 2),
             ],
 
-            'children' => $this->whenLoaded('children', fn () => $req->children->map(
-                fn ($child) => $this->buildChildPayload($child, forDriver: true)
-            )->values()),
-
+            'children'   => $childrenArray,
+            
             'notes'      => $req->notes,
             'created_at' => $req->created_at?->toIso8601String(),
+            'updated_at' => $req->updated_at?->toIso8601String(),
         ];
     }
 }

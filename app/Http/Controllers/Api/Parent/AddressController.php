@@ -96,16 +96,23 @@ class AddressController extends Controller
         $address = $this->ownedAddress($address, $userId);
 
         try {
-            $updatedAddress = $this->addressService->updateAddress($address, $userId, $request->validated());
+            $result = $this->addressService->updateAddress($address, $userId, $request->validated());
         } catch (AddressOperationException $e) {
             return $this->businessError($e);
         }
 
-        return response()->json([
+        $responseData = [
             'success' => true,
-            'message' => 'تم تحديث بيانات العنوان بنجاح.',
-            'data'    => new AddressResource($updatedAddress)
-        ], Response::HTTP_OK);
+            'message' => $result['message'],
+            'data'    => new AddressResource($result['address'])
+        ];
+
+        if (isset($result['cancelled_requests_count']) && $result['cancelled_requests_count'] > 0) {
+            $responseData['cancelled_requests_count'] = $result['cancelled_requests_count'];
+            $responseData['cancelled_request_ids'] = $result['cancelled_request_ids'];
+        }
+
+        return response()->json($responseData, Response::HTTP_OK);
     }
 
     /**

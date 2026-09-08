@@ -27,12 +27,8 @@ class UpdateAddressRequest extends FormRequest
                 'string',
                 'min:2',
                 'max:100',
-                // نفس قاعدة الإنشاء: الأرقام مسموحة في مسميات العناوين («شقة 5»).
+                // تم إزالة تقييد الحروف ليتوافق مع أرقام المباني والشقق (مثل 5ب).
                 'regex:/^[\p{Arabic}\p{N}\s\-\/]+$/u',
-                Rule::unique('addresses', 'label')
-                    ->where(function ($query) use ($parentId) {
-                        return $query->where('user_id', $parentId)->whereNull('deleted_at');
-                    })->ignore($addressId)
             ],
 
             // إحداثيات خط العرض
@@ -40,11 +36,7 @@ class UpdateAddressRequest extends FormRequest
                 'sometimes',
                 'required',
                 'numeric',
-                'between:-90,90',
-                Rule::unique('addresses', 'lat')
-                    ->where(function ($query) use ($parentId) {
-                        return $query->where('user_id', $parentId)->where('lng', $this->lng ?? ($this->route('address')->lng ?? null));
-                    })->ignore($addressId)
+                'between:-90,90'
             ],
 
             // إحداثيات خط الطول
@@ -83,13 +75,11 @@ class UpdateAddressRequest extends FormRequest
             'label.min'      => 'مسمى العنوان يجب ألا يقل عن حرفين.',
             'label.max'      => 'مسمى العنوان يجب ألا يتجاوز 100 حرف.',
             'label.regex'    => 'مسمى العنوان يجب أن يكون بالعربية (ويمكن أن يتضمن أرقاماً).',
-            'label.unique'   => 'اسم العنوان مسجل لديك مسبقاً في عنوان آخر.',
 
             // خط العرض (Lat)
             'lat.required' => 'إحداثيات خط العرض مطلوبة.',
             'lat.numeric'  => 'إحداثيات خط العرض يجب أن تكون رقماً.',
             'lat.between'  => 'إحداثيات خط العرض غير صالحة جغرافياً.',
-            'lat.unique'   => 'هذا الموقع الجغرافي مسجل لديك مسبقاً في عنوان آخر.',
 
             // خط الطول (Lng)
             'lng.required' => 'إحداثيات خط الطول مطلوبة.',

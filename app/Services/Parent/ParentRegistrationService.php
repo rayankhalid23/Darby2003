@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Parent\ParentModel;
 use App\Services\Shared\OtpService;
 use App\Services\Shared\EmailService;
+use App\Services\Shared\TermsService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
@@ -18,11 +19,13 @@ class ParentRegistrationService
 {
     protected $otpService;
     protected $emailService;
+    protected TermsService $termsService;
 
-    public function __construct(OtpService $otpService, EmailService $emailService)
+    public function __construct(OtpService $otpService, EmailService $emailService, TermsService $termsService)
     {
         $this->otpService = $otpService;
         $this->emailService = $emailService;
+        $this->termsService = $termsService;
     }
 
     public function requestNewOtp(string $email): string
@@ -81,6 +84,20 @@ class ParentRegistrationService
                     'avatar_url'        => $data['avatar_url'] ?? null,
                 ]);
                 Log::info("Service: User record created for ID: {$user->id}");
+
+                // توثيق موافقة ولي الأمر على النسخة السارية من الشروط والأحكام لحظة
+                // إنشاء الحساب — قبل هذا السطر تم التحقق من الحقل عبر ParentRegisterRequest
+                // (accepted)، وهذا هو التسجيل الفعلي القابل للاستخراج عند أي نزاع لاحق.
+                try {
+                    $this->termsService->recordAcceptance(
+                        $user,
+                        'parent',
+                        request()?->ip(),
+                        request() ? (string) request()->userAgent() : null
+                    );
+                } catch (\Throwable $e) {
+                    Log::warning("Service: Failed to record terms acceptance for parent #{$user->id}: " . $e->getMessage());
+                }
 
                 // تسجيل الجهاز فقط إذا تم إرسال fcm_token حقيقي (فريد عالمياً في الجدول)؛
                 // التسجيل الرسمي يتم عبر POST /api/user/device-token بعد تسجيل الدخول

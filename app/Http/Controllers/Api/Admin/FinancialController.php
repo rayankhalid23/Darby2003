@@ -31,7 +31,7 @@ class FinancialController extends Controller
     public function invoices(): JsonResponse
     {
         $perPage = (int) request('per_page', 15);
-        $query = \App\Models\Shared\Invoice::with(['contract.parent.user', 'contract.driver.user'])
+        $query = \App\Models\Shared\Invoice::with(['subscriptionRequest', 'parent', 'driver.user'])
             ->when(request('status'), fn($q, $v) => $q->where('status', $v))
             ->when(request('type'), fn($q, $v) => $q->where('type', $v))
             ->when(request('search'), function ($q, $v) {

@@ -9,6 +9,7 @@ use App\Models\Driver\DriverDocument;
 use App\Jobs\SendDriverOtpEmailJob;
 use App\Services\Shared\EmailService;
 use App\Services\Shared\OtpService;
+use App\Services\Shared\TermsService;
 use App\Services\Notification\NotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -22,12 +23,18 @@ class DriverRegisterService
     protected EmailService $emailService;
     protected OtpService $otpService;
     protected NotificationService $notificationService;
+    protected TermsService $termsService;
 
-    public function __construct(EmailService $emailService, OtpService $otpService, NotificationService $notificationService)
-    {
+    public function __construct(
+        EmailService $emailService,
+        OtpService $otpService,
+        NotificationService $notificationService,
+        TermsService $termsService
+    ) {
         $this->emailService = $emailService;
         $this->otpService = $otpService;
         $this->notificationService = $notificationService;
+        $this->termsService = $termsService;
     }
 
     /**
@@ -63,6 +70,13 @@ class DriverRegisterService
      */
     public function registerAccountAfterOtp(array $data): User
     {
+        // فحص دفاعي: RegisterAccountRequest (الخطوة 1) يفرض 'terms_accepted' لكن
+        // هذه الدالة تُستدعى بـ $request->all() من OtpRequest (الخطوة 2) الذي لا
+        // يحمل نفس قواعد التحقق، فلا بد من تكرار الفحص هنا قبل لمس قاعدة البيانات.
+        if (!filter_var($data['terms_accepted'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            throw new Exception('يجب الموافقة على الشروط والأحكام لإتمام التسجيل.');
+        }
+
         return DB::transaction(function () use ($data) {
             // 1. إنشاء المستخدم وتفعيله مباشرة لأن الـ OTP تم التحقق منه
             $user = User::create([
@@ -81,6 +95,18 @@ class DriverRegisterService
                 'user_id' => $user->id,
                 'status'  => 'Offline',
             ]);
+
+            // 2.5 توثيق موافقة السائق على النسخة السارية من الشروط والأحكام
+            try {
+                $this->termsService->recordAcceptance(
+                    $user,
+                    'driver',
+                    request()?->ip(),
+                    request() ? (string) request()->userAgent() : null
+                );
+            } catch (\Throwable $e) {
+                Log::warning("Driver terms acceptance recording failed for user #{$user->id}: " . $e->getMessage());
+            }
 
             // 3. تسجيل جهاز السائق فقط إذا تم إرسال fcm_token حقيقي (fcm_token فريد عالمياً في الجدول،
             //    ولا معنى لإدراج توكن وهمي؛ التسجيل الرسمي للجهاز يتم عبر POST /api/user/device-token بعد تسجيل الدخول)

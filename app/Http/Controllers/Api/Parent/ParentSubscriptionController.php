@@ -65,13 +65,17 @@ class ParentSubscriptionController extends Controller
         $requests = SubscriptionRequest::query()
             ->with([
                 'driver.user',
+                'driver.vehicle',
                 'children' => function ($query) {
                     $query->withPivot([
                         'timing',
                         'distance_km',
+                        'school_label',
+                        'school_lat',
+                        'school_lng',
                         'price_per_child',
                         'trip_price',
-                        'discount_amount',            
+                        'discount_amount',
                         'total_amount_after_discount',
                         'driver_net_price'
                     ]);
@@ -102,13 +106,17 @@ class ParentSubscriptionController extends Controller
         $subscriptionRequest = SubscriptionRequest::query()
             ->with([
                 'driver.user',
+                'driver.vehicle',
                 'children' => function ($query) {
                     $query->withPivot([
                         'timing',
                         'distance_km',
+                        'school_label',
+                        'school_lat',
+                        'school_lng',
                         'price_per_child',
                         'trip_price',
-                        'discount_amount',            
+                        'discount_amount',
                         'total_amount_after_discount',
                         'driver_net_price'
                     ]);
@@ -215,13 +223,17 @@ class ParentSubscriptionController extends Controller
                     'child.school',
                     'child.address',
                     'driver.user',
+                    'driver.vehicle',
                     'subscriptionRequest.children' => function ($query) {
                         $query->withPivot([
                             'timing',
                             'distance_km',
+                            'school_label',
+                            'school_lat',
+                            'school_lng',
                             'price_per_child',
                             'trip_price',
-                            'discount_amount',            
+                            'discount_amount',
                             'total_amount_after_discount',
                             'driver_net_price'
                         ]);
@@ -418,13 +430,17 @@ class ParentSubscriptionController extends Controller
 
             $subscriptionRequest = SubscriptionRequest::with([
                 'driver.user',
+                'driver.vehicle',
                 'children' => function ($query) {
                     $query->withPivot([
                         'timing',
                         'distance_km',
+                        'school_label',
+                        'school_lat',
+                        'school_lng',
                         'price_per_child',
                         'trip_price',
-                        'discount_amount',            
+                        'discount_amount',
                         'total_amount_after_discount',
                         'driver_net_price'
                     ]);

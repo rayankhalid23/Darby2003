@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Auth\PasswordController;
 use App\Http\Controllers\Api\Shared\NotificationController as SharedNotificationController;
 use App\Http\Controllers\Api\Shared\MediaController;
 use App\Http\Controllers\Api\Shared\GeographySearchController;
+use App\Http\Controllers\Api\Shared\TermsController;
 
 /*
 |--------------------------------------------------------------------------
@@ -21,6 +22,12 @@ Route::match(['get', 'post'], '/geography/search', [GeographySearchController::c
 // 🖼️ تقديم ملفات وثائق/مركبات السائقين عبر لارافيل لضمان ترويسات CORS (عام، بلا توكن —
 // وسوم <img> والمكتبات المستخدمة في تحميل الصور لا ترسل Authorization)
 Route::get('/media/{path}', [MediaController::class, 'show'])->where('path', '.*');
+
+// 📜 الشروط والأحكام — عرض عام بلا توكن (تُستدعى من شاشة التسجيل قبل أي مصادقة)
+Route::prefix('terms')->group(function () {
+    Route::get('/current', [TermsController::class, 'current'])->name('api.terms.current');
+    Route::get('/{id}', [TermsController::class, 'show'])->whereNumber('id')->name('api.terms.show');
+});
 
 // مسار تسجيل الدخول
 Route::post('/auth/login', [LoginController::class, 'login']);
@@ -37,7 +44,10 @@ Route::prefix('auth/password')->group(function () {
 Route::middleware('auth:sanctum')->group(function () {
     
     Route::post('/auth/logout', [LoginController::class, 'logout']);
-    
+
+    // 📜 تسجيل موافقة المستخدم الحالي على النسخة السارية من الشروط والأحكام
+    Route::post('/terms/accept', [TermsController::class, 'accept'])->name('api.terms.accept');
+
     Route::get('/user/profile', function (Request $request) {
         return response()->json([
             'status' => true,
