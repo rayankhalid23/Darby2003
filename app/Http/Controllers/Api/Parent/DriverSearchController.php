@@ -41,7 +41,8 @@ class DriverSearchController extends Controller
             }
 
             // 3. تشغيل محرك الفلترة والتسعير بالمعرف الصحيح
-            $drivers = $this->matchingService->matchDrivers($filters, $parentId);
+            $result  = $this->matchingService->matchDrivers($filters, $parentId);
+            $drivers = $result['drivers'];
 
             $isEmpty = $drivers->isEmpty();
 
@@ -50,6 +51,10 @@ class DriverSearchController extends Controller
                 'message' => $isEmpty
                     ? 'لم يتم العثور على سائقين مطابقين للبحث.'
                     : 'تمت الفلترة وجلب السائقين بنجاح.',
+
+                // يلخّص بيانات الاشتراك المشتركة (النوع/الاتجاه/المدة) والأطفال
+                // المشمولين، كما طُبِّقت فعلياً بالفلترة والتسعير التقديري أدناه.
+                'search_context' => $result['context'],
 
                 'meta' => [
                     'current_page' => $drivers->currentPage(),

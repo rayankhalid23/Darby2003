@@ -7,6 +7,7 @@ use App\Models\Driver\Driver;
 use App\Models\Driver\DriverSeatSlot;
 use App\Models\Shared\PricingSetting;
 use App\Models\Shared\Zone;
+use App\Services\Shared\PricingCalculator;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -15,11 +16,15 @@ use Illuminate\Support\Facades\Log;
 class DriverMatchingService
 {
     /**
-     * نوع الاشتراك واتجاه الرحلة لم يعودا مخزّنين على الطفل، بل يُحددان عند إنشاء
-     * طلب الاشتراك (request_children)؛ فنستخدم هنا قيمتين افتراضيتين لتقدير السعر فقط.
+     * نوع الاشتراك واتجاه الرحلة وفترة البحث اختيارية من ولي الأمر عند البحث؛
+     * غيابها يعني تقدير سعر ليوم عمل واحد ذهاباً فقط (أقل تقدير ممكن لا أكبره).
      */
-    private const DEFAULT_TRIP_DIRECTION   = 'go';
+    private const DEFAULT_TRIP_DIRECTION    = 'go';
     private const DEFAULT_SUBSCRIPTION_TYPE = 'multi_day';
+
+    public function __construct(
+        private readonly PricingCalculator $pricingCalculator
+    ) {}
 
     private function resolveChildren(array $childIds, int $parentId): Collection
     {
@@ -33,10 +38,29 @@ class DriverMatchingService
         return $query->get();
     }
 
-    public function matchDrivers(array $filters, int $parentId): LengthAwarePaginator
+    /**
+     * @return array{drivers: LengthAwarePaginator, context: array}
+     */
+    public function matchDrivers(array $filters, int $parentId): array
     {
         // 1. استرجاع بيانات الأطفال المحددين بناءً على child_ids
         $children = $this->resolveChildren($filters['child_ids'] ?? [], $parentId);
+
+        // بيانات الاشتراك المشتركة لكل الأطفال المحددين بهذا البحث (نفس حقول
+        // الطلب الفعلي عند الإنشاء) — تُستخدم بالتسعير التقديري وتُعاد كما هي
+        // في context الاستجابة حتى تعرف الواجهة بالضبط شنو انطبق.
+        $subscriptionType = $filters['subscription_type'] ?? self::DEFAULT_SUBSCRIPTION_TYPE;
+        $tripDirection    = $filters['trip_direction']    ?? self::DEFAULT_TRIP_DIRECTION;
+        $startDate        = $filters['start_date']        ?? now()->toDateString();
+        $endDate          = $filters['end_date']          ?? $startDate;
+
+        $context = [
+            'subscription_type' => $subscriptionType,
+            'trip_direction'    => $tripDirection,
+            'start_date'        => $startDate,
+            'end_date'          => $endDate,
+            'child_ids'         => $children->pluck('id')->values()->all(),
+        ];
 
         // 2. الاستعلام الأساسي: السائق معتمد وموثوق ورخصته سارية
         $query = Driver::query()
@@ -91,8 +115,16 @@ class DriverMatchingService
                 }
             }
 
-            $drivers->getCollection()->transform(function (Driver $driver) use ($children, $childrenDistances) {
-                $priceDetails = $this->calculatePricingForDriver($driver, $children, $childrenDistances);
+            $drivers->getCollection()->transform(function (Driver $driver) use ($children, $childrenDistances, $subscriptionType, $tripDirection, $startDate, $endDate) {
+                $priceDetails = $this->calculatePricingForDriver(
+                    $driver,
+                    $children,
+                    $childrenDistances,
+                    $subscriptionType,
+                    $tripDirection,
+                    $startDate,
+                    $endDate
+                );
                 $driver->estimated_total_price = $priceDetails['total'];
                 $driver->pricing_breakdown      = $priceDetails['breakdown'];
                 $driver->platform_fee           = $priceDetails['platform_fee'];
@@ -120,7 +152,7 @@ class DriverMatchingService
             });
         }
 
-        return $drivers;
+        return ['drivers' => $drivers, 'context' => $context];
     }
 
     private function applyTextSearch($query, string $keyword): void
@@ -170,10 +202,11 @@ class DriverMatchingService
         // (children.preferred_time_slot) لا من قيمة افتراضية.
         $direction = $filters['trip_direction'] ?? self::DEFAULT_TRIP_DIRECTION;
 
-        // حساب طلب المقاعد لكل slot
+        // حساب طلب المقاعد لكل slot — الفترة خاصة بكل طفل بروحه دائماً (تُشتق من
+        // تفضيله المسجَّل)، لا يوجد أي override موحّد يفرض نفس الفترة على كل الأطفال.
         $slotDemand = [];
         foreach ($children as $child) {
-            $timing = $filters['timing'] ?? DriverSeatSlot::timingFromPreferredSlot($child->preferred_time_slot);
+            $timing = DriverSeatSlot::timingFromPreferredSlot($child->preferred_time_slot);
 
             if ($timing === null) {
                 continue;
@@ -262,8 +295,22 @@ class DriverMatchingService
     /**
      * حساب التسعير الشامل بعمولة منفصلة لكل طفل ودعم خلط (يومي + شهري)
      */
-    private function calculatePricingForDriver(Driver $driver, Collection $children, array $childrenDistances = []): array
-    {
+    private function calculatePricingForDriver(
+        Driver $driver,
+        Collection $children,
+        array $childrenDistances = [],
+        string $subscriptionType = self::DEFAULT_SUBSCRIPTION_TYPE,
+        string $tripDirection = self::DEFAULT_TRIP_DIRECTION,
+        ?string $startDate = null,
+        ?string $endDate = null
+    ): array {
+        // أيام العمل والاتجاه محسوبان مرة واحدة لكل الأطفال (نفس معادلة PricingCalculator
+        // المستخدمة فعلياً عند إنشاء الاشتراك)، حتى يطابق السعر التقديري هنا السعر الحقيقي لاحقاً.
+        $workingDays   = strtolower(trim($subscriptionType)) === 'single_day'
+            ? 1
+            : $this->pricingCalculator->workingDays($startDate, $endDate);
+        $tripMultiplier = $this->pricingCalculator->tripsPerDay($tripDirection);
+
         // 1. جلب إعدادات الأسعار من قاعدة البيانات
         $settings = rescue(fn() => PricingSetting::first(), null, false);
         $priceKmAc         = $settings->price_per_km_ac ?? 2.50;
@@ -296,8 +343,6 @@ class DriverMatchingService
 
         foreach ($children as $child) {
             $logistics = $child->logistics;
-            $subscriptionType = self::DEFAULT_SUBSCRIPTION_TYPE;
-            $tripDir          = self::DEFAULT_TRIP_DIRECTION;
 
             $childEntry = [
                 'child_id'            => $child->id,
@@ -318,10 +363,9 @@ class DriverMatchingService
                 ],
                 'subscription_type'   => $subscriptionType,
                 'preferred_time_slot' => $logistics?->preferred_time_slot ?? 'morning',
-                'trip_direction'      => $tripDir,
-                // تواريخ الاشتراك تُحدد عند إنشاء الطلب (request_children) وليست مخزّنة على الطفل
-                'start_date'          => null,
-                'end_date'            => null,
+                'trip_direction'      => $tripDirection,
+                'start_date'          => $startDate,
+                'end_date'            => $endDate,
             ];
 
             if (!$child->address || !$child->school || !$child->address->lat || !$child->school->lat) {
@@ -336,12 +380,8 @@ class DriverMatchingService
             );
 
             $effectiveDistance = max($distanceKm, 4.0);
-            $tripMultiplier    = ($tripDir === 'both') ? 2 : 1;
             $singleLegPrice    = round($effectiveDistance * $pricePerKm, 2);
             $dailyPrice        = round($singleLegPrice * $tripMultiplier, 2);
-
-            // تقدير سعر البحث يُحتسب ليوم عمل واحد؛ عدد الأيام الفعلي يُحسب عند إنشاء طلب الاشتراك
-            $workingDays       = 1;
 
             // --- الحسابات الخاصة بهذا الطفل بفرده ---
             $childRawSubtotal  = round($dailyPrice * $workingDays, 2);                      // الإجمالي قبل الخصم

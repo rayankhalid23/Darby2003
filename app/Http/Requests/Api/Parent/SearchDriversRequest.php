@@ -28,10 +28,11 @@ class SearchDriversRequest extends FormRequest
             // ─── فترة الاشتراك المطلوبة ──────────────────────────────────────
             // بدونها كان فلتر المقاعد يفحص اليوم الحالي فقط، فيظهر سائق ممتلئ
             // طوال الفصل الدراسي لمجرد أن مقاعد اليوم شاغرة.
-            'start_date'     => ['nullable', 'date', 'after_or_equal:today'],
-            'end_date'       => ['nullable', 'date', 'after_or_equal:start_date'],
-            'trip_direction' => ['nullable', 'string', Rule::in(['go', 'return', 'both'])],
-            'timing'         => ['nullable', 'string', Rule::in(['MORNING', 'EVENING', 'BOTH'])],
+            'start_date'         => ['nullable', 'date', 'after_or_equal:today'],
+            'end_date'           => ['nullable', 'date', 'after_or_equal:start_date'],
+            'trip_direction'     => ['nullable', 'string', Rule::in(['go', 'return', 'both'])],
+            // نوع الاشتراك — يحدد طريقة حساب أيام العمل بالتسعير التقديري (يوم واحد أو كل أيام الفترة).
+            'subscription_type'  => ['nullable', 'string', Rule::in(['single_day', 'multi_day'])],
         ];
     }
 
@@ -70,10 +71,6 @@ class SearchDriversRequest extends FormRequest
             }]);
         }
 
-        if ($this->filled('timing')) {
-            $this->merge(['timing' => strtoupper((string) $this->timing)]);
-        }
-
         // نهاية غير مُرسلة تعني اشتراك ليوم واحد
         if ($this->filled('start_date') && !$this->filled('end_date')) {
             $this->merge(['end_date' => $this->input('start_date')]);
@@ -93,7 +90,7 @@ class SearchDriversRequest extends FormRequest
             'end_date.date'               => 'صيغة تاريخ نهاية الاشتراك غير صحيحة.',
             'end_date.after_or_equal'     => 'تاريخ النهاية يجب أن يكون مساوياً أو بعد تاريخ البدء.',
             'trip_direction.in'           => 'اتجاه الرحلة غير صالح (go للذهاب، return للإياب، both للاتجاهين).',
-            'timing.in'                   => 'الفترة غير صالحة (MORNING صباحي، EVENING مسائي، BOTH كلاهما).',
+            'subscription_type.in'        => 'نوع الاشتراك غير صالح (single_day ليوم واحد، multi_day لعدة أيام).',
         ];
     }
 }
