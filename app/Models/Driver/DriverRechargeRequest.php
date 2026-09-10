@@ -40,9 +40,14 @@ class DriverRechargeRequest extends Model
         return $this->belongsTo(Driver::class, 'driver_id');
     }
 
+    /**
+     * withTrashed(): طلب الشحن مستند تاريخي — لو الأدمن حذف وسيلة الدفع لاحقاً
+     * (حذف ناعم) يجب أن يبقى اسمها ظاهراً في مراجعة الطلبات القديمة، لا أن
+     * تختفي فجأة ويظهر "بلا وسيلة دفع" لطلب دُفع بالفعل عبرها.
+     */
     public function paymentMethod(): BelongsTo
     {
-        return $this->belongsTo(PaymentMethod::class, 'payment_method_id');
+        return $this->belongsTo(PaymentMethod::class, 'payment_method_id')->withTrashed();
     }
 
     public function admin(): BelongsTo

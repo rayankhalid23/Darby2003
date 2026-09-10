@@ -166,8 +166,13 @@ class DailyTripGenerationService
             return true;
         }
 
-        $covers = \Illuminate\Support\Facades\DB::table('request_children')
-            ->whereIn('request_id', $subscriptionRequestIds)
+        // ⚠️ start_date/end_date انتقلا من request_children إلى requests (المصدر
+        // الوحيد الآن) عبر ميغريشن 2026_09_07_183713 — هذا الاستعلام كان لا يزال
+        // يقرأ من request_children فيفشل بخطأ SQL "Unknown column" لأي مسار عليه
+        // اشتراك فعّال، أي أن أمر trips:generate-daily (المُجدوَل كـcron) كان يفشل
+        // فعلياً لكل مسار حقيقي عليه أطفال — تحقّقت من هذا مباشرة بالتنفيذ الفعلي.
+        $covers = \Illuminate\Support\Facades\DB::table('requests')
+            ->whereIn('id', $subscriptionRequestIds)
             ->whereDate('start_date', '<=', $dateString)
             ->whereDate('end_date', '>=', $dateString)
             ->exists();
@@ -176,13 +181,13 @@ class DailyTripGenerationService
             return true;
         }
 
-        // توافقية: اشتراكات قديمة بلا تواريخ على مستوى الطفل
-        $hasAnyChildDates = \Illuminate\Support\Facades\DB::table('request_children')
-            ->whereIn('request_id', $subscriptionRequestIds)
+        // توافقية: اشتراكات قديمة بلا تواريخ على مستوى الطلب
+        $hasAnyDates = \Illuminate\Support\Facades\DB::table('requests')
+            ->whereIn('id', $subscriptionRequestIds)
             ->whereNotNull('start_date')
             ->exists();
 
-        return !$hasAnyChildDates;
+        return !$hasAnyDates;
     }
 
     private function buildTripStops(Trip $trip, Route $route, string $dateString): void

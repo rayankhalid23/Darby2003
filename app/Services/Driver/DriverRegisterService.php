@@ -9,7 +9,6 @@ use App\Models\Driver\DriverDocument;
 use App\Jobs\SendDriverOtpEmailJob;
 use App\Services\Shared\EmailService;
 use App\Services\Shared\OtpService;
-use App\Services\Shared\TermsService;
 use App\Services\Notification\NotificationService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -23,18 +22,12 @@ class DriverRegisterService
     protected EmailService $emailService;
     protected OtpService $otpService;
     protected NotificationService $notificationService;
-    protected TermsService $termsService;
 
-    public function __construct(
-        EmailService $emailService,
-        OtpService $otpService,
-        NotificationService $notificationService,
-        TermsService $termsService
-    ) {
+    public function __construct(EmailService $emailService, OtpService $otpService, NotificationService $notificationService)
+    {
         $this->emailService = $emailService;
         $this->otpService = $otpService;
         $this->notificationService = $notificationService;
-        $this->termsService = $termsService;
     }
 
     /**
@@ -54,10 +47,12 @@ class DriverRegisterService
 
         // 🚀 الحل الأسرع: استخدام dispatchSync لتنفيذ الإرسال فوراً وبشكل لحظي بدلاً من الانتظار في الـ Queue
         SendDriverOtpEmailJob::dispatchSync(
-            $data['email'], 
-            $data['full_name'], 
-            $otpCode, 
-            4, // role_id الخاص بالسائق
+            $data['email'],
+            $data['full_name'],
+            $otpCode,
+            // ⚠️ رقم داخلي لاختيار عبارة الترحيب فقط (EmailService::determineGreeting)،
+            // لا علاقة له بـ roles.id الفعلي (دور السائق الحقيقي = 8) — لا تستخدمه لغير هذا الغرض.
+            4,
             $data['gender'] ?? null,
             'REGISTER'
         );
@@ -70,14 +65,20 @@ class DriverRegisterService
      */
     public function registerAccountAfterOtp(array $data): User
     {
-        // فحص دفاعي: RegisterAccountRequest (الخطوة 1) يفرض 'terms_accepted' لكن
-        // هذه الدالة تُستدعى بـ $request->all() من OtpRequest (الخطوة 2) الذي لا
-        // يحمل نفس قواعد التحقق، فلا بد من تكرار الفحص هنا قبل لمس قاعدة البيانات.
-        if (!filter_var($data['terms_accepted'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
-            throw new Exception('يجب الموافقة على الشروط والأحكام لإتمام التسجيل.');
-        }
-
         return DB::transaction(function () use ($data) {
+            // ⚠️ role_id كان مثبّتاً يدوياً على 4 — وهو دور "مشرف خدمة العملاء
+            // والشكاوى" (staff) بجدول roles الحالي، لا دور السائق (id=8). كل حساب
+            // سائق أُنشئ عبر هذا المسار كان يُسجَّل فعلياً كموظف إداري: يمرّ من
+            // فحوصات $user->admin/isSuperAdmin() بصمت ويرى بيانات لا تخصه (تحقق
+            // فعلي أثناء الاختبار: سائق عادي رأى كل فواتير كل السائقين وأولياء
+            // الأمور عبر GET /invoices لأن الكنترولر يفرّع على $user->admin أولاً).
+            // نجلب المعرّف من جدول roles بالاسم بدل تكرار رقم ثابت عرضة للانحراف
+            // عن أي إعادة seed مستقبلية.
+            $driverRoleId = \App\Models\Role::where('name', 'driver')->value('id');
+            if (!$driverRoleId) {
+                throw new Exception('تعذّر إتمام التسجيل: دور "السائق" غير معرّف بجدول الأدوار.');
+            }
+
             // 1. إنشاء المستخدم وتفعيله مباشرة لأن الـ OTP تم التحقق منه
             $user = User::create([
                 'full_name'         => $data['full_name'],
@@ -86,7 +87,7 @@ class DriverRegisterService
                 'alternative_phone' => $data['alternative_phone'] ?? null,
                 'password_hash'     => Hash::make($data['password']),
                 'gender'            => $data['gender'] ?? null,
-                'role_id'           => 4,
+                'role_id'           => $driverRoleId,
                 'is_active'         => 0, // معلّق — يتفعل فقط عند موافقة الأدمن
             ]);
 
@@ -95,18 +96,6 @@ class DriverRegisterService
                 'user_id' => $user->id,
                 'status'  => 'Offline',
             ]);
-
-            // 2.5 توثيق موافقة السائق على النسخة السارية من الشروط والأحكام
-            try {
-                $this->termsService->recordAcceptance(
-                    $user,
-                    'driver',
-                    request()?->ip(),
-                    request() ? (string) request()->userAgent() : null
-                );
-            } catch (\Throwable $e) {
-                Log::warning("Driver terms acceptance recording failed for user #{$user->id}: " . $e->getMessage());
-            }
 
             // 3. تسجيل جهاز السائق فقط إذا تم إرسال fcm_token حقيقي (fcm_token فريد عالمياً في الجدول،
             //    ولا معنى لإدراج توكن وهمي؛ التسجيل الرسمي للجهاز يتم عبر POST /api/user/device-token بعد تسجيل الدخول)

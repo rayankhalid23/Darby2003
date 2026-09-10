@@ -71,6 +71,36 @@ class TermsController extends Controller
     }
 
     /**
+     * GET /api/terms/status  (auth:sanctum)
+     * يستدعيها الفرونت في أي لحظة يقرر فيها هو عرض شاشة الشروط (بعد إنشاء
+     * حساب ولي الأمر مباشرة، أو بعد موافقة الأدمن على السائق) ليعرف هل
+     * المستخدم الحالي وافق على النسخة السارية أم لا، بمعزل تام عن التسجيل.
+     */
+    public function status(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $role = $this->resolveUserRole($user);
+
+        if (!$role) {
+            return response()->json([
+                'success' => false,
+                'message' => 'تعذر تحديد دور المستخدم (ولي أمر / سائق).',
+            ], 422);
+        }
+
+        $current = $this->termsService->getCurrentPublished($role);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'تم جلب حالة الموافقة على الشروط بنجاح.',
+            'data'    => [
+                'has_accepted'      => $current ? $this->termsService->hasAccepted($user, $role) : true,
+                'current_version'   => $current ? new TermsVersionResource($current) : null,
+            ],
+        ], 200);
+    }
+
+    /**
      * POST /api/terms/accept  (auth:sanctum)
      * تسجيل موافقة المستخدم الحالي على النسخة السارية لدوره. هذه هي نقطة
      * الدخول التي تُستدعى أيضاً عند نشر نسخة جديدة فتحجب middleware

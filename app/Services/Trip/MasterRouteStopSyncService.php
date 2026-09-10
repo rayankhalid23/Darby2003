@@ -195,6 +195,21 @@ class MasterRouteStopSyncService
     }
 
     /**
+     * يُستدعى من DriverRouteController عند إسناد/نقل اشتراك لمسار يدوياً
+     * (assign-route / move-route). بدون هذا الاستدعاء كان `active_subscriptions.
+     * route_id` يتحدّث بينما تبقى `route_stops` فارغة تماماً من محطة الطفل — فيَظهر
+     * الإسناد ناجحاً بواجهة السائق (children_count يرتفع) لكن DailyTripGenerationService
+     * لا يرى هذا الطفل إطلاقاً لأنه يبني الرحلة اليومية حصراً من route_stops، فلا
+     * يُولَّد له أي توقّف اصطحاب/إنزال أبداً.
+     */
+    public function addChildToRoute(Route $route, ActiveSubscription $sub): void
+    {
+        $sub->loadMissing('child');
+        $this->addChildStopsToRoute($route, collect([$sub]));
+        $this->resequenceRoute($route->fresh());
+    }
+
+    /**
      * يُستدعى عند تحول حالة اشتراك نشط إلى cancelled/completed.
      * يزيل محطة منزل الطفل من كل مسار موجودة به، ويزيل محطة المدرسة أيضاً
      * إذا لم يعد هناك طفل آخر نشط من نفس المدرسة على هذا المسار.

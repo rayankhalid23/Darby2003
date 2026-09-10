@@ -27,11 +27,6 @@ class RegisterAccountRequest extends FormRequest
             'device_name'       => 'nullable|string',
             'platform'          => 'nullable|string',
             'fcm_token'         => 'nullable|string',
-
-            // موافقة إلزامية على الشروط والأحكام. يُعاد إرسالها وجوباً في خطوة
-            // التحقق من الـ OTP أيضاً (registerAccountAfterOtp يتحقق منها هناك
-            // دفاعياً لأنه يقرأ $request->all() من OtpRequest لا من هذا الطلب).
-            'terms_accepted'    => 'required|accepted',
         ];
     }
 
@@ -76,10 +71,6 @@ class RegisterAccountRequest extends FormRequest
             'device_name.string'       => 'اسم الجهاز يجب أن يكون نصاً صالحاً.',
             'platform.string'          => 'نوع المنصة يجب أن يكون نصاً صالحاً.',
             'fcm_token.string'         => 'رمز الإشعارات (FCM Token) يجب أن يكون نصاً صالحاً.',
-
-            // الموافقة على الشروط
-            'terms_accepted.required'  => 'يجب الموافقة على الشروط والأحكام لإتمام التسجيل.',
-            'terms_accepted.accepted'  => 'يجب الموافقة على الشروط والأحكام لإتمام التسجيل.',
         ];
     }
 

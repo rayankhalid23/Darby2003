@@ -6,7 +6,6 @@ use App\Models\User;
 use App\Models\Parent\ParentModel;
 use App\Services\Shared\OtpService;
 use App\Services\Shared\EmailService;
-use App\Services\Shared\TermsService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
@@ -19,13 +18,11 @@ class ParentRegistrationService
 {
     protected $otpService;
     protected $emailService;
-    protected TermsService $termsService;
 
-    public function __construct(OtpService $otpService, EmailService $emailService, TermsService $termsService)
+    public function __construct(OtpService $otpService, EmailService $emailService)
     {
         $this->otpService = $otpService;
         $this->emailService = $emailService;
-        $this->termsService = $termsService;
     }
 
     public function requestNewOtp(string $email): string
@@ -70,13 +67,23 @@ class ParentRegistrationService
 
         try {
             return DB::transaction(function () use ($data) {
+                // ⚠️ role_id كان مثبّتاً على 3 — دور "مشرف شؤون السائقين والأسطول"
+                // (staff) بجدول roles الحالي، لا دور ولي الأمر (id=7). نفس خلل
+                // DriverRegisterService بالضبط، وبنفس الأثر: كل ولي أمر سجّل عبر
+                // هذا المسار يمرّ من فحوصات $user->admin بصمت. نجلب المعرّف بالاسم
+                // بدل رقم ثابت.
+                $parentRoleId = \App\Models\Role::where('name', 'parent')->value('id');
+                if (!$parentRoleId) {
+                    throw new Exception('تعذّر إتمام التسجيل: دور "ولي الأمر" غير معرّف بجدول الأدوار.');
+                }
+
                 $user = User::create([
                     'full_name'         => $data['full_name'],
                     'email'             => $data['email'],
                     'phone_number'      => $data['phone_number'],
                     'alternative_phone' => $data['alternative_phone'] ?? null,
                     'password_hash'     => Hash::make($data['password']),
-                    'role_id'           => 3,
+                    'role_id'           => $parentRoleId,
                     'is_active'         => 1,
                     'is_trusted'        => 1,
                     'email_verified_at' => Carbon::now(),
@@ -84,20 +91,6 @@ class ParentRegistrationService
                     'avatar_url'        => $data['avatar_url'] ?? null,
                 ]);
                 Log::info("Service: User record created for ID: {$user->id}");
-
-                // توثيق موافقة ولي الأمر على النسخة السارية من الشروط والأحكام لحظة
-                // إنشاء الحساب — قبل هذا السطر تم التحقق من الحقل عبر ParentRegisterRequest
-                // (accepted)، وهذا هو التسجيل الفعلي القابل للاستخراج عند أي نزاع لاحق.
-                try {
-                    $this->termsService->recordAcceptance(
-                        $user,
-                        'parent',
-                        request()?->ip(),
-                        request() ? (string) request()->userAgent() : null
-                    );
-                } catch (\Throwable $e) {
-                    Log::warning("Service: Failed to record terms acceptance for parent #{$user->id}: " . $e->getMessage());
-                }
 
                 // تسجيل الجهاز فقط إذا تم إرسال fcm_token حقيقي (فريد عالمياً في الجدول)؛
                 // التسجيل الرسمي يتم عبر POST /api/user/device-token بعد تسجيل الدخول

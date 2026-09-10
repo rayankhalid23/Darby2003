@@ -37,9 +37,13 @@ class RechargeRequest extends Model
         return $this->belongsTo(User::class, 'parent_id');
     }
 
+    /**
+     * withTrashed(): نفس منطق DriverRechargeRequest::paymentMethod() — سجل شحن
+     * مكتمل يجب أن يبقى مرتبطاً باسم وسيلة الدفع حتى لو حذفها الأدمن لاحقاً.
+     */
     public function paymentMethod(): BelongsTo
     {
-        return $this->belongsTo(PaymentMethod::class, 'payment_method_id');
+        return $this->belongsTo(PaymentMethod::class, 'payment_method_id')->withTrashed();
     }
 
     public function admin(): BelongsTo

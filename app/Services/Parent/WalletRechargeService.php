@@ -58,6 +58,16 @@ class WalletRechargeService
             $method = PaymentMethod::where('code', $paymentMethodIdentifier)->first();
         }
 
+        // ⚠️ لا يكفي إخفاء الوسيلة المعطّلة من getPaymentMethods(): كان أي عميل يعرف
+        // id/code وسيلة عطّلها الأدمن (توكن قديم مخزّن بالتطبيق، أو تجربة يدوية)
+        // يقدر يبدأ بها جلسة شحن وينفّذها كأن شيئاً لم يتغيّر. تعطيل الأدمن يجب أن
+        // يمنع الاستخدام فعلياً لا أن يخفي الخيار من القائمة فقط.
+        if ($method && !$method->is_active) {
+            throw ValidationException::withMessages([
+                'payment_method' => ['طريقة الدفع المحددة غير مفعلة حالياً.'],
+            ]);
+        }
+
         $minAmount = $method ? (float) $method->min_amount : 1.0;
         $maxAmount = $method ? (float) $method->max_amount : 50000.0;
 

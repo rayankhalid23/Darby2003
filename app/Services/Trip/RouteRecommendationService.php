@@ -147,9 +147,15 @@ class RouteRecommendationService
         }
 
         // 3. لا يمكن إضافة طفل إلى مسارين نفس الفترة (صباحيين أو مسائيين) في نفس الوقت
+        //
+        // ⚠️ بدون استبعاد status='cancelled' كان أي اشتراك قديم مُلغى (سبق أن رُبط
+        // بمسار ثم أُلغي) يبقى يحجب الطفل أبداً عن أي إسناد جديد بنفس الفترة — تحقّقت
+        // فعلياً: طفل عنده اشتراك ملغى من أيام مضت رُفض إسناد اشتراكه الجديد النشط
+        // بخطأ "مضاف بالفعل" رغم عدم وجود أي تعارض فعلي حالياً.
         $subTripType = strtolower($route->route_type);
         $alreadyAssignedOtherRoute = ActiveSubscription::forChild($sub->child_id)
             ->where('id', '!=', $sub->id)
+            ->where('status', '!=', 'cancelled')
             ->whereNotNull('route_id')
             ->whereHas('route', function ($q) use ($subTripType) {
                 $q->whereRaw('LOWER(route_type) = ?', [$subTripType]);

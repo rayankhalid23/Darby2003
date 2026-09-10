@@ -45,7 +45,10 @@ Route::middleware('auth:sanctum')->group(function () {
     
     Route::post('/auth/logout', [LoginController::class, 'logout']);
 
-    // 📜 تسجيل موافقة المستخدم الحالي على النسخة السارية من الشروط والأحكام
+    // 📜 حالة موافقة المستخدم الحالي + تسجيل الموافقة — مستقلتان تماماً عن التسجيل،
+    // يستدعيهما الفرونت في اللحظة التي يقرر فيها عرض شاشة الشروط (بعد إنشاء حساب
+    // ولي الأمر، أو بعد تفعيل الأدمن لحساب السائق)
+    Route::get('/terms/status', [TermsController::class, 'status'])->name('api.terms.status');
     Route::post('/terms/accept', [TermsController::class, 'accept'])->name('api.terms.accept');
 
     Route::get('/user/profile', function (Request $request) {

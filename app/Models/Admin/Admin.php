@@ -20,10 +20,16 @@ class Admin extends User
     protected static function booted(): void
     {
         static::addGlobalScope('staff_role', function (Builder $builder) {
-            $builder->where(function ($query) {
-                $query->whereIn('role_id', [1, 2, 5, 6, 7, 8])
-                      ->orWhereHas('role', fn ($q) => $q->where('kind', 'staff'));
-            });
+            // ⚠️ كانت هذه القائمة الثابتة [1,2,5,6,7,8] تضم 7 و8 — وهما تحديداً
+            // role_id ولي الأمر والسائق (kind='account') لا أي دور إداري، بينما
+            // تُسقط 3 و4 (أدوار إدارية فعلية). النتيجة: أي حساب ولي أمر أو سائق
+            // كان يُطابَق كـ"أدمن" ($user->admin يرجع صحيحاً له)، فيمرّ من كل
+            // فحص صلاحيات إدارية بصمت ويرى بيانات لا تخصه (تحقق فعلي أثناء
+            // الاختبار: سائق عادي رأى فواتير كل السائقين وأولياء الأمور عبر
+            // GET /invoices لأن الكنترولر يفرّع أولاً على $user->admin). الاعتماد
+            // فقط على roles.kind الديناميكي يمنع تكرار هذا الانحراف عند أي
+            // إعادة ترقيم لجدول roles مستقبلاً.
+            $builder->whereHas('role', fn ($q) => $q->where('kind', 'staff'));
         });
     }
 

@@ -162,7 +162,16 @@ class FinancialLedgerService
 
         // مجاميع مباشرة من قاعدة البيانات — النسخة السابقة كانت تحمّل كل سجلات
         // أولياء الأمور والسائقين ثم تقرأ رصيد كل واحد باستعلام منفصل (N+1).
-        $totalParentWallets = $this->sumWalletBalances(ParentModel::class);
+        //
+        // ⚠️ `sumWalletBalances(ParentModel::class)` كانت تفلتر wallets.holder_type
+        // على القيمة الحرفية 'App\Models\Parent\ParentModel' — لكن ParentModel
+        // يُصرّح صراحة بـ getMorphClass() = User::class (للتوافق مع محفظة bavix
+        // الموحّدة)، فكل محفظة ولي أمر تُخزَّن فعلياً بـ holder_type='App\Models\User'.
+        // النتيجة: هذا المجموع كان يرجع صفراً دائماً بغض النظر عن الرصيد الحقيقي
+        // (تحقّق فعلي: رصيد ولي أمر 2635 د.ل والتقرير يعرض 0). لا خطر من توسيع
+        // الفلتر لكل هولدرز User: لا مسار آخر بالنظام يودع في محفظة User مباشرة
+        // غير أولياء الأمور (الأدمن/الموظفون لا يملكون محافظ إطلاقاً).
+        $totalParentWallets = $this->sumWalletBalances(User::class);
         $totalDriverWallets = $this->sumWalletBalances(Driver::class);
 
         // 1️⃣ مرآة محافظ السائقين

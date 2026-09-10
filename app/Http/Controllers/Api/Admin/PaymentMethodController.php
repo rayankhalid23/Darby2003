@@ -93,6 +93,23 @@ class PaymentMethodController extends Controller
             'sort_order'      => 'nullable|integer',
         ]);
 
+        // ⚠️ عكس store()، هذه الحقول اختيارية هنا (سياسة "تعديل جزئي")، فلا يمكن
+        // فرض gt:min_amount على حقل قد لا يُرسل أصلاً. نتحقق يدوياً من القيمتين
+        // الفعليتين (المُرسلة أو القديمة من قاعدة البيانات) لمنع حفظ وسيلة دفع
+        // بحد أدنى أكبر من حدها الأقصى — كانت تصبح غير قابلة للاستخدام إطلاقاً
+        // لأن أي مبلغ سيفشل بأحد الشرطين دائماً.
+        $existing = $this->service->getById($id);
+        $effectiveMin = $validated['min_amount'] ?? $existing->min_amount;
+        $effectiveMax = $validated['max_amount'] ?? $existing->max_amount;
+
+        if ($effectiveMin !== null && $effectiveMax !== null && (float) $effectiveMin >= (float) $effectiveMax) {
+            return response()->json([
+                'status'  => false,
+                'message' => 'الحد الأدنى للمبلغ يجب أن يكون أقل من الحد الأقصى.',
+                'errors'  => ['max_amount' => ['يجب أن يكون الحد الأقصى أكبر من الحد الأدنى.']],
+            ], 422);
+        }
+
         $method = $this->service->update($id, $validated);
 
         return response()->json([

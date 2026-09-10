@@ -116,15 +116,12 @@ class FinancialController extends Controller
 
     public function processWithdrawal(int $id, ProcessWithdrawalRequest $request): JsonResponse
     {
-        $admin = auth()->user()->admin ?? \App\Models\Admin\Admin::first();
-
-        if (!$admin) {
-            return response()->json([
-                'success' => false,
-                'message' => 'ليس لديك صلاحية لإجراء هذا العمل.',
-                'errors'  => ['admin' => ['غير مصرح بالحساب الإداري.']]
-            ], 403);
-        }
+        // ⚠️ كان `?? Admin::first()` يُسجّل الإجراء باسم "أول أدمن بالجدول" حرفياً
+        // كلما رجعت `auth()->user()->admin` قيمة فارغة (بدل رفض الطلب أو تسجيله
+        // باسم صاحبه الحقيقي) — فيُنسَب اعتماد/رفض طلب سحب لموظف لم يفعله إطلاقاً.
+        // هذا المسار محمي أصلاً بصلاحية `financial.manage_withdrawals` بالراوتر،
+        // فمعرّف المستخدم الحالي هو المصدر الصحيح الوحيد لهوية من نفّذ الإجراء.
+        $adminId = auth()->id();
 
         $withdrawalReq = \App\Models\Shared\WithdrawalRequest::findOrFail($id);
 
@@ -140,12 +137,12 @@ class FinancialController extends Controller
         $action = $request->validated('action');
 
         if ($action === 'approve') {
-            $withdrawal = $this->withdrawalService->approveWithdrawal($id, $admin->id);
+            $withdrawal = $this->withdrawalService->approveWithdrawal($id, $adminId);
             $message = 'تمت الموافقة على طلب السحب بنجاح.';
         } else {
             $withdrawal = $this->withdrawalService->rejectWithdrawal(
                 $id,
-                $admin->id,
+                $adminId,
                 $request->validated('rejection_reason')
             );
             $message = 'تم رفض طلب السحب.';
@@ -199,25 +196,26 @@ class FinancialController extends Controller
                 'payment_method'   => $recharge->payment_method,
                 'reference_number' => $recharge->reference_number,
                 'status'           => $recharge->status,
-                'failure_reason'   => $recharge->failure_reason,
+                // ⚠️ 'failure_reason' و'processed_at' لم يكونا موجودين أصلاً بجدول
+                // recharge_requests (تحقق فعلي عبر SHOW COLUMNS) فكانا يرجعان null
+                // دائماً مهما كان القرار. سبب الرفض الحقيقي يُخزَّن بعمود notes عبر
+                // WalletRechargeService::failRecharge()، ووقت المعالجة الفعلي هو
+                // updated_at لحظة تغيّر status (completed_at لا يُملأ إلا للنجاح).
+                'notes'            => $recharge->notes,
                 'created_at'       => $recharge->created_at,
-                'processed_at'     => $recharge->processed_at,
-                'admin_name'       => $recharge->admin?->user?->full_name,
+                'completed_at'     => $recharge->completed_at,
+                'processed_at'     => $recharge->status === 'pending' ? null : $recharge->updated_at,
+                'admin_name'       => $recharge->admin?->full_name,
             ],
         ]);
     }
 
     public function processRecharge(int $id): JsonResponse
     {
-        $admin = auth()->user()->admin ?? \App\Models\Admin\Admin::first();
-
-        if (!$admin) {
-            return response()->json([
-                'success' => false,
-                'message' => 'ليس لديك صلاحية.',
-                'errors'  => ['admin' => ['غير مصرح بالحساب الإداري.']]
-            ], 403);
-        }
+        // ⚠️ نفس خلل processWithdrawal: `?? Admin::first()` كان يُسنِد الإجراء
+        // زوراً لأول أدمن بالجدول بدل منفّذه الحقيقي. الراوتر يحمي هذا المسار
+        // بصلاحية `financial.manage_recharges` أصلاً.
+        $adminId = auth()->id();
 
         $rechargeReq = RechargeRequest::findOrFail($id);
 
@@ -233,12 +231,12 @@ class FinancialController extends Controller
         $action = request('action', 'complete');
 
         if ($action === 'complete') {
-            $recharge = $this->rechargeService->completeRecharge($id, $admin->id);
+            $recharge = $this->rechargeService->completeRecharge($id, $adminId);
             $message = 'تم تأكيد عملية الشحن وإضافة الرصيد للمحفظة.';
         } else {
             $recharge = $this->rechargeService->failRecharge(
                 $id,
-                $admin->id,
+                $adminId,
                 request('reason', 'تم رفض طلب الشحن.')
             );
             $message = 'تم رفض طلب الشحن.';

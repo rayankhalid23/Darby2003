@@ -626,8 +626,13 @@ class TripLifecycleService
             ? Carbon::parse($trip->trip_date)->toDateString()
             : Carbon::today()->toDateString();
 
-        $covers = DB::table('request_children')
-            ->where('request_id', $subscriptionRequestId)
+        // ⚠️ start_date/end_date انتقلا من request_children إلى requests (المصدر الوحيد
+        // الآن) عبر ميغريشن 2026_09_07_183713 — نفس خلل DailyTripGenerationService
+        // ::routeHasCoverageOn() بالضبط لكن هنا بمسار تسوية أموال الرحلة المكتملة: كان
+        // يفشل بخطأ SQL "Unknown column" لأي رحلة نُقل فيها طفل فعلياً، أي أن إنهاء أي
+        // رحلة حقيقية كان سيفشل تماماً في اللحظة التي يُفترض أن يُصرف فيها مستحق السائق.
+        $covers = DB::table('requests')
+            ->where('id', $subscriptionRequestId)
             ->whereDate('start_date', '<=', $tripDate)
             ->whereDate('end_date', '>=', $tripDate)
             ->exists();
@@ -636,23 +641,12 @@ class TripLifecycleService
             return true;
         }
 
-        // توافقية: طلبات قديمة بلا تواريخ على مستوى الطفل — نرجع لتواريخ الطلب نفسه
-        $hasChildDates = DB::table('request_children')
-            ->where('request_id', $subscriptionRequestId)
-            ->whereNotNull('start_date')
-            ->exists();
-
-        if ($hasChildDates) {
-            return false;
-        }
-
         $req = \App\Models\Shared\SubscriptionRequest::find($subscriptionRequestId);
         if (!$req || !$req->start_date || !$req->end_date) {
             return true;
         }
 
-        return Carbon::parse($req->start_date)->toDateString() <= $tripDate
-            && Carbon::parse($req->end_date)->toDateString() >= $tripDate;
+        return false;
     }
 
     /**

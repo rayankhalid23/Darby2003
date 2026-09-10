@@ -201,7 +201,13 @@ class WalletController extends Controller
             return false;
         }
 
+        // ⚠️ إلغاء الاشتراك لا يُلغي الرحلات المجدولة على مساره بالتبعية — تبقى
+        // `trips.status = pending` رغم أن مبلغ الاشتراك استُرجع بالكامل لولي
+        // الأمر بالفعل. بدون استبعاد `cancelled` هنا، كان بإمكان ولي الأمر حجز
+        // مبلغ رحلة من جديد على اشتراك مُسترجَع أصلاً — رحلة لن يُنفّذها أي سائق
+        // أبداً، فيبقى المال عالقاً بأمانات لا يُفرَج عنها إلا بتدخّل يدوي.
         return \App\Models\Shared\ActiveSubscription::where('route_id', $trip->route_id)
+            ->where('status', '!=', 'cancelled')
             ->forParent($parentUserId)
             ->exists();
     }
@@ -214,6 +220,7 @@ class WalletController extends Controller
     private function resolveTripPriceForParent(\App\Models\Shared\Trip $trip, int $parentUserId): float
     {
         $subscriptionIds = \App\Models\Shared\ActiveSubscription::where('route_id', $trip->route_id)
+            ->where('status', '!=', 'cancelled')
             ->forParent($parentUserId)
             ->pluck('subscription_request_id')
             ->filter()

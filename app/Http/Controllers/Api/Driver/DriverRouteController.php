@@ -7,6 +7,7 @@ use App\Models\Shared\Route as RouteModel;
 use App\Models\Shared\ActiveSubscription;
 use App\Services\Trip\RouteRecommendationService;
 use App\Services\Trip\RouteModuleException;
+use App\Services\Trip\MasterRouteStopSyncService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,10 +18,14 @@ use Throwable;
 class DriverRouteController extends Controller
 {
     protected RouteRecommendationService $recommendationService;
+    protected MasterRouteStopSyncService $routeStopSyncService;
 
-    public function __construct(RouteRecommendationService $recommendationService)
-    {
+    public function __construct(
+        RouteRecommendationService $recommendationService,
+        MasterRouteStopSyncService $routeStopSyncService
+    ) {
         $this->recommendationService = $recommendationService;
+        $this->routeStopSyncService  = $routeStopSyncService;
     }
 
     /**
@@ -393,6 +398,11 @@ class DriverRouteController extends Controller
             }
             $sub->save();
 
+            // ⚠️ بدون هذا الاستدعاء يرتفع children_count بواجهة السائق فوراً بينما
+            // لا تُبنى أي محطة اصطحاب/إنزال فعلية للطفل — فلا يظهر إطلاقاً برحلة
+            // اليوم التي يولّدها DailyTripGenerationService (يعتمد حصراً على route_stops).
+            $this->routeStopSyncService->addChildToRoute($route, $sub);
+
             $updatedMetrics = $this->recommendationService->calculateRouteMetrics($route->fresh());
 
             return response()->json([
@@ -447,6 +457,14 @@ class DriverRouteController extends Controller
             $sub->route_id = $targetRoute->id;
             $sub->save();
 
+            // ⚠️ نفس خلل assignSubscription: لازم إزالة محطة الطفل من المسار القديم
+            // (وإلا يبقى يظهر برحلة يومَين معاً) وبناء محطته على المسار الجديد فعلياً
+            // (وإلا يختفي من الرحلة اليومية تماماً رغم نجاح النقل ظاهرياً).
+            if ($oldRoute) {
+                $this->routeStopSyncService->removeChildFromDriverRoutes($sub);
+            }
+            $this->routeStopSyncService->addChildToRoute($targetRoute, $sub);
+
             $oldMetrics = $oldRoute ? $this->recommendationService->calculateRouteMetrics($oldRoute->fresh()) : null;
             $targetMetrics = $this->recommendationService->calculateRouteMetrics($targetRoute->fresh());
 
@@ -493,8 +511,14 @@ class DriverRouteController extends Controller
                 ->forDriver($driver->id)
                 ->firstOrFail();
 
+            // ⚠️ بدون هذا الاستدعاء تبقى محطة منزل الطفل (وربما محطة مدرسته) على
+            // المسار القديم للأبد — بيانات وهمية يقرأها مولّد الرحلة اليومية
+            // (DailyTripGenerationService::buildTripStops) فيولّد للسائق توقفاً
+            // لطفل لم يعد على هذا المسار أصلاً. لاحظت هذا فعلياً: مسار حي بلا أي
+            // اشتراك نشط (children_count=0) وما زال يحمل محطتي منزل/مدرسة قديمتين.
             $sub->route_id = null;
             $sub->save();
+            $this->routeStopSyncService->removeChildFromDriverRoutes($sub);
 
             $metrics = $this->recommendationService->calculateRouteMetrics($route->fresh());
 
