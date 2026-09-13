@@ -10,6 +10,8 @@ use App\Models\Driver\Driver;
 use App\Models\Parent\ParentModel;
 use App\Models\Shared\Complaint;
 use App\Models\Shared\DriverReview;
+use App\Models\Shared\SubscriptionRequest;
+use App\Models\Shared\Trip;
 
 /**
  * اختبار وحدة "الشكاوى وتقييمات السائقين" (Admin + Parent) بعد إصلاح:
@@ -41,10 +43,16 @@ class ComplaintsAndDriverReviewsTest extends TestCase
     {
         parent::setUp();
 
+        // ملاحظة (2026-09-14): بعد تطبيع V2 لم يعد admins/parents جدولين منفصلين
+        // (ParentModel/Admin أصبحا Proxy فوق users مفلتَرين بالدور)، وجدول roles
+        // الحقيقي مزروع مسبقاً بأدوار فعلية: 1=super_admin (kind=staff)،
+        // 7=parent، 8=driver (kind=account). id=1/2/3 القديمة كانت تصادف أدوار
+        // staff أخرى فعلية (fleet_supervisor إلخ) دون أن يظهر ذلك كخطأ بسبب
+        // insertOrIgnore، والإدراج المباشر في جدول admins كان يفشل لعدم وجوده.
         DB::table('roles')->insertOrIgnore([
-            ['id' => 1, 'name' => 'Admin',  'display_name' => 'مدير'],
-            ['id' => 2, 'name' => 'Driver', 'display_name' => 'سائق'],
-            ['id' => 3, 'name' => 'Parent', 'display_name' => 'ولي أمر'],
+            ['id' => 1, 'name' => 'super_admin', 'display_name' => 'مدير النظام العام', 'kind' => 'staff', 'is_super' => 1],
+            ['id' => 7, 'name' => 'parent',      'display_name' => 'ولي أمر',            'kind' => 'account', 'is_super' => 0],
+            ['id' => 8, 'name' => 'driver',      'display_name' => 'سائق حافلة/فان',      'kind' => 'account', 'is_super' => 0],
         ]);
 
         $this->adminUser = User::create([
@@ -55,18 +63,13 @@ class ComplaintsAndDriverReviewsTest extends TestCase
             'role_id'      => 1,
             'is_active'    => 1,
         ]);
-        // موديل Admin بلا أعمدة created_at/updated_at في قاعدة البيانات، لذا نُدرج مباشرة
-        DB::table('admins')->insert([
-            'user_id'    => $this->adminUser->id,
-            'created_by' => $this->adminUser->id,
-        ]);
 
         $this->driverUser = User::create([
             'full_name'    => 'سائق الشكاوى',
             'email'        => 'driver.cx.' . uniqid() . '@darby.test',
             'phone_number' => '091' . rand(1000000, 9999999),
             'password_hash' => bcrypt('password123'),
-            'role_id'      => 2,
+            'role_id'      => 8,
             'is_active'    => 1,
         ]);
         $this->driver = Driver::create([
@@ -82,11 +85,12 @@ class ComplaintsAndDriverReviewsTest extends TestCase
             'email'        => 'parent.cx.' . uniqid() . '@darby.test',
             'phone_number' => '092' . rand(1000000, 9999999),
             'password_hash' => bcrypt('password123'),
-            'role_id'      => 3,
+            'role_id'      => 7,
             'is_active'    => 1,
+            'is_trusted'   => 1,
         ]);
 
-        $this->parent = ParentModel::create(['user_id' => $this->parentUser->id, 'is_trusted' => 1]);
+        $this->parent = ParentModel::findOrFail($this->parentUser->id);
     }
 
     // =========================================================
@@ -169,10 +173,10 @@ class ComplaintsAndDriverReviewsTest extends TestCase
             'email'        => 'other.cx.' . uniqid() . '@darby.test',
             'phone_number' => '093' . rand(1000000, 9999999),
             'password_hash' => bcrypt('password123'),
-            'role_id'      => 3,
+            'role_id'      => 7,
             'is_active'    => 1,
         ]);
-        $otherParent = ParentModel::create(['user_id' => $otherParentUser->id, 'is_trusted' => 1]);
+        $otherParent = ParentModel::findOrFail($otherParentUser->id);
 
         $review = DriverReview::create([
             'parent_id' => $otherParentUser->id,
@@ -245,6 +249,114 @@ class ComplaintsAndDriverReviewsTest extends TestCase
 
         $response->assertStatus(200);
         $this->assertDatabaseMissing('driver_reviews', ['id' => $review->id]);
+    }
+
+    // =========================================================
+    // Parent — تقديم شكوى (عامة ومتعلقة برحلة)
+    // =========================================================
+
+    /**
+     * تقديم الشكوى يتطلب اشتراكاً سابقاً أو حالياً بين ولي الأمر والسائق
+     * (ComplaintService::createComplaint) — نُنشئ طلب اشتراك بأي حالة "فعالة"
+     * لإثبات وجود العلاقة بينهما.
+     */
+    protected function giveParentSubscriptionWithDriver(string $status = SubscriptionRequest::STATUS_ACCEPTED): SubscriptionRequest
+    {
+        return SubscriptionRequest::create([
+            'parent_id' => $this->parentUser->id,
+            'driver_id' => $this->driver->id,
+            'status'    => $status,
+        ]);
+    }
+
+    public function test_parent_can_submit_general_complaint_against_driver(): void
+    {
+        $this->giveParentSubscriptionWithDriver();
+
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/complaints', [
+            'driver_id'   => $this->driver->id,
+            'description' => 'السائق يتحدث بطريقة غير لائقة مع الأطفال داخل الحافلة.',
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('success', true);
+        $response->assertJsonPath('data.driver.id', $this->driver->id);
+
+        $this->assertDatabaseHas('complaints', [
+            'submitted_by' => $this->parentUser->id,
+            'driver_id'    => $this->driver->id,
+            'trip_id'      => null,
+            'status'       => 'pending',
+        ]);
+    }
+
+    public function test_parent_can_submit_trip_related_complaint_against_driver(): void
+    {
+        $this->giveParentSubscriptionWithDriver();
+
+        $trip = Trip::create(['driver_id' => $this->driver->id]);
+
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/complaints', [
+            'driver_id'   => $this->driver->id,
+            'trip_id'     => $trip->id,
+            'description' => 'السائق تجاوز الوقت المحدد لإيصال الأطفال في هذه الرحلة تحديداً.',
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('success', true);
+
+        $this->assertDatabaseHas('complaints', [
+            'submitted_by' => $this->parentUser->id,
+            'driver_id'    => $this->driver->id,
+            'trip_id'      => $trip->id,
+        ]);
+    }
+
+    public function test_parent_cannot_submit_complaint_without_subscription_with_driver(): void
+    {
+        // لا يوجد أي طلب اشتراك يربط ولي الأمر بهذا السائق هنا عمداً.
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/complaints', [
+            'driver_id'   => $this->driver->id,
+            'description' => 'شكوى بلا أي علاقة اشتراك سابقة مع هذا السائق.',
+        ]);
+
+        $response->assertStatus(400);
+        $response->assertJsonPath('success', false);
+        $this->assertDatabaseMissing('complaints', [
+            'submitted_by' => $this->parentUser->id,
+            'driver_id'    => $this->driver->id,
+        ]);
+    }
+
+    public function test_parent_cannot_submit_trip_complaint_for_trip_belonging_to_another_driver(): void
+    {
+        $this->giveParentSubscriptionWithDriver();
+
+        $otherDriverUser = User::create([
+            'full_name'    => 'سائق آخر للشكاوى',
+            'email'        => 'other.driver.cx.' . uniqid() . '@darby.test',
+            'phone_number' => '095' . rand(1000000, 9999999),
+            'password_hash' => bcrypt('password123'),
+            'role_id'      => 8,
+            'is_active'    => 1,
+        ]);
+        $otherDriver = Driver::create([
+            'user_id'        => $otherDriverUser->id,
+            'national_id'    => 'NAT' . rand(100000, 999999),
+            'license_number' => 'LIC' . rand(100000, 999999),
+            'license_expiry' => now()->addYears(2)->format('Y-m-d'),
+            'status'         => 'Approved',
+        ]);
+        $tripForOtherDriver = Trip::create(['driver_id' => $otherDriver->id]);
+
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/complaints', [
+            'driver_id'   => $this->driver->id,
+            'trip_id'     => $tripForOtherDriver->id,
+            'description' => 'محاولة ربط شكوى برحلة لا تخص السائق المشتكى عليه.',
+        ]);
+
+        $response->assertStatus(400);
+        $response->assertJsonPath('success', false);
     }
 
     // =========================================================

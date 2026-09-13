@@ -36,10 +36,9 @@ class FinancialService
 
         $subscriptionRequest->loadMissing(['parent.user', 'driver.user']);
 
-        // فاتورة مبدئية واحدة لكل طلب: إعادة الاستدعاء تُعيد القائمة بدل إنشاء
+        // فاتورة واحدة لكل طلب: إعادة الاستدعاء تُعيد الفاتورة القائمة بدل إنشاء
         // نسخة ثانية تنافسها على نفس الاشتراك.
         $existing = Invoice::where('subscription_request_id', $subscriptionRequest->id)
-            ->where('type', 'proforma')
             ->latest('id')
             ->first();
 

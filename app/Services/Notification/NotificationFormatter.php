@@ -617,7 +617,7 @@ class NotificationFormatter
             case self::TYPE_DRIVER_DOCUMENTS_UPDATED:
                 $title = $customTitle ?? 'تحديث وثائق رسمية للسائق 📄';
                 $message = $customMessage ?? ($driverName !== 'السائق' ? "قام السائق ({$driverName}) بتحديث وثائقه الرسمية وبانتظار المراجعة." : "قام سائق بتحديث وثائقه الرسمية وبانتظار مراجعة الإدارة.");
-                $screen = 'ADMIN_DRIVER_REVIEW';
+                $screen = 'ADMIN_DRIVER_CHANGE';
                 $entityType = 'driver_document';
                 $action = 'open_driver_review';
                 break;
@@ -625,7 +625,7 @@ class NotificationFormatter
             case self::TYPE_DRIVER_VEHICLE_UPDATED:
                 $title = $customTitle ?? 'طلب تعديل بيانات مركبة 🚗';
                 $message = $customMessage ?? ($driverName !== 'السائق' ? "قام السائق ({$driverName}) بطلب تعديل بيانات مركبته وبانتظار مراجعة الإدارة." : "قام سائق بطلب تعديل بيانات مركبته وبانتظار المراجعة.");
-                $screen = 'ADMIN_DRIVER_REVIEW';
+                $screen = 'ADMIN_DRIVER_CHANGE';
                 $entityType = 'driver_vehicle';
                 $action = 'open_driver_review';
                 break;

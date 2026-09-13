@@ -22,7 +22,7 @@ class WithdrawalService
         $this->ledgerService       = $ledgerService ?? app(FinancialLedgerService::class);
     }
 
-    public function requestWithdrawal(int $driverId, float $amount, ?array $paymentDetails = null): WithdrawalRequest
+    public function requestWithdrawal(int $driverId, float $amount): WithdrawalRequest
     {
         $driver = Driver::findOrFail($driverId);
 
@@ -65,7 +65,7 @@ class WithdrawalService
 
         // السحب وإنشاء الطلب في معاملة واحدة: بدونها قد تُخصم المحفظة
         // ثم يفشل إنشاء سجل الطلب فيضيع المبلغ بلا أثر يمكن تتبّعه أو استرجاعه.
-        return DB::transaction(function () use ($driver, $driverId, $amount, $amountCents, $balance, $paymentDetails) {
+        return DB::transaction(function () use ($driver, $driverId, $amount, $amountCents, $balance) {
             $balanceBefore = (int) $driver->balance;
             $driver->wallet->withdraw($amountCents);
 
@@ -89,11 +89,10 @@ class WithdrawalService
             );
 
             return WithdrawalRequest::create([
-                'driver_id'                => $driverId,
-                'amount'                   => $amount,
+                'driver_id'                 => $driverId,
+                'amount'                    => $amount,
                 'wallet_balance_at_request' => $balance,
-                'status'                   => 'pending',
-                'payment_method_details'   => $paymentDetails,
+                'status'                    => 'pending',
             ]);
         });
     }

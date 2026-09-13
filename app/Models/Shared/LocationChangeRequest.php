@@ -8,6 +8,8 @@ use App\Models\Parent\Child;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class LocationChangeRequest extends Model
 {
@@ -16,18 +18,27 @@ class LocationChangeRequest extends Model
     const POINT_TYPE_PICKUP  = 'pickup';
     const POINT_TYPE_DROPOFF = 'dropoff';
 
-    const STATUS_PENDING  = 'pending';
-    const STATUS_APPROVED = 'approved';
-    const STATUS_REJECTED = 'rejected';
+    const STATUS_PENDING   = 'pending';
+    const STATUS_APPROVED  = 'approved';
+    const STATUS_REJECTED  = 'rejected';
+    const STATUS_CANCELLED = 'cancelled';
+
+    const DIRECTION_TO_SCHOOL = 'to_school';
+    const DIRECTION_TO_HOME   = 'to_home';
+    const DIRECTION_BOTH      = 'both';
 
     const DEFAULT_FEE = 5.00;
 
     protected $fillable = [
+        // ⚠️ active_subscription_id و child_id يبقيان للتوافقية مع الطلبات القديمة
+        // (سجل واحد لطفل واحد). الطلبات الجديدة المُجمَّعة تتركهما null وتعتمد
+        // على جدول location_change_request_children.
         'active_subscription_id',
         'child_id',
         'parent_id',
         'driver_id',
         'point_type',
+        'direction',
         'change_date',
         'is_single_day',
         'new_address_id',
@@ -65,6 +76,10 @@ class LocationChangeRequest extends Model
         return $this->belongsTo(ActiveSubscription::class, 'active_subscription_id');
     }
 
+    /**
+     * الطفل المفرد للتوافقية مع الطلبات القديمة — لا تستخدمه للطلبات المُجمَّعة.
+     * الأفضل استخدام $request->targets أو $request->children.
+     */
     public function child(): BelongsTo
     {
         return $this->belongsTo(Child::class, 'child_id');
@@ -83,5 +98,28 @@ class LocationChangeRequest extends Model
     public function newAddress(): BelongsTo
     {
         return $this->belongsTo(Address::class, 'new_address_id');
+    }
+
+    /**
+     * صفوف الأطفال ضمن هذا الطلب المُجمَّع (مع الاتجاه والاشتراك والمحطة).
+     */
+    public function targets(): HasMany
+    {
+        return $this->hasMany(LocationChangeRequestChild::class, 'location_change_request_id');
+    }
+
+    /**
+     * الأطفال المعنيّون بهذا الطلب عبر جدول الربط. يتضمن الطلبات القديمة أيضاً
+     * (بعد الترحيل الضمني في الـ Resource).
+     */
+    public function children(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            Child::class,
+            'location_change_request_children',
+            'location_change_request_id',
+            'child_id'
+        )->withPivot(['active_subscription_id', 'trip_id', 'direction', 'trip_stop_id', 'applied', 'skip_reason'])
+         ->withTimestamps();
     }
 }

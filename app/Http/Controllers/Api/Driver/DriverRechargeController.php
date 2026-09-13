@@ -16,9 +16,24 @@ class DriverRechargeController extends Controller
         $this->service = $service;
     }
 
+    /**
+     * ⚠️ نفس تنظيف WalletController@paymentMethods — الحقول القديمة (name_en,
+     * account_name, account_number, iban, wallet_number, instructions_ar,
+     * instructions_en, target_audience, processing_type) لم تعد مستخدمة بعد
+     * تبسيط شاشة الأدمن. icon_url مُبقىً عليه (يُرفع فعلياً من شاشة الأدمن).
+     */
     public function paymentMethods(): JsonResponse
     {
-        $methods = $this->service->getActivePaymentMethods();
+        $methods = $this->service->getActivePaymentMethods()
+            ->map(fn ($method) => [
+                'id'         => (int) $method->id,
+                'name_ar'    => $method->name_ar,
+                'code'       => $method->code,
+                'icon_url'   => $method->icon_url,
+                'min_amount' => (float) $method->min_amount,
+                'max_amount' => (float) $method->max_amount,
+            ])
+            ->values();
 
         return response()->json([
             'status' => true,

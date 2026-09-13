@@ -44,6 +44,7 @@ class Driver extends Model implements Wallet
         'last_ping_at',
         'rating_avg',
         'license_expiry_notified_milestone',
+        'ai_last_reset_at',
     ];
 
     /**
@@ -62,6 +63,7 @@ class Driver extends Model implements Wallet
             'license_expiry'   => 'date',
             'rating_avg'       => 'float',
             'school_stages'    => 'array',
+            'ai_last_reset_at' => 'datetime',
         ];
     }
 

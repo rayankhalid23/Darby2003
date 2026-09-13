@@ -14,8 +14,7 @@ use App\Http\Controllers\Api\Admin\AdminAuditLogController;
 use App\Http\Controllers\Api\Admin\MunicipalityController;
 use App\Http\Controllers\Api\Admin\SubMunicipalityController;
 use App\Http\Controllers\Api\Admin\MunicipalityZoneController;
-use App\Http\Controllers\Api\Admin\AdminAiAlertsController;
-use App\Http\Controllers\Api\Admin\AdminDriverActionController;
+use App\Http\Controllers\Api\Admin\DriverAiPolicyController;
 
 // =========================================================================
 // 🖼️ صور المشرفين (عامة بلا توكن)
@@ -130,20 +129,20 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->middleware('permission:drivers.review_initial')
             ->name('api.admin.drivers.review');
 
-        // 7. مسار إلغاء حظر وإعادة تفعيل السائق يدوياً للإدارة
-        Route::post('/{driverId}/unblock', [AdminDriverActionController::class, 'unblockDriver'])
-            ->name('api.admin.drivers.unblock');
+        // 7. إعادة تأهيل السائق (Reset AI): يصفّر نافذة 30 يوم ويرجع is_trusted=true
+        Route::post('/{driverId}/ai-reset', [DriverAiPolicyController::class, 'resetDriver'])
+            ->name('api.admin.drivers.ai-reset');
     });
 
     // =========================================================================
-    // 🤖 مسارات مراجعة تنبيهات وإجراءات الذكاء الاصطناعي للإدارة (360 Breakdown)
+    // 🤖 تنبيهات محرك تقييم تعليقات الأولياء بالذكاء الاصطناعي
     // =========================================================================
     Route::prefix('ai-alerts')->group(function () {
-        Route::get('/', [AdminAiAlertsController::class, 'index'])
+        Route::get('/', [DriverAiPolicyController::class, 'alertsIndex'])
             ->name('api.admin.ai-alerts.index');
-        Route::get('/{id}', [AdminAiAlertsController::class, 'show'])
+        Route::get('/{id}', [DriverAiPolicyController::class, 'alertsShow'])
             ->name('api.admin.ai-alerts.show');
-        Route::post('/{id}/resolve', [AdminDriverActionController::class, 'resolveAlert'])
+        Route::post('/{id}/resolve', [DriverAiPolicyController::class, 'resolveAlert'])
             ->name('api.admin.ai-alerts.resolve');
     });
 
@@ -310,6 +309,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->middleware('permission:financial.view_ledger,financial.view_summary');
 
         // 3. طلبات السحب
+        Route::get('/drivers-summary', [\App\Http\Controllers\Api\Admin\FinancialController::class, 'driversSummary'])
+            ->middleware('permission:financial.manage_withdrawals');
         Route::get('/withdrawals', [\App\Http\Controllers\Api\Admin\FinancialController::class, 'withdrawals'])
             ->middleware('permission:financial.manage_withdrawals');
         Route::get('/withdrawals/{id}', [\App\Http\Controllers\Api\Admin\FinancialController::class, 'withdrawalDetail'])

@@ -5,6 +5,7 @@ namespace App\Services\Driver;
 use App\Models\Driver\Driver;
 use App\Models\Driver\DriverAbsence;
 use App\Models\Driver\DriverDocument;
+use App\Models\Driver\VehicleDocument;
 use App\Models\Shared\ActiveSubscription;
 use App\Models\Shared\FinancialLedger;
 use App\Models\Shared\SubscriptionRequest;
@@ -12,6 +13,7 @@ use App\Models\Shared\Trip;
 use App\Models\Shared\TripEscrowHold;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DriverStatisticsService
 {
@@ -24,6 +26,39 @@ class DriverStatisticsService
     protected function commissionRate(): float
     {
         return \App\Models\Shared\PricingSetting::commissionRateFraction();
+    }
+
+    /**
+     * جلب أحدث تاريخ انتهاء لوثيقة تأمين خاصة بمركبات السائق.
+     * المصدر الأساسي: جدول vehicle_documents (doc_type = INSURANCE, expiry_date) عبر hasManyThrough.
+     * الفولباك: جدول driver_documents القديم إن كان موجوداً — لأنه غير موجود في كل البيئات.
+     */
+    protected function resolveInsuranceExpiry(Driver $driver): ?string
+    {
+        $expiry = VehicleDocument::whereIn(
+                'vehicle_id',
+                DB::table('vehicles')->where('driver_id', $driver->id)->pluck('id')
+            )
+            ->where('doc_type', 'INSURANCE')
+            ->whereNotNull('expiry_date')
+            ->orderByDesc('expiry_date')
+            ->value('expiry_date');
+
+        if ($expiry) {
+            return $expiry instanceof Carbon ? $expiry->toDateString() : (string) $expiry;
+        }
+
+        if (Schema::hasTable('driver_documents')) {
+            $legacy = DriverDocument::where('driver_id', $driver->id)
+                ->where('doc_type', 'INSURANCE')
+                ->whereNotNull('insurance_expiry_date')
+                ->orderByDesc('id')
+                ->value('insurance_expiry_date');
+
+            return $legacy ? (string) $legacy : null;
+        }
+
+        return null;
     }
 
     /**
@@ -402,14 +437,10 @@ class DriverStatisticsService
             $licenseStatusLabel = 'تنتهي قريباً';
         }
 
-        // وثيقة التأمين
-        $insuranceDoc = DriverDocument::where('driver_id', $driver->id)
-            ->where('doc_type', 'INSURANCE')
-            ->whereNotNull('insurance_expiry_date')
-            ->orderBy('id', 'desc')
-            ->first();
-
-        $insuranceExpiry = $insuranceDoc?->insurance_expiry_date ? Carbon::parse($insuranceDoc->insurance_expiry_date) : null;
+        // وثيقة التأمين — المصدر الأساسي: جدول vehicle_documents (المطبع) عبر مركبة السائق.
+        // مع دعم رجعي لجدول driver_documents القديم إن كان موجوداً في بيئة ما.
+        $insuranceExpiryRaw = $this->resolveInsuranceExpiry($driver);
+        $insuranceExpiry = $insuranceExpiryRaw ? Carbon::parse($insuranceExpiryRaw) : null;
         $insuranceDaysRemaining = $insuranceExpiry ? (int) $today->diffInDays($insuranceExpiry, false) : null;
         $insuranceIsExpired = $insuranceDaysRemaining !== null && $insuranceDaysRemaining < 0;
 

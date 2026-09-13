@@ -12,12 +12,9 @@ class PaymentMethodService
     {
         $query = PaymentMethod::latest('sort_order')->latest('id');
 
-        if (!empty($filters['target_audience']) && $filters['target_audience'] !== 'all') {
-            $query->where(function ($q) use ($filters) {
-                $q->where('target_audience', $filters['target_audience'])
-                  ->orWhere('target_audience', 'both');
-            });
-        }
+        // ⚠️ فلتر target_audience أُزيل: كل وسائل الدفع الآن لولي الأمر حصراً
+        // (target_audience = 'parent' ثابتة من PaymentMethodController::store())،
+        // فلا معنى تشغيلياً لفلترة قائمة كل عناصرها متطابقة بالفعل.
 
         if (!empty($filters['processing_type'])) {
             $query->where('processing_type', $filters['processing_type']);
@@ -63,7 +60,15 @@ class PaymentMethodService
 
     public function create(array $data): PaymentMethod
     {
-        return PaymentMethod::create($data);
+        // ⚠️ fresh() إلزامي: لو الأدمن ترك min_amount/max_amount/is_active/
+        // sort_order فارغة (كلها اختيارية)، القيم الافتراضية (1.00/50000.00/
+        // true/0) تُطبَّق فقط على مستوى عمود قاعدة البيانات نفسها — النموذج
+        // المُرجَع من create() مباشرة لا يحمل هذه القيم إطلاقاً (الخاصية غير
+        // معرَّفة بمصفوفة $attributes للكائن أصلاً)، فتُقرأ null ضمنياً وتظهر
+        // بالرد كـ 0/0/false/null رغم أن المخزَّن فعلياً بقاعدة البيانات صحيح
+        // تماماً. تحقّقت من هذا التناقض فعلياً (رد الـ API خاطئ، صف قاعدة
+        // البيانات سليم) قبل الإصلاح.
+        return PaymentMethod::create($data)->fresh();
     }
 
     public function update(int $id, array $data): PaymentMethod

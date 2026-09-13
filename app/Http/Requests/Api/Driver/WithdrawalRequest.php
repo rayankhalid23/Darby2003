@@ -14,14 +14,10 @@ class WithdrawalRequest extends FormRequest
 
     public function rules(): array
     {
+        // الاستلام يدوي من مقرّ الشركة، فالطلب لا يحتاج بيانات بنكية أو رقم هاتف —
+        // فقط قيمة السحب. الحد الأدنى يُشتق من ثابت النظام المالي بدل تكراره هنا.
         return [
-            // الحد الأدنى يُشتق من ثابت النظام المالي بدل تكراره رقماً هنا وفي الخدمة.
             'amount' => 'required|numeric|min:' . (FinancialLedgerService::MIN_WITHDRAWAL_AMOUNT / 100) . '|max:50000',
-            'payment_method_details' => 'nullable|array',
-            'payment_method_details.bank_name' => 'nullable|string|max:100',
-            'payment_method_details.account_number' => 'nullable|string|max:100',
-            'payment_method_details.account_name' => 'nullable|string|max:100',
-            'payment_method_details.mobile_number' => 'nullable|string|max:20',
         ];
     }
 

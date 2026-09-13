@@ -19,12 +19,34 @@ class WalletController extends Controller
 
     /**
      * 1️⃣ جلب طرق الدفع المفعلة المتاحة لولي الأمر
+     *
+     * ⚠️ كان الرد يُرجع نموذج PaymentMethod الخام بكل أعمدته (name_en,
+     * account_name, account_number, iban, wallet_number, instructions_ar/en,
+     * target_audience, processing_type, deleted_at...) — كلها بقيت من مرحلة
+     * "التحويل اليدوي" التي أُلغيت، وصارت null دائماً بعد تبسيط شاشة الأدمن.
+     * نُرجع الآن فقط الحقول التي يستخدمها الفرونت فعلياً — icon_url مُبقىً
+     * عليه عمداً (بعكس بقية الحقول المحذوفة) لأنه صار يُرفع فعلياً من شاشة
+     * الأدمن ويُعرض بواجهة ولي الأمر.
      */
     public function paymentMethods(): JsonResponse
     {
+        // collect() إلزامي: getPaymentMethods() قد يرجع مصفوفة PHP عادية []
+        // (مسار الاحتياط getFallbackPaymentMethods عند عدم وجود أي وسيلة مفعّلة)
+        // لا Collection، و[]->map() خطأ فادح مباشر.
+        $methods = collect($this->rechargeService->getPaymentMethods())
+            ->map(fn ($method) => [
+                'id'         => (int) $method->id,
+                'name_ar'    => $method->name_ar,
+                'code'       => $method->code,
+                'icon_url'   => $method->icon_url,
+                'min_amount' => (float) $method->min_amount,
+                'max_amount' => (float) $method->max_amount,
+            ])
+            ->values();
+
         return response()->json([
             'success' => true,
-            'data'    => $this->rechargeService->getPaymentMethods(),
+            'data'    => $methods,
         ]);
     }
 

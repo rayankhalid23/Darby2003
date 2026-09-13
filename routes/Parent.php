@@ -151,8 +151,11 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/{id}', [InvoiceController::class, 'show']);
     });
 
-    // التحقق من وجود اشتراك لولي الأمر مع سائق معين ?driver_id=
+    // التحقق من وجود اشتراك لولي الأمر مع سائق معين ?driver_id= (فقط active/pending/completed)
     Route::get('/subscriptions/check', [ParentSubscriptionController::class, 'checkSubscription']);
+
+    // التحقق من وجود اشتراك لولي الأمر مع سائق معين بغض النظر عن الحالة ?driver_id=
+    Route::get('/subscriptions/check-exists', [ParentSubscriptionController::class, 'checkSubscriptionExists']);
 
     // شاشات العرض والتتبع للرحلات (الرحلة الكيان الأساسي)
     Route::get('/trips/active', [ParentTripController::class, 'getActiveTrips']);
@@ -181,9 +184,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // -------------------------------------------------------------
     Route::prefix('location-change-requests')->group(function () {
         Route::get('/options', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'options']);
+        Route::post('/available-trips', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'availableTrips']);
         Route::post('/preview', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'preview']);
         Route::get('/', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'index']);
         Route::post('/', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'store']);
+        Route::delete('/{id}', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'destroy']);
     });
 
     // -------------------------------------------------------------

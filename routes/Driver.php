@@ -170,6 +170,7 @@ Route::get('zones', [ZoneController::class, 'index'])
     // مسارات المحفظة المالية والشحن والسحب
     Route::prefix('wallet')->group(function () {
         Route::get('/balance', [App\Http\Controllers\Api\Driver\WithdrawalController::class, 'balance']);
+        Route::get('/summary', [App\Http\Controllers\Api\Driver\WithdrawalController::class, 'summary']);
         Route::get('/payment-methods', [App\Http\Controllers\Api\Driver\DriverRechargeController::class, 'paymentMethods']);
         Route::post('/recharge-request', [App\Http\Controllers\Api\Driver\DriverRechargeController::class, 'store']);
         Route::get('/recharge-requests', [App\Http\Controllers\Api\Driver\DriverRechargeController::class, 'index']);

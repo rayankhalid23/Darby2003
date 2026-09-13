@@ -165,6 +165,20 @@ class SubscriptionRequest extends Model
         return $query->where('driver_id', $driverId);
     }
 
+    /**
+     * هل يوجد اشتراك يربط ولي الأمر بهذا السائق، بغض النظر عن حالته
+     * (قيد الانتظار، مقبول، نشط، مكتمل، ملغي...)؟ لا نفلتر على status هنا
+     * لأن الهدف إثبات وجود علاقة اشتراك سابقة أو حالية بينهما، وليس التحقق
+     * من كون الاشتراك نشطاً حالياً.
+     */
+    public static function existsForParentAndDriver(int $parentId, int $driverId): bool
+    {
+        return self::query()
+            ->where('parent_id', $parentId)
+            ->where('driver_id', $driverId)
+            ->exists();
+    }
+
     // ============================================================
     // Accessors
     // ============================================================

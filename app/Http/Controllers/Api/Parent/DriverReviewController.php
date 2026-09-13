@@ -54,9 +54,9 @@ class DriverReviewController extends Controller
             // تحميل العلاقات لعرضها بشكل كامل في الاستجابة
             $review->load(['parent', 'driver.user']);
 
-            // 🤖 تشغيل تقييم سياسات الذكاء الاصطناعي فوراً فقط عند استقبال تقييم سلبي (rating <= 2) لتقليل الضغط على السيرفر
-            if ((int) $request->rating <= 2) {
-                \App\Jobs\EvaluateDriverPolicyJob::dispatch((int) $request->driver_id);
+            // 🤖 كل تعليق يمر على محرك التصنيف الذكي، ثم على محرك القرار
+            if (!empty(trim((string) $review->comment))) {
+                \App\Jobs\ClassifyDriverReviewJob::dispatch($review->id);
             }
 
             Log::info("DriverReview [Store] - تمت إضافة تقييم جديد بنجاح.", ['review_id' => $review->id]);

@@ -70,28 +70,34 @@ class DriverMatchingService
             ->where('drivers.license_expiry', '>=', now()->toDateString())
             ->with(['user', 'vehicles', 'zones']);
 
-        // 3. التحقق من وجود بحث بالاسم أو رقم الهاتف
-        $hasSearchQuery = !empty($filters['search_query']);
+       // 3. التحقق من وجود بحث بالاسم أو رقم الهاتف
+       $hasSearchQuery = !empty($filters['search_query']);
 
-        if ($hasSearchQuery) {
-            $this->applyTextSearch($query, $filters['search_query']);
-        }
+       if ($hasSearchQuery) {
+           // عند البحث بالاسم أو الهاتف: نكتفي بالبحث النصي وتجاهل جميع الفلاتر الأخرى تماماً
+           $this->applyTextSearch($query, $filters['search_query']);
+       } else {
+           // في حالة عدم وجود بحث نصي: نطبق فلاتر الجنس، التكييف، والفلترة الذكية للأطفال
+           // ⚠️ 'both' من الواجهة تعني «لا فرق» → لا نُطبِّق فلتراً، لأن users.gender
+           // enum('male','female') فقط ولا يحتوي 'both' فيرجع صفراً.
+           if (!empty($filters['driver_gender']) && $filters['driver_gender'] !== 'both') {
+               $query->whereHas('user', fn($u) => $u->where('gender', $filters['driver_gender']));
+           }
 
-        if (!empty($filters['driver_gender'])) {
-            $query->whereHas('user', fn($u) => $u->where('gender', $filters['driver_gender']));
-        }
+           if (isset($filters['has_ac']) && $filters['has_ac'] !== null && $filters['has_ac'] !== '') {
+               $hasAc = filter_var($filters['has_ac'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+               if ($hasAc !== null) {
+                   // نتحقق من المركبة النشطة فقط: مركبة Retired/Maintenance لا يجوز
+                   // أن تُقرِّر أهلية السائق (فلتر seat_availability أصلاً يقيّد status=Active).
+                   $query->whereHas('vehicles', fn($q) => $q->where('status', 'Active')->where('has_ac', $hasAc));
+               }
+           }
 
-        if (isset($filters['has_ac']) && $filters['has_ac'] !== null && $filters['has_ac'] !== '') {
-            $hasAc = filter_var($filters['has_ac'], FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
-            if ($hasAc !== null) {
-                $query->whereHas('vehicles', fn($q) => $q->where('has_ac', $hasAc));
-            }
-        }
-
-        // 4. تطبيق الفلترة الذكية عند عدم وجود بحث نصي
-        if ($children->isNotEmpty() && !$hasSearchQuery) {
-            $this->applyChildrenSmartFilters($query, $children, $filters);
-        }
+           // 4. تطبيق الفلترة الذكية للأطفال (المناطق، المقاعد، الجنس المقبول)
+           if ($children->isNotEmpty()) {
+               $this->applyChildrenSmartFilters($query, $children, $filters);
+           }
+       }
 
         // 5. الترتيب والتصفح
         $drivers = $query
@@ -221,16 +227,40 @@ class DriverMatchingService
             return;
         }
 
-        // استبعاد السائقين الغائبين في أي يوم من فترة البحث
+        // استبعاد السائقين الغائبين في أي يوم من فترة البحث.
+        // نأخذ بعين الاعتبار طلبات الغياب المُعتمَدة أو التي لم تُراجَع بعد فقط
+        // (approved أو pending). الطلبات المرفوضة (rejected) لا تحجب السائق لأنه
+        // لم يُثبَت غيابه فعلاً — بقاؤها في الفلتر كان يُخفي سائقاً متاحاً بسبب طلب
+        // رُفض إدارياً.
         $query->whereDoesntHave('absences', function ($q) use ($startDate, $endDate) {
-            $q->whereBetween('absence_date', [$startDate, $endDate]);
+            $q->whereBetween('absence_date', [$startDate, $endDate])
+              ->whereIn('status', [
+                  \App\Models\Driver\DriverAbsence::STATUS_APPROVED,
+                  \App\Models\Driver\DriverAbsence::STATUS_PENDING,
+              ]);
         });
 
-        // فلتر المقاعد: لكل slot، تحقق أن السائق لديه طاقة كافية
-        // نستخدم subquery يحسب min(capacity - booked) عبر الفترة
+        // فلتر المقاعد: لكل slot، تحقق أن السائق يُشغّل هذه الخانة أصلاً ولديه
+        // طاقة كافية عبر الفترة. الشرط الأول (drivers.{slot}=1) هو الفاصل الذي
+        // كان مفقوداً: بدونه أي سائق ما اشتغلش سابقاً في هذه الخانة يمر لأنه
+        // ماكوش أي صف في driver_seat_slots فيرجع MAX(booked)=NULL.
+        // خارطة الخانة إلى عمود السائق الذي يفعّلها.
+        $slotToDriverFlag = [
+            \App\Models\Driver\DriverSeatSlot::MORNING_GO       => 'morning_go',
+            \App\Models\Driver\DriverSeatSlot::MORNING_RETURN   => 'morning_return',
+            \App\Models\Driver\DriverSeatSlot::AFTERNOON_GO     => 'afternoon_go',
+            \App\Models\Driver\DriverSeatSlot::AFTERNOON_RETURN => 'afternoon_return',
+        ];
+
         foreach ($slotDemand as $slot => $needed) {
             $slotCopy   = $slot;
             $neededCopy = $needed;
+            $driverFlag = $slotToDriverFlag[$slot] ?? null;
+
+            if ($driverFlag !== null) {
+                // السائق لازم يكون قد اختار العمل في هذه الفترة/الاتجاه أصلاً.
+                $query->where("drivers.$driverFlag", true);
+            }
 
             $query->where(function ($q) use ($slotCopy, $neededCopy, $startDate, $endDate) {
                 // السائق مقبول إذا:
@@ -277,18 +307,17 @@ class DriverMatchingService
             ->values()
             ->toArray();
 
-        // يجب أن يغطي السائق منطقة المدرسة
-        if (!empty($schoolZoneIds)) {
-            $query->whereHas('zones', function ($q) use ($schoolZoneIds) {
-                $q->whereIn('zones.id', $schoolZoneIds);
-            });
+        // يجب أن يغطي السائق كل مناطق المدارس المطلوبة (AND، وليس OR).
+        // whereIn سابقاً كان AND-ي على مستوى «موجود منطقة ضمن القائمة» فقط،
+        // فيمر سائق يغطي 1 من 3 مناطق ثم يفشل عملياً عند التوصيل للمدرسة الثانية.
+        foreach ($schoolZoneIds as $zoneId) {
+            $query->whereHas('zones', fn($q) => $q->where('zones.id', $zoneId));
         }
 
-        // يجب أن يغطي السائق أيضاً منطقة سكن الطالب (Dual-Zone)
-        if (!empty($homeZoneIds)) {
-            $query->whereHas('zones', function ($q) use ($homeZoneIds) {
-                $q->whereIn('zones.id', $homeZoneIds);
-            });
+        // نفس المنطق لمناطق السكن (رغم أن أطفال ولي واحد عادةً بنفس العنوان،
+        // فقد تختلف عناوينهم لاحقاً - نضمن التغطية الكاملة).
+        foreach ($homeZoneIds as $zoneId) {
+            $query->whereHas('zones', fn($q) => $q->where('zones.id', $zoneId));
         }
     }
 

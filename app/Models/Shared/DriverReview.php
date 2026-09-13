@@ -22,10 +22,16 @@ class DriverReview extends Model
         'rating',
         'comment',
         'status',
+        'ai_label',
+        'ai_category',
+        'ai_severity',
+        'ai_classified_at',
     ];
 
     protected $casts = [
-        'rating' => 'integer',
+        'rating'           => 'integer',
+        'ai_severity'      => 'integer',
+        'ai_classified_at' => 'datetime',
     ];
 
     public function parent(): BelongsTo

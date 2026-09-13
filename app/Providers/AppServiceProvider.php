@@ -13,6 +13,15 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->allowFileUploadsOnArtisanServe();
+
+        $this->app->singleton(\App\Services\Ai\ReviewClassifierService::class, function ($app) {
+            $config = $app['config']->get('services.ai_classifier', []);
+            return new \App\Services\Ai\ReviewClassifierService(
+                baseUrl: (string) ($config['base_url'] ?? 'http://127.0.0.1:8001'),
+                endpoint: (string) ($config['endpoint'] ?? '/classify'),
+                timeoutSeconds: (int) ($config['timeout'] ?? 10),
+            );
+        });
     }
 
     /**

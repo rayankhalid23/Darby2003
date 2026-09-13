@@ -39,7 +39,7 @@ class StoreChildRequest extends FormRequest
             'notification_radius' => 'nullable|integer|min:100|max:5000',
 
             // البيانات اللوجستية والاشتراك
-            'preferred_time_slot' => ['required', Rule::in(['morning', 'evening', 'both'])],
+            'preferred_time_slot' => ['required', Rule::in(['morning', 'evening'])],
             'pickup_time'         => 'nullable|date_format:H:i',
             'dropoff_time'        => 'nullable|date_format:H:i',
         ];
@@ -88,8 +88,8 @@ class StoreChildRequest extends FormRequest
             'notification_radius.max'       => 'نطاق الإشعار لا يتجاوز 5000 متر.',
             
             // اللوجستيات
-            'preferred_time_slot.required' => 'يجب اختيار الفترة المفضلة (صباحي، مسائي، كلاهما).',
-            'preferred_time_slot.in'       => 'الفترة المفضلة المختارة غير صالحة.',
+            'preferred_time_slot.required' => 'يجب اختيار الفترة المفضلة (صباحي أو مسائي).',
+            'preferred_time_slot.in'       => 'الفترة المفضلة المختارة غير صالحة (مسموح فقط: morning أو evening).',
 
             'pickup_time.date_format'      => 'وقت الالتقاط يجب أن يكون بصيغة HH:MM.',
             'dropoff_time.date_format'     => 'وقت التوصيل يجب أن يكون بصيغة HH:MM.',

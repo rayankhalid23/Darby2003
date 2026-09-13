@@ -9,6 +9,7 @@ use App\Services\Admin\ComplaintService;
 use App\Services\Driver\WithdrawalService;
 use App\Services\Parent\WalletRechargeService;
 use App\Services\Shared\FinancialService;
+use App\Models\Shared\MasterEscrowVault;
 use App\Models\Shared\RechargeRequest;
 use Illuminate\Http\JsonResponse;
 
@@ -62,6 +63,35 @@ class FinancialController extends Controller
         return response()->json([
             'success' => true,
             'data'    => new InvoiceResource($invoice),
+        ]);
+    }
+
+    /**
+     * ملخّص أموال السائقين على مستوى المنظومة، مصدره المرآة المحاسبية في
+     * MasterEscrowVault لا مجاميع محسوبة على المحافظ. أرقام الخزينة بالقروش،
+     * والاستجابة بالدينار للواجهة.
+     */
+    public function driversSummary(): JsonResponse
+    {
+        $vault = MasterEscrowVault::getVault();
+
+        $availableCents = (int) $vault->driver_available_pool;
+        $pendingCents   = (int) ($vault->pending_withdrawal_pool ?? 0);
+
+        $pendingCount = \App\Models\Shared\WithdrawalRequest::where('status', 'pending')->count();
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                // مجموع المحافظ المتاحة فوراً للسحب (لم يتقدّم بها السائقون بطلب بعد).
+                'available_for_withdrawal' => round($availableCents / 100, 2),
+                // مجموع ما هو محجوز حالياً بانتظار قرار الأدمن.
+                'requested_pending'        => round($pendingCents / 100, 2),
+                // إجمالي ما تملكه المنظومة نيابة عن السائقين (الاثنان معاً).
+                'total_driver_funds'       => round(($availableCents + $pendingCents) / 100, 2),
+                'pending_requests_count'   => $pendingCount,
+                'currency'                 => 'د.ل',
+            ],
         ]);
     }
 

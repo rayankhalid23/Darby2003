@@ -6,6 +6,10 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
+/**
+ * طلب تغيير موقع مُجمَّع (يدعم عدة أطفال وعدة رحلات).
+ * يُستخدم لكل من preview و store.
+ */
 class StoreLocationChangeRequestRequest extends FormRequest
 {
     public function authorize(): bool
@@ -16,30 +20,37 @@ class StoreLocationChangeRequestRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'active_subscription_id' => ['required', 'integer', 'exists:active_subscriptions,id'],
-            'point_type'             => ['required', 'string', 'in:pickup,dropoff'],
-            // التغيير يخص رحلة واحدة ويوماً واحداً فقط، لذلك لم يعد هناك خيار "تغيير دائم".
-            'change_date'            => ['nullable', 'date', 'after_or_equal:today'],
-            'address_id'             => ['nullable', 'integer', 'exists:addresses,id', 'required_without_all:lat,lng'],
-            'lat'                    => ['nullable', 'numeric', 'between:-90,90', 'required_without:address_id'],
-            'lng'                    => ['nullable', 'numeric', 'between:-180,180', 'required_without:address_id'],
-            'label'                  => ['nullable', 'string', 'max:255'],
+            'point_type'  => ['required', 'string', 'in:pickup,dropoff'],
+            'date'        => ['required', 'date', 'after_or_equal:today'],
+
+            // العنوان الجديد — إما id لعنوان محفوظ أو (lat + lng).
+            'address_id'  => ['nullable', 'integer', 'exists:addresses,id', 'required_without_all:lat,lng'],
+            'lat'         => ['nullable', 'numeric', 'between:-90,90',  'required_without:address_id'],
+            'lng'         => ['nullable', 'numeric', 'between:-180,180', 'required_without:address_id'],
+            'label'       => ['nullable', 'string', 'max:255'],
+
+            // تحديد الأطفال والاشتراكات — [{child_id, trip_ids: [active_subscription_id, ...]}]
+            'selections'                => ['required', 'array', 'min:1'],
+            'selections.*.child_id'     => ['required', 'integer', 'exists:children,id'],
+            'selections.*.trip_ids'     => ['required', 'array', 'min:1'],
+            'selections.*.trip_ids.*'   => ['integer', 'exists:active_subscriptions,id'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'active_subscription_id.required' => 'يجب تحديد الاشتراك/الرحلة المعنية.',
-            'active_subscription_id.exists'    => 'الاشتراك المحدد غير موجود.',
-            'point_type.required'              => 'يجب تحديد نوع النقطة (استلام أو تسليم).',
-            'point_type.in'                    => 'نوع النقطة يجب أن يكون استلام (pickup) أو تسليم (dropoff).',
-            'change_date.date'                 => 'تاريخ التغيير يجب أن يكون تاريخاً صالحاً.',
-            'change_date.after_or_equal'       => 'لا يمكن تحديد تاريخ سابق لتغيير الموقع.',
-            'address_id.exists'                => 'العنوان المحدد غير موجود.',
-            'address_id.required_without_all'  => 'يجب اختيار عنوان محفوظ أو إدخال إحداثيات الموقع الجديد.',
-            'lat.required_without'             => 'يجب إدخال خط العرض عند عدم اختيار عنوان محفوظ.',
-            'lng.required_without'             => 'يجب إدخال خط الطول عند عدم اختيار عنوان محفوظ.',
+            'point_type.required'         => 'يجب تحديد نوع النقطة (استلام أو تسليم).',
+            'point_type.in'               => 'نوع النقطة يجب أن يكون pickup أو dropoff.',
+            'date.required'               => 'يجب تحديد التاريخ.',
+            'date.after_or_equal'         => 'لا يمكن تحديد تاريخ سابق.',
+            'address_id.exists'           => 'العنوان المحدد غير موجود.',
+            'address_id.required_without_all' => 'يجب اختيار عنوان محفوظ أو إدخال إحداثيات.',
+            'lat.required_without'        => 'يجب إدخال خط العرض عند عدم اختيار عنوان محفوظ.',
+            'lng.required_without'        => 'يجب إدخال خط الطول عند عدم اختيار عنوان محفوظ.',
+            'selections.required'         => 'يجب تحديد طفل واحد ورحلة واحدة على الأقل.',
+            'selections.*.child_id.required' => 'كل عنصر يجب أن يحتوي child_id.',
+            'selections.*.trip_ids.required' => 'كل طفل يجب أن يكون له رحلة واحدة على الأقل.',
         ];
     }
 

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Driver\Driver;
 use App\Models\Parent\ParentModel;
 use App\Models\Shared\DriverReview;
+use App\Models\Shared\SubscriptionRequest;
 
 /**
  * اختبار وحدة "تقييمات السائقين" (Admin + Parent) بعد إصلاح:
@@ -21,6 +22,14 @@ use App\Models\Shared\DriverReview;
  * ملاحظة: كانت هذه الحالات ضمن ComplaintsAndDriverReviewsTest قبل إزالة منطق
  * الشكاوى بالكامل من الكود الحي (جدول complaints بقي في القاعدة كأرشيف صامت
  * بدون أي Route أو Model يصل إليه).
+ *
+ * إصلاح إضافي (2026-09-14): الإعداد كان يستخدم role_id مُختلَقة (1/2/3 بأسماء
+ * Admin/Driver/Parent) ويُدرج مباشرة في جدول admins القديم. بعد تطبيع V2،
+ * admins/parents لم يعودا جدولين منفصلين (ParentModel/Admin أصبحا Proxy فوق
+ * users)، وجدول roles الحقيقي مزروع مسبقاً بأدوار فعلية (1=super_admin كـ
+ * staff، 7=parent، 8=driver كـ account). استخدام 1/2/3 كان يصادف أدوار staff
+ * أخرى (fleet_supervisor إلخ) بسبب insertOrIgnore (لا يكتب فوق الصفوف
+ * الموجودة فعلاً)، والإدراج في admins كان يفشل لعدم وجود الجدول أصلاً.
  */
 class DriverReviewsTest extends TestCase
 {
@@ -37,9 +46,9 @@ class DriverReviewsTest extends TestCase
         parent::setUp();
 
         DB::table('roles')->insertOrIgnore([
-            ['id' => 1, 'name' => 'Admin',  'display_name' => 'مدير'],
-            ['id' => 2, 'name' => 'Driver', 'display_name' => 'سائق'],
-            ['id' => 3, 'name' => 'Parent', 'display_name' => 'ولي أمر'],
+            ['id' => 1, 'name' => 'super_admin', 'display_name' => 'مدير النظام العام', 'kind' => 'staff', 'is_super' => 1],
+            ['id' => 7, 'name' => 'parent',      'display_name' => 'ولي أمر',            'kind' => 'account', 'is_super' => 0],
+            ['id' => 8, 'name' => 'driver',      'display_name' => 'سائق حافلة/فان',      'kind' => 'account', 'is_super' => 0],
         ]);
 
         $this->adminUser = User::create([
@@ -50,18 +59,13 @@ class DriverReviewsTest extends TestCase
             'role_id'      => 1,
             'is_active'    => 1,
         ]);
-        // موديل Admin بلا أعمدة created_at/updated_at في قاعدة البيانات، لذا نُدرج مباشرة
-        DB::table('admins')->insert([
-            'user_id'    => $this->adminUser->id,
-            'created_by' => $this->adminUser->id,
-        ]);
 
         $this->driverUser = User::create([
             'full_name'    => 'سائق المراجعات',
             'email'        => 'driver.cx.' . uniqid() . '@darby.test',
             'phone_number' => '091' . rand(1000000, 9999999),
             'password_hash' => bcrypt('password123'),
-            'role_id'      => 2,
+            'role_id'      => 8,
             'is_active'    => 1,
         ]);
         $this->driver = Driver::create([
@@ -77,11 +81,12 @@ class DriverReviewsTest extends TestCase
             'email'        => 'parent.cx.' . uniqid() . '@darby.test',
             'phone_number' => '092' . rand(1000000, 9999999),
             'password_hash' => bcrypt('password123'),
-            'role_id'      => 3,
+            'role_id'      => 7,
             'is_active'    => 1,
+            'is_trusted'   => 1,
         ]);
 
-        $this->parent = ParentModel::create(['user_id' => $this->parentUser->id, 'is_trusted' => 1]);
+        $this->parent = ParentModel::findOrFail($this->parentUser->id);
     }
 
     // =========================================================
@@ -125,6 +130,116 @@ class DriverReviewsTest extends TestCase
         $response->assertJsonValidationErrors(['driver_id']);
     }
 
+    /**
+     * ولي الأمر الذي لديه اشتراك مع السائق (بأي حالة) يقدر يترك أكثر من
+     * تعليق/تقييم عادي — لا يُطبّق عليه قيد "تعليق واحد فقط".
+     */
+    public function test_parent_with_subscription_can_submit_more_than_one_review_for_same_driver(): void
+    {
+        SubscriptionRequest::create([
+            'parent_id' => $this->parentUser->id,
+            'driver_id' => $this->driver->id,
+            'status'    => SubscriptionRequest::STATUS_ACCEPTED,
+        ]);
+
+        DriverReview::create([
+            'parent_id' => $this->parentUser->id,
+            'driver_id' => $this->driver->id,
+            'rating'    => 4,
+            'comment'   => 'تعليق أول',
+            'status'    => 'active',
+        ]);
+
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/driver-reviews', [
+            'driver_id' => $this->driver->id,
+            'rating'    => 5,
+            'comment'   => 'تعليق ثانٍ لنفس السائق بعد وجود اشتراك بيننا.',
+        ]);
+
+        $response->assertStatus(201);
+        $response->assertJsonPath('status', true);
+
+        $this->assertEquals(2, DriverReview::where('parent_id', $this->parentUser->id)
+            ->where('driver_id', $this->driver->id)
+            ->count());
+    }
+
+    /**
+     * ولي الأمر بدون أي اشتراك مع السائق يبقى مقيّداً بتعليق واحد فقط
+     * (يغطي نفس سلوك test_parent_cannot_submit_duplicate_review_for_same_driver
+     * لكن بعد إضافة استثناء الاشتراك، للتأكد من عدم كسر القيد الأصلي).
+     */
+    public function test_parent_without_subscription_still_limited_to_one_review(): void
+    {
+        DriverReview::create([
+            'parent_id' => $this->parentUser->id,
+            'driver_id' => $this->driver->id,
+            'rating'    => 4,
+            'status'    => 'active',
+        ]);
+
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/driver-reviews', [
+            'driver_id' => $this->driver->id,
+            'rating'    => 5,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['driver_id']);
+    }
+
+    // =========================================================
+    // SubscriptionRequest::existsForParentAndDriver
+    // =========================================================
+
+    /**
+     * يجب أن ترجع true إن وُجد صف في جدول الاشتراكات (requests) يربط ولي
+     * الأمر بالسائق، بغض النظر عن حالة الاشتراك: نشط (accepted)، ملغي
+     * (cancelled)، قيد الانتظار (pending)، أو مكتمل (contract_offered).
+     */
+    public function test_exists_for_parent_and_driver_returns_true_regardless_of_status(): void
+    {
+        foreach ([
+            SubscriptionRequest::STATUS_PENDING,
+            SubscriptionRequest::STATUS_ACCEPTED,
+            SubscriptionRequest::STATUS_CANCELLED,
+            'contract_offered',
+        ] as $status) {
+            $driverUser = User::create([
+                'full_name'    => 'سائق اختبار ' . $status,
+                'email'        => 'driver.status.' . uniqid() . '@darby.test',
+                'phone_number' => '094' . rand(1000000, 9999999),
+                'password_hash' => bcrypt('password123'),
+                'role_id'      => 8,
+                'is_active'    => 1,
+            ]);
+            $driver = Driver::create([
+                'user_id'        => $driverUser->id,
+                'national_id'    => 'NAT' . rand(100000, 999999),
+                'license_number' => 'LIC' . rand(100000, 999999),
+                'license_expiry' => now()->addYears(2)->format('Y-m-d'),
+                'status'         => 'Approved',
+            ]);
+
+            SubscriptionRequest::create([
+                'parent_id' => $this->parentUser->id,
+                'driver_id' => $driver->id,
+                'status'    => $status,
+            ]);
+
+            $this->assertTrue(
+                SubscriptionRequest::existsForParentAndDriver($this->parentUser->id, $driver->id),
+                "expected true for status [{$status}]"
+            );
+        }
+    }
+
+    public function test_exists_for_parent_and_driver_returns_false_when_no_subscription(): void
+    {
+        $this->assertFalse(
+            SubscriptionRequest::existsForParentAndDriver($this->parentUser->id, $this->driver->id)
+        );
+    }
+
     public function test_parent_can_update_own_review(): void
     {
         $review = DriverReview::create([
@@ -164,10 +279,10 @@ class DriverReviewsTest extends TestCase
             'email'        => 'other.cx.' . uniqid() . '@darby.test',
             'phone_number' => '093' . rand(1000000, 9999999),
             'password_hash' => bcrypt('password123'),
-            'role_id'      => 3,
+            'role_id'      => 7,
             'is_active'    => 1,
         ]);
-        $otherParent = ParentModel::create(['user_id' => $otherParentUser->id, 'is_trusted' => 1]);
+        $otherParent = ParentModel::findOrFail($otherParentUser->id);
 
         $review = DriverReview::create([
             'parent_id' => $otherParentUser->id,

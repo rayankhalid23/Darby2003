@@ -185,72 +185,47 @@ class DriverSubscriptionController extends Controller
         }
 
         try {
-            // 1. البحث برقم اشتراك الطفل المحدد من جدول active_subscriptions
+            $childrenPivotCols = [
+                'timing',
+                'distance_km',
+                'school_label',
+                'school_lat',
+                'school_lng',
+                'price_per_child',
+                'trip_price',
+                'discount_amount',
+                'total_amount_after_discount',
+                'driver_net_price'
+            ];
+
+            $eagerLoads = [
+                'parent',
+                'children' => fn($q) => $q->withPivot($childrenPivotCols),
+                'children.school',
+                'children.address',
+                'activeSubscriptions.requestChild',
+            ];
+
+            // 1. أولاً: محاولة البحث بمعرف اشتراك الطفل من جدول active_subscriptions
             $activeSub = \App\Models\Shared\ActiveSubscription::query()
-                ->with([
-                    'child.school',
-                    'child.address',
-                    'subscriptionRequest.parent',
-                    'subscriptionRequest.children' => function ($query) {
-                        $query->withPivot([
-                            'timing',
-                            'distance_km',
-                            'school_label',
-                            'school_lat',
-                            'school_lng',
-                            'price_per_child',
-                            'trip_price',
-                            'discount_amount',
-                            'total_amount_after_discount',
-                            'driver_net_price'
-                        ]);
-                    },
-                    'subscriptionRequest.activeSubscriptions'
-                ])
                 ->forDriver($driver->id)
                 ->where('id', $id)
                 ->first();
 
-            if ($activeSub && $activeSub->subscriptionRequest && $activeSub->child) {
-                $childWithPivot = $activeSub->subscriptionRequest->children->firstWhere('id', $activeSub->child_id) ?? $activeSub->child;
-                return (new \App\Http\Resources\Api\Driver\DriverActiveChildSubscriptionResource([
-                    'subscriptionRequest' => $activeSub->subscriptionRequest,
-                    'child'               => $childWithPivot,
-                    'activeSubId'         => $activeSub->id,
-                ]))->additional([
-                    'status'  => true,
-                    'success' => true,
-                    'message' => 'تم جلب تفاصيل الاشتراك النشط بنجاح',
-                ]);
+            if ($activeSub && $activeSub->subscription_request_id) {
+                $subscriptionRequest = SubscriptionRequest::query()
+                    ->with($eagerLoads)
+                    ->where('driver_id', $driver->id)
+                    ->where('id', $activeSub->subscription_request_id)
+                    ->first();
+            } else {
+                // 2. ثانياً: إذا تم تمرير المعرف العام لطلب الاشتراك (requests.id)
+                $subscriptionRequest = SubscriptionRequest::query()
+                    ->with($eagerLoads)
+                    ->where('driver_id', $driver->id)
+                    ->where('id', $id)
+                    ->first();
             }
-
-            // 2. إذا تم تمرير المعرف العام للطلب
-            $subscriptionRequest = SubscriptionRequest::query()
-                ->with([
-                    'parent.user',
-                    'children' => function ($query) {
-                        $query->withPivot([
-                            'timing',
-                            'distance_km',
-                            'price_per_child',
-                            'trip_price',
-                            'discount_amount',            
-                            'total_amount_after_discount',
-                            'driver_net_price'
-                        ]);
-                    },
-                    'children.school',
-                    'children.address',
-                    'activeSubscriptions'
-                ])
-                ->where('driver_id', $driver->id)
-                ->where(function ($q) use ($id) {
-                    $q->where('id', $id)
-                      ->orWhereHas('activeSubscriptions', function ($subQ) use ($id) {
-                          $subQ->where('id', $id);
-                      });
-                })
-                ->first();
 
             if (!$subscriptionRequest) {
                 return response()->json([
@@ -260,11 +235,7 @@ class DriverSubscriptionController extends Controller
                 ], 404);
             }
 
-            $firstChild = $subscriptionRequest->children?->first();
-            return (new \App\Http\Resources\Api\Driver\DriverActiveChildSubscriptionResource([
-                'subscriptionRequest' => $subscriptionRequest,
-                'child'               => $firstChild,
-            ]))->additional([
+            return (new \App\Http\Resources\Api\Driver\DriverGroupedActiveSubscriptionResource($subscriptionRequest))->additional([
                 'status'  => true,
                 'success' => true,
                 'message' => 'تم جلب تفاصيل الاشتراك النشط بنجاح',
@@ -278,6 +249,7 @@ class DriverSubscriptionController extends Controller
             ], 500);
         }
     }
+
 
     public function show(Request $request, $id)
     {

@@ -28,7 +28,7 @@ class SubscriptionRequestDetailsResource extends JsonResource
 
             'home_address' => $this->buildHomeAddressBlock($req),
 
-            'children_count' => (int) ($req->children_count ?? ($req->children?->count() ?: 0)),
+            'children_count' => (int) ($req->relationLoaded('children') ? $req->children->count() : ($req->children_count ?? 0)),
 
             'pricing' => [
                 'total_price'                 => (float) ($req->total_price ?? 0),

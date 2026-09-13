@@ -4,6 +4,7 @@ namespace App\Http\Requests\Api\Parent;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use App\Models\Shared\SubscriptionRequest;
 
 class StoreDriverReviewRequest extends FormRequest
 {
@@ -15,18 +16,29 @@ class StoreDriverReviewRequest extends FormRequest
     public function rules(): array
     {
         $userId = auth()->id();
+        $driverId = (int) $this->input('driver_id');
+
+        $driverIdRules = [
+            'required',
+            'integer',
+            'exists:drivers,id',
+        ];
+
+        // ولي الأمر الذي لديه اشتراك (بأي حالة) مع هذا السائق يقدر يترك أكثر
+        // من تعليق عادي (لا نطبّق قيد "تعليق واحد فقط" عليه).
+        $hasSubscriptionWithDriver = $userId && $driverId
+            && SubscriptionRequest::existsForParentAndDriver($userId, $driverId);
+
+        if (!$hasSubscriptionWithDriver) {
+            $driverIdRules[] = Rule::unique('driver_reviews', 'driver_id')
+                ->where(function ($q) use ($userId) {
+                    $q->where('parent_id', $userId);
+                })
+                ->whereNull('deleted_at');
+        }
 
         return [
-            'driver_id' => [
-                'required',
-                'integer',
-                'exists:drivers,id',
-                Rule::unique('driver_reviews', 'driver_id')
-                    ->where(function ($q) use ($userId) {
-                        $q->where('parent_id', $userId);
-                    })
-                    ->whereNull('deleted_at'),
-            ],
+            'driver_id' => $driverIdRules,
             'rating' => 'required|integer|min:1|max:5',
             'comment' => 'nullable|string|max:2000',
         ];

@@ -54,7 +54,7 @@ class UpdateChildRequest extends FormRequest
             'notification_radius' => 'sometimes|nullable|integer|min:50|max:5000',
 
             // البيانات اللوجستية والاشتراك (كلها اختيارية وجزئية)
-            'preferred_time_slot' => ['sometimes', 'nullable', Rule::in(['morning', 'evening', 'both'])],
+            'preferred_time_slot' => ['sometimes', 'nullable', Rule::in(['morning', 'evening'])],
             'pickup_time'         => 'sometimes|nullable|date_format:H:i',
             'dropoff_time'        => 'sometimes|nullable|date_format:H:i',
             'is_active'           => 'sometimes|nullable|boolean',
@@ -74,7 +74,7 @@ class UpdateChildRequest extends FormRequest
             'grade.max'                  => 'الصف الدراسي لا يتجاوز 12.',
             'photo.mimes'                => 'صيغة الصورة يجب أن تكون: jpeg, png, jpg, webp, heic, heif.',
             'photo.max'                  => 'حجم الصورة كبير جداً، الحد الأقصى 10 ميجابايت.',
-            'preferred_time_slot.in'     => 'الفترة المختارة غير صالحة (morning, evening, both).',
+            'preferred_time_slot.in'     => 'الفترة المختارة غير صالحة (مسموح فقط: morning أو evening).',
         ];
     }
 

@@ -20,6 +20,12 @@ return [
     'fastapi' => [
     'base_url' => env('FASTAPI_BASE_URL', 'http://127.0.0.1:8000'),
 ],
+
+    'ai_classifier' => [
+        'base_url' => env('AI_CLASSIFIER_BASE_URL', 'http://127.0.0.1:8001'),
+        'endpoint' => env('AI_CLASSIFIER_ENDPOINT', '/classify'),
+        'timeout'  => (int) env('AI_CLASSIFIER_TIMEOUT', 10),
+    ],
     'resend' => [
         'key' => env('RESEND_API_KEY'),
     ],

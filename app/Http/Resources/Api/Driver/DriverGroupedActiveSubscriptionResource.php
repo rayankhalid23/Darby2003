@@ -27,12 +27,12 @@ class DriverGroupedActiveSubscriptionResource extends JsonResource
         $childrenArray = [];
         if ($req->relationLoaded('children')) {
             foreach ($req->children as $child) {
-                $childPayload = $this->buildChildPayload($child, forDriver: true);
+                // جلب بيانات الاشتراك النشط (المسار والأوقات) الخاصة بهذا الطفل
+                $matchingActiveSub = optional($req->activeSubscriptions)->firstWhere('child_id', $child->id);
+                $childPayload = $this->buildChildPayload($child, forDriver: true, req: $req, activeSub: $matchingActiveSub);
                 $commissionTotal += $childPayload['pricing']['platform_commission_amount'];
                 $driverNetTotal  += $childPayload['pricing']['driver_net_price'];
 
-                // جلب بيانات الاشتراك النشط (المسار والأوقات) الخاصة بهذا الطفل
-                $matchingActiveSub = optional($req->activeSubscriptions)->firstWhere('child_id', $child->id);
                 if ($matchingActiveSub) {
                     $childResolvedState = $req->resolveState($child, $matchingActiveSub);
                     
@@ -41,8 +41,8 @@ class DriverGroupedActiveSubscriptionResource extends JsonResource
                         'status'       => $childResolvedState['status'],
                         'status_label' => $childResolvedState['state_label'],
                         'route_id'     => $matchingActiveSub->route_id,
-                        'pickup_time'  => $matchingActiveSub->pickup_time,
-                        'dropoff_time' => $matchingActiveSub->dropoff_time,
+                        'pickup_time'  => $matchingActiveSub->pickup_time ?? $req->pickup_time,
+                        'dropoff_time' => $matchingActiveSub->dropoff_time ?? $req->dropoff_time,
                     ];
 
                     if ($childResolvedState['status'] === 'cancelled') {
@@ -71,7 +71,7 @@ class DriverGroupedActiveSubscriptionResource extends JsonResource
 
             'home_address' => $this->buildHomeAddressBlock($req),
 
-            'children_count' => (int) ($req->children_count ?? ($req->children?->count() ?: 0)),
+            'children_count' => (int) ($req->relationLoaded('children') ? $req->children->count() : ($req->children_count ?? 0)),
 
             'pricing' => [
                 'total_price'                 => (float) ($req->total_price ?? 0),

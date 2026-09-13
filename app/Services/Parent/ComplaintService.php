@@ -145,6 +145,8 @@ class ComplaintService
             'status'        => 'pending',
         ]);
 
+        $complaint->load(['driver.user', 'trip', 'resolvedBy']);
+
         try {
             $admins = User::whereIn('role_id', [1, 2])->get();
             // withPush: false — إشعارات الأدمن عبر DB + polling فقط، بلا Firebase Push.

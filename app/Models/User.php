@@ -219,22 +219,20 @@ class User extends Authenticatable implements HasName, Wallet
             return ['*'];
         }
 
-        $rolePerms = $this->role?->permissions ?? [];
-        if (!is_array($rolePerms)) {
-            $rolePerms = json_decode($rolePerms, true) ?? [];
+        // V2 RBAC: الصلاحيات محفوظة في جدول permissions مرتبطة بالأدوار عبر permission_role
+        if (!$this->role_id) {
+            return [];
         }
 
-        // إذا كان الدور يحمل All
-        if (in_array('*', $rolePerms, true) || isset($rolePerms['all'])) {
-            return ['*'];
-        }
-
-        $customPerms = $this->custom_permissions ?? [];
-        if (!is_array($customPerms)) {
-            $customPerms = json_decode($customPerms, true) ?? [];
-        }
-
-        return array_values(array_unique(array_merge($rolePerms, $customPerms)));
+        return \Illuminate\Support\Facades\Cache::remember(
+            "user.perms.role.{$this->role_id}",
+            300,
+            fn () => \Illuminate\Support\Facades\DB::table('permission_role')
+                ->join('permissions', 'permissions.id', '=', 'permission_role.permission_id')
+                ->where('permission_role.role_id', $this->role_id)
+                ->pluck('permissions.key')
+                ->all()
+        );
     }
 
     /**

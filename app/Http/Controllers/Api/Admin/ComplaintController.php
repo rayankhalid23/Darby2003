@@ -67,7 +67,7 @@ class ComplaintController extends Controller
     public function review(ReviewComplaintRequest $request, int $id): JsonResponse
     {
         $adminId = auth()->id();
-        $admin = \App\Models\Admin\Admin::where('user_id', $adminId)->first() ?? \App\Models\Admin\Admin::first();
+        $admin = \App\Models\Admin\Admin::find($adminId) ?? \App\Models\Admin\Admin::first();
 
         $action = $request->input('action') ?? (method_exists($request, 'validated') ? $request->validated('action') : null);
         $actionDetails = $request->input('action_details') ?? (method_exists($request, 'validated') ? $request->validated('action_details') : null);

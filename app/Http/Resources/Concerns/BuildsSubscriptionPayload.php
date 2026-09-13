@@ -4,6 +4,7 @@ namespace App\Http\Resources\Concerns;
 
 use App\Models\Driver\Driver;
 use App\Models\Parent\Child;
+use App\Models\Shared\ActiveSubscription;
 use App\Models\Shared\PricingSetting;
 use App\Models\Shared\SubscriptionRequest;
 use App\Models\User;
@@ -16,10 +17,15 @@ use App\Models\User;
 trait BuildsSubscriptionPayload
 {
     /**
-     * بيانات طفل واحد موحّدة (اسم، صورة، مدرسة، سعره). لو $forDriver=true تُضاف
+     * بيانات طفل واحد موحّدة (اسم، صورة، مدرسة، سعره، الفترة، ووقتي الصعود والنزول). لو $forDriver=true تُضاف
      * عمولة المنصة وصافي السائق لهذا الطفل.
      */
-    protected function buildChildPayload(?Child $child, bool $forDriver = false): ?array
+    protected function buildChildPayload(
+        ?Child $child, 
+        bool $forDriver = false, 
+        ?SubscriptionRequest $req = null, 
+        ?ActiveSubscription $activeSub = null
+    ): ?array
     {
         if (!$child) {
             return null;
@@ -50,6 +56,18 @@ trait BuildsSubscriptionPayload
             $pricing['driver_net_price'] = $driverNet;
         }
 
+        // محاولة جلب الطلب وسجل الاشتراك النشط تلقائياً إذا لم يُمرّرا
+        if (!$req && isset($this->resource)) {
+            $req = $this->resource instanceof SubscriptionRequest ? $this->resource : ($this->resource['subscriptionRequest'] ?? null);
+        }
+
+        if (!$activeSub && $req && $req->relationLoaded('activeSubscriptions')) {
+            $activeSub = optional($req->activeSubscriptions)->firstWhere('child_id', $child->id);
+        }
+
+        $pickupTime = $activeSub?->pickup_time ?? $req?->pickup_time;
+        $dropoffTime = $activeSub?->dropoff_time ?? $req?->dropoff_time;
+
         return [
             'child_id'      => $child->id,
             'name'          => $child->full_name,
@@ -65,6 +83,8 @@ trait BuildsSubscriptionPayload
                 'lng'  => (float) ($pivot?->school_lng ?? $school?->lng ?? 0),
             ],
             'timing'        => $pivot?->timing,
+            'pickup_time'   => $pickupTime,
+            'dropoff_time'  => $dropoffTime,
             'distance_km'   => (float) ($pivot?->distance_km ?? 0),
             'medical_notes' => $child->medical_notes,
             'pricing'       => $pricing,

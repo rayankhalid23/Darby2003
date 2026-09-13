@@ -165,29 +165,7 @@ class ParentSubscriptionController extends Controller
 
             $activeSubscriptions = $this->subscriptionService->getParentActiveSubscriptions($userId, $filter);
 
-            // تفكيك الاشتراكات ليتم عرض كل طفل باشتراكه المستقل
-            $childSubscriptions = collect();
-            foreach ($activeSubscriptions as $subscriptionRequest) {
-                if ($subscriptionRequest->children && $subscriptionRequest->children->isNotEmpty()) {
-                    foreach ($subscriptionRequest->children as $child) {
-                        $matchingActiveSub = optional($subscriptionRequest->activeSubscriptions)->firstWhere('child_id', $child->id);
-                        $activeSubId = $matchingActiveSub ? $matchingActiveSub->id : $subscriptionRequest->id;
-                        $childSubscriptions->push([
-                            'subscriptionRequest' => $subscriptionRequest,
-                            'child'               => $child,
-                            'activeSubId'         => $activeSubId,
-                        ]);
-                    }
-                } else {
-                    $childSubscriptions->push([
-                        'subscriptionRequest' => $subscriptionRequest,
-                        'child'               => null,
-                        'activeSubId'         => $subscriptionRequest->id,
-                    ]);
-                }
-            }
-
-            return \App\Http\Resources\Api\Parent\ParentActiveChildSubscriptionResource::collection($childSubscriptions)
+            return \App\Http\Resources\Api\Parent\ParentGroupedActiveSubscriptionResource::collection($activeSubscriptions)
                 ->additional([
                     'status'  => true,
                     'success' => true,
@@ -217,76 +195,54 @@ class ParentSubscriptionController extends Controller
             $user = $request->user();
             $parentId = (int) $user->id;
 
-            // 1. البحث برقم اشتراك الطفل المحدد من جدول active_subscriptions
+            $childrenPivotCols = [
+                'timing',
+                'distance_km',
+                'school_label',
+                'school_lat',
+                'school_lng',
+                'price_per_child',
+                'trip_price',
+                'discount_amount',
+                'total_amount_after_discount',
+                'driver_net_price'
+            ];
+
+            $eagerLoads = [
+                'driver.user',
+                'driver.vehicle',
+                'children' => fn($query) => $query->withPivot($childrenPivotCols),
+                'children.school',
+                'children.address',
+                'activeSubscriptions.requestChild',
+            ];
+
+            // 1. أولاً: محاولة البحث برقم اشتراك الطفل المحدد من جدول active_subscriptions
             $activeSub = \App\Models\Shared\ActiveSubscription::query()
-                ->with([
-                    'child.school',
-                    'child.address',
-                    'driver.user',
-                    'driver.vehicle',
-                    'subscriptionRequest.children' => function ($query) {
-                        $query->withPivot([
-                            'timing',
-                            'distance_km',
-                            'school_label',
-                            'school_lat',
-                            'school_lng',
-                            'price_per_child',
-                            'trip_price',
-                            'discount_amount',
-                            'total_amount_after_discount',
-                            'driver_net_price'
-                        ]);
-                    },
-                    'subscriptionRequest.activeSubscriptions'
-                ])
                 ->forParent($parentId)
                 ->where('id', $id)
                 ->first();
 
-            if ($activeSub && $activeSub->subscriptionRequest && $activeSub->child) {
-                $childWithPivot = $activeSub->subscriptionRequest->children->firstWhere('id', $activeSub->child_id) ?? $activeSub->child;
-                return (new \App\Http\Resources\Api\Parent\ParentActiveChildSubscriptionResource([
-                    'subscriptionRequest' => $activeSub->subscriptionRequest,
-                    'child'               => $childWithPivot,
-                    'activeSubId'         => $activeSub->id,
-                ]))->additional([
-                    'status'  => true,
-                    'success' => true,
-                    'message' => 'تم جلب تفاصيل الاشتراك بنجاح',
-                ]);
+            if ($activeSub && $activeSub->subscription_request_id) {
+                $subscriptionRequest = SubscriptionRequest::query()
+                    ->with($eagerLoads)
+                    ->where(function ($q) use ($parentId, $user) {
+                        $q->where('parent_id', $parentId)
+                          ->orWhere('parent_id', $user->id);
+                    })
+                    ->where('id', $activeSub->subscription_request_id)
+                    ->first();
+            } else {
+                // 2. ثانياً: إذا تم تمرير المعرف العام للطلب
+                $subscriptionRequest = SubscriptionRequest::query()
+                    ->with($eagerLoads)
+                    ->where(function ($q) use ($parentId, $user) {
+                        $q->where('parent_id', $parentId)
+                          ->orWhere('parent_id', $user->id);
+                    })
+                    ->where('id', $id)
+                    ->first();
             }
-
-            // 2. إذا تم تمرير المعرف العام للطلب
-            $subscriptionRequest = SubscriptionRequest::query()
-                ->with([
-                    'driver.user',
-                    'children' => function ($query) {
-                        $query->withPivot([
-                            'timing',
-                            'distance_km',
-                            'price_per_child',
-                            'trip_price',
-                            'discount_amount',            
-                            'total_amount_after_discount',
-                            'driver_net_price'
-                        ]);
-                    },
-                    'children.school',
-                    'children.address',
-                    'activeSubscriptions'
-                ])
-                ->where(function ($q) use ($parentId, $user) {
-                    $q->where('parent_id', $parentId)
-                      ->orWhere('parent_id', $user->id);
-                })
-                ->where(function ($q) use ($id) {
-                    $q->where('id', $id)
-                      ->orWhereHas('activeSubscriptions', function ($subQ) use ($id) {
-                          $subQ->where('id', $id);
-                      });
-                })
-                ->first();
 
             if (!$subscriptionRequest) {
                 return response()->json([
@@ -296,11 +252,7 @@ class ParentSubscriptionController extends Controller
                 ], 404);
             }
 
-            $firstChild = $subscriptionRequest->children?->first();
-            return (new \App\Http\Resources\Api\Parent\ParentActiveChildSubscriptionResource([
-                'subscriptionRequest' => $subscriptionRequest,
-                'child'               => $firstChild,
-            ]))->additional([
+            return (new \App\Http\Resources\Api\Parent\ParentGroupedActiveSubscriptionResource($subscriptionRequest))->additional([
                 'status'  => true,
                 'success' => true,
                 'message' => 'تم جلب تفاصيل الاشتراك بنجاح',
@@ -414,6 +366,47 @@ class ParentSubscriptionController extends Controller
 
         } catch (Exception $e) {
             Log::error('Error in ParentSubscriptionController@checkSubscription: ' . $e->getMessage());
+
+            return response()->json([
+                'success'          => false,
+                'has_subscription' => false,
+                'message'          => 'حدث خطأ أثناء التحقق من الاشتراك.'
+            ], 500);
+        }
+    }
+
+    /**
+     * هل يوجد اشتراك (بأي حالة) يربط ولي الأمر الحالي بسائق معيّن؟
+     * بخلاف checkSubscription التي تفلتر على active/pending/completed فقط،
+     * هذه تعتمد على SubscriptionRequest::existsForParentAndDriver التي لا تفلتر
+     * على status إطلاقاً — تُستخدم لإثبات وجود علاقة سابقة أو حالية (مثلاً كشرط لإضافة تقييم).
+     */
+    public function checkSubscriptionExists(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'driver_id' => 'required|integer|exists:drivers,id',
+            ]);
+
+            $parentId = (int) $request->user()->id;
+            $driverId = (int) $request->driver_id;
+
+            $hasSubscription = SubscriptionRequest::existsForParentAndDriver($parentId, $driverId);
+
+            return response()->json([
+                'success'          => true,
+                'has_subscription' => $hasSubscription,
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors'  => $e->errors(),
+            ], 422);
+
+        } catch (Exception $e) {
+            Log::error('Error in ParentSubscriptionController@checkSubscriptionExists: ' . $e->getMessage());
 
             return response()->json([
                 'success'          => false,

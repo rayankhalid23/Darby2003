@@ -907,14 +907,20 @@ class SubscriptionRequestService
             $this->holdSubscriptionFundsOnAcceptance($req, $parent);
         }
 
-        // 6.3 إصدار الفاتورة المبدئية للاشتراك.
+        // 6.3 إصدار الفاتورة وتسويتها للاشتراك
         // ⚠️ لم تكن تُصدر من أي مسار حيّ إطلاقاً، فبقيت شاشات الفواتير لولي الأمر
-        // والسائق والأدمن فارغة، وبقي أمر التسوية بلا مدخلات. الفشل هنا لا يُسقط
-        // قبول الطلب: الفاتورة مستند عرض، والحركة المالية تمت وسُجّلت قبله.
+        // والسائق والأدمن فارغة. وعند تحويل الأموال للسائق مباشرة تكتمل التسوية المالية
+        // فوراً (STATUS_COMPLETED)، فيتم تسوية الفاتورة لتتحول حالتها إلى مدفوعة (paid).
         try {
-            app(\App\Services\Shared\FinancialService::class)->generateProformaInvoice($req);
+            $financialService = app(\App\Services\Shared\FinancialService::class);
+            $financialService->generateProformaInvoice($req);
+
+            $finance = \App\Models\Shared\PlatformFinance::where('subscription_request_id', $req->id)->latest('id')->first();
+            if ($finance && $finance->status === \App\Models\Shared\PlatformFinance::STATUS_COMPLETED) {
+                $financialService->settleSubscription($req);
+            }
         } catch (\Throwable $e) {
-            Log::warning("فشل إصدار الفاتورة المبدئية للطلب ID {$req->id}: " . $e->getMessage());
+            Log::warning("فشل إصدار أو تسوية الفاتورة للطلب ID {$req->id}: " . $e->getMessage());
         }
 
         // 6.5 مزامنة المسار الرئيسي (Master Route) لكل فترة/اتجاه مطلوبة (route_stops)
