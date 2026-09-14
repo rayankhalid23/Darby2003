@@ -9,6 +9,7 @@ use App\Models\Driver\DriverAbsence;
 use App\Models\Shared\ActiveSubscription;
 use App\Services\Shared\OsrmRoutingService;
 use App\Services\Notification\NotificationService;
+use App\Services\Trip\TripTrackingService;
 use App\Models\Driver\Driver;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache; // ✅ استيراد الفيساد الصحيح للكاش
@@ -38,13 +39,16 @@ class TripLifecycleService
 
     protected NotificationService $notificationService;
 
+    protected TripTrackingService $trackingService;
+
     /**
      * حقن خدمة الـ OSRM التي قمنا بإعدادها مسبقاً
      */
-    public function __construct(OsrmRoutingService $osrmService, NotificationService $notificationService)
+    public function __construct(OsrmRoutingService $osrmService, NotificationService $notificationService, TripTrackingService $trackingService)
     {
         $this->osrmService = $osrmService;
         $this->notificationService = $notificationService;
+        $this->trackingService = $trackingService;
     }
 
     /**
@@ -509,7 +513,7 @@ class TripLifecycleService
         // 🛡️ صمام أمان الأطفال — يرمي TripLifecycleException (422) عند وجود طفل بحالة boarded/pending
         $this->assertNoForgottenChildren($trip);
 
-        return DB::transaction(function () use ($trip) {
+        $result = DB::transaction(function () use ($trip) {
             // 1. تحديث حالة الرحلة في قاعدة البيانات
             $trip->update([
                 'status' => 'completed',
@@ -581,6 +585,13 @@ class TripLifecycleService
                 'message' => 'تم إنهاء الرحلة وتصفير سجلات الكاش المؤقتة بنجاح.'
             ];
         });
+
+        // خارج المعاملة عمداً (نداء شبكي خارجي لـ Firestore) — لا نبقي معاملة قاعدة
+        // البيانات مفتوحة بانتظار استجابة Firebase، ولا نفشل إنهاء الرحلة لو تعذّرت
+        // المزامنة (markTripOfflineInFirestore تبتلع أخطاءها داخلياً وتسجلها في اللوق فقط).
+        $this->trackingService->markTripOfflineInFirestore($trip->id);
+
+        return $result;
     }
 
     /**

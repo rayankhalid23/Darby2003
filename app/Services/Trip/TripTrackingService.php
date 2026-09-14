@@ -108,6 +108,39 @@ class TripTrackingService
     }
 
     /**
+     * تعليم وثيقة الرحلة في Firestore كـ "غير متصلة" عند إنهائها (أو إلغائها).
+     *
+     * بدون هذا، تبقى وثيقة trips_tracking/{tripId} على آخر حالة وصلتها من آخر نبضة GPS
+     * قبل إغلاق الرحلة (is_online: true + آخر موقع) للأبد — لأن pushLocationToFirestore()
+     * لا تُستدعى إلا من نبضات GPS الفعلية، وما فماش نبضات بعد إغلاق الرحلة. أي تطبيق
+     * ولي الأمر يستمع مباشرة على هذه الوثيقة (Firebase Listener) يبقى يشوف الحافلة "أونلاين"
+     * في آخر نقطة حتى بعد سويعات من وصولها فعلياً.
+     *
+     * merge:true عمداً — تحدّث فقط is_online/last_updated بلا ما تحذف أو تكتب فوق باقي
+     * الحقول (lat/lng/heading) اللي تبقى كآخر موقع معروف "تاريخياً" لغرض التصحيح لاحقاً.
+     */
+    public function markTripOfflineInFirestore(int $tripId): void
+    {
+        $serviceAccountPath = config('firebase.credentials.file', storage_path('app/firebase/firebase-service-account.json'));
+
+        if (!file_exists($serviceAccountPath)) {
+            return;
+        }
+
+        try {
+            $factory = (new Factory)->withServiceAccount($serviceAccountPath);
+            $database = $factory->createFirestore()->database();
+
+            $database->collection('trips_tracking')->document((string) $tripId)->set([
+                'is_online'    => false,
+                'last_updated' => now()->toIso8601String(),
+            ], ['merge' => true]);
+        } catch (Throwable $e) {
+            Log::warning("فشل تحديث حالة الأوفلاين للرحلة رقم {$tripId} في Firestore - " . $e->getMessage());
+        }
+    }
+
+    /**
      * معالجة بدء الرحلة التلقائي والتصحيح اللاحق (Back-dating)
      */
     protected function handleAutoStart(Trip $trip)
