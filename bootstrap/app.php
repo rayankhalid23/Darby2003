@@ -24,7 +24,7 @@ return Application::configure(basePath: dirname(__DIR__))
             // 1. تسجيل مسارات أولياء الأمور (Parents Module)
             Route::middleware('api')
                 ->prefix('api/parent')
-                ->group(base_path('routes/parent.php'));
+                ->group(base_path('routes/Parent.php'));
 
             // 2. تسجيل مسارات السائقين (Drivers Module)
             Route::middleware('api')
