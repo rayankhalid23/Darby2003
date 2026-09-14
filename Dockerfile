@@ -12,7 +12,6 @@ RUN install-php-extensions \
     intl \
     sodium \
     bcmath \
-    grpc \
     opcache
 
 RUN a2enmod rewrite
@@ -25,7 +24,10 @@ WORKDIR /var/www/html
 COPY . .
 
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-RUN composer install --no-interaction --optimize-autoloader --no-dev
+# google/cloud-firestore يطلب ext-grpc إجباريًا في composer.json، لكن الكود يكتب فقط
+# (set) بدون أي استماع لحظي (listen/snapshot)، فمكتبة جوجل ترجع تلقائيًا لبروتوكول REST
+# بدون هذه الإضافة. تجاهل هذا الشرط يوفّر عملية بناء تستغرق ثوانٍ بدل تجميع grpc C++ الثقيل.
+RUN composer install --no-interaction --optimize-autoloader --no-dev --ignore-platform-req=ext-grpc
 
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
