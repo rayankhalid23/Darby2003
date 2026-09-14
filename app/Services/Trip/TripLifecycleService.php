@@ -189,15 +189,22 @@ class TripLifecycleService
             }
 
             // تحديد نقطة التوقف بناءً على نوع الرحلة (صباحية للحوش / مسائية للمدرسة)
-            if ($trip->trip_type === 'morning') {
+            // ⚠️ trip_type يُخزَّن أحياناً 'Morning' (من DailyTripGenerationService وstartTrip،
+            // نسخاً عن routes.route_type) وأحياناً 'morning' (بيانات تجريبية قديمة) — المقارنة
+            // الحساسة لحالة الأحرف كانت تُفشل التعرّف على كل رحلة صباحية حقيقية وتحسب مسارها
+            // كأنه رحلة عودة (إحداثيات dropoff بدل pickup).
+            if (strtolower((string) $trip->trip_type) === 'morning') {
                 $coordinates[] = ['lat' => $sub->pickup_lat, 'lng' => $sub->pickup_lng];
             } else {
                 $coordinates[] = ['lat' => $sub->dropoff_lat, 'lng' => $sub->dropoff_lng];
             }
 
             // تأمين إحداثيات المدرسة باعتبارها المحطة الأخيرة للكل
+            // ⚠️ كانت تقرأ $sub->school->latitude/longitude، وهما عمودان غير موجودين
+            // فعلياً في جدول schools (الأعمدة الحقيقية lat/lng) — فتعود دائماً null، وتُسقِط
+            // OsrmRoutingService::calculateRoute() الطلب بأكمله عبر حارس الإحداثيات الصفرية.
             if (!$schoolCoords && $sub->school) {
-                $schoolCoords = ['lat' => $sub->school->latitude, 'lng' => $sub->school->longitude];
+                $schoolCoords = ['lat' => $sub->school->lat, 'lng' => $sub->school->lng];
             }
             
             $validSubCount++;

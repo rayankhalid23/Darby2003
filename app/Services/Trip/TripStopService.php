@@ -273,6 +273,17 @@ class TripStopService
                     'trip_cost'       => 0,
                 ]
             );
+
+            // ⚠️ كانت هذه الدالة تسجّل trip_events فقط دون تحديث trip_stops، خلافاً لمسار
+            // السائق (DriverTripController::scan) ولـ skipChild في نفس الملف. فيبقى صف
+            // محطة المنزل عالقاً على 'pending' حتى بعد صعود الطفل فعلياً، فيمنع
+            // assertNoForgottenChildren() السائق من إنهاء الرحلة رغم اكتمالها فعلاً،
+            // ويستمر resolveNextStop() في توجيه السائق لمحطة طفل صعد الحافلة بالفعل.
+            \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('child_id', $childId)
+                ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
+                ->update(['status' => \App\Models\Shared\TripStop::STATUS_BOARDED]);
         });
 
         Cache::forget("trip_waiting_{$tripId}_{$childId}");

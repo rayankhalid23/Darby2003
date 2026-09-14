@@ -1963,10 +1963,12 @@ class SubscriptionRequestService
             ->forParent($parentId)
             ->get();
 
-        // دعم إضافي: جلب طلبات الاشتراكات أيضاً في حال كانت تحت الإجراء أو العقد
+        // دعم إضافي: جلب طلبات الاشتراكات أيضاً — بغض النظر عن حالتها (pending/
+        // accepted/rejected/cancelled/contract_offered)، فالمهم هنا هو وجود
+        // علاقة اشتراك سابقة أو حالية بين ولي الأمر والسائق، وليس التحقق من
+        // كون الاشتراك نشطاً حالياً (نفس مبدأ SubscriptionRequest::existsForParentAndDriver).
         $requestSubs = SubscriptionRequest::with(['driver.user'])
             ->where('parent_id', $parentId)
-            ->whereIn('status', ['accepted', 'contract_offered', 'pending', 'active'])
             ->get();
 
         $processedDrivers = [];
@@ -1980,7 +1982,6 @@ class SubscriptionRequestService
             $processedDrivers[] = $driver->id;
 
             $driverUser = $driver->user;
-            $canChat = in_array(strtolower($sub->status ?? 'active'), ['active', 'approved']);
 
             $chats[] = [
                 "chat_room_id"        => "parent_" . $parentId . "_driver_" . $driver->id,
@@ -1989,7 +1990,9 @@ class SubscriptionRequestService
                 "driver_name"         => $driverUser->full_name,
                 "driver_phone"        => $driverUser->phone_number,
                 "driver_photo"        => $driverUser->avatar_url,
-                "can_chat"            => $canChat,
+                // بغض النظر عن حالة الاشتراك (active/completed/cancelled/...) —
+                // وجود صف اشتراك بين الطرفين كافٍ للسماح بالمحادثة بينهما.
+                "can_chat"            => true,
                 "subscription_status" => $sub->status ?? 'active'
             ];
         }
@@ -2032,11 +2035,11 @@ class SubscriptionRequestService
             })
             ->get();
 
+        // بغض النظر عن حالة الطلب — راجع نفس التعليق في getParentChats().
         $requestSubs = SubscriptionRequest::with(['parent'])
             ->where(function ($q) use ($driverId, $userId) {
                 $q->where('driver_id', $driverId)->orWhere('driver_id', $userId);
             })
-            ->whereIn('status', ['accepted', 'contract_offered', 'pending', 'active'])
             ->get();
 
         $processedParents = [];
@@ -2054,7 +2057,9 @@ class SubscriptionRequestService
                 "parent_name"         => $parentUser->full_name,
                 "parent_phone"        => $parentUser->phone_number,
                 "parent_photo"        => $parentUser->avatar_url,
-                "can_chat"            => in_array(strtolower($sub->status ?? 'active'), ['active', 'approved']),
+                // بغض النظر عن حالة الاشتراك (active/completed/cancelled/...) —
+                // وجود صف اشتراك بين الطرفين كافٍ للسماح بالمحادثة بينهما.
+                "can_chat"            => true,
                 "subscription_status" => $sub->status ?? 'active'
             ];
         }
