@@ -1,4 +1,4 @@
-FROM php:8.3-apache
+FROM php:8.4-apache
 
 # أداة تثبيت إضافات PHP الموثوقة (تتعامل مع اعتماديات apt والإضافات المفعّلة مسبقًا تلقائيًا)
 # https://github.com/mlocati/docker-php-extension-installer
