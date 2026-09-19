@@ -1,0 +1,22 @@
+{
+  "label2id": {
+    "Irrelevant": 0,
+    "Mixed": 1,
+    "Negative": 2,
+    "Neutral": 3,
+    "Positive": 4
+  },
+  "sev2id": {
+    "0": 0,
+    "1": 1,
+    "2": 2
+  },
+  "cat2id": {
+    "Behavior": 0,
+    "General": 1,
+    "Off_Topic": 2,
+    "Punctuality": 3,
+    "Safety": 4,
+    "Vehicle_Condition": 5
+  }
+}

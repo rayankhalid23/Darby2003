@@ -24,10 +24,12 @@ use App\Http\Controllers\Api\Driver\DriverStatisticsController;
     
     // 1. طلب إرسال كود الـ OTP إلى بريد السائق
     Route::post('register', [DriverRegisterController::class, 'registerAccount'])
+        ->middleware('throttle:otp')
         ->name('api.driver.register.account');
 
     // 2. التحقق من كود الـ OTP وإنشاء الحساب وتوليد التوكن فوراً
     Route::post('verify-otp', [DriverRegisterController::class, 'verifyOtp'])
+        ->middleware('throttle:otp')
         ->name('api.driver.verify-otp');
 
     // روابط تأكيد وإلغاء البريد الإلكتروني (تعتمد على التوقيع الرقمي المحمي Signed URL)
@@ -110,9 +112,13 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{dispatchId}/reject', [DriverTripController::class, 'rejectBreakdownDispatch']);
     });
 
-    // عرض بيانات الملف الشخصي للسائق وعلاقاته
+    // عرض بيانات الملف الشخصي للسائق وعلاقاته ومؤشرات الـ AI
     Route::get('profile', [ProfileController::class, 'show'])
         ->name('api.driver.profile.show');
+
+    // 🌟 عرض تقييمات السائق وملاحظات أولياء الأمور وملخص الأداء
+    Route::get('reviews', [\App\Http\Controllers\Api\Driver\DriverReviewController::class, 'index'])
+        ->name('api.driver.reviews.index');
 
     // عرض حالة اعتماد الحساب فقط (Pending/Approved/Rejected) — لشاشة انتظار المراجعة
     Route::get('status', [ProfileController::class, 'status'])

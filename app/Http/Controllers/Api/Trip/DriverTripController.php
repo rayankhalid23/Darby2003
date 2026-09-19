@@ -1083,16 +1083,24 @@ class DriverTripController extends Controller
                         }
                     }
 
-                    if ($targetLat !== null && $targetLng !== null) {
-                        try {
-                            $this->geofenceService->assertWithinCoordinates($driverLat, $driverLng, (float) $targetLat, (float) $targetLng, $stopType);
-                        } catch (\App\Services\Trip\GeofenceViolationException $e) {
-                            return response()->json([
-                                'status'     => 'error',
-                                'error_code' => $e->getErrorCode(),
-                                'message'    => $e->getMessage(),
-                            ], $e->getCode());
-                        }
+                    // 🔒 لا يجوز تغيير حالة الطفل دون التحقق الفعلي من موقع المحطة: إن تعذّر
+                    // تحديد إحداثيات المحطة (منزل/مدرسة) نرفض الطلب بدلاً من تمريره بلا تحقق.
+                    if ($targetLat === null || $targetLng === null) {
+                        return response()->json([
+                            'status'     => 'error',
+                            'error_code' => 'STOP_LOCATION_UNAVAILABLE',
+                            'message'    => 'تعذر تحديد موقع المحطة (منزل/مدرسة) للتحقق من تواجدك، يرجى التواصل مع الدعم الفني.',
+                        ], 422);
+                    }
+
+                    try {
+                        $this->geofenceService->assertWithinCoordinates($driverLat, $driverLng, (float) $targetLat, (float) $targetLng, $stopType);
+                    } catch (\App\Services\Trip\GeofenceViolationException $e) {
+                        return response()->json([
+                            'status'     => 'error',
+                            'error_code' => $e->getErrorCode(),
+                            'message'    => $e->getMessage(),
+                        ], $e->getCode());
                     }
                 }
             }

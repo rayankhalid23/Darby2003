@@ -70,7 +70,7 @@ class TripTrackingService
         ], now()->addHours(6));
 
         // 3. مزامنة الموقع اللحظي مع Firestore (trips_tracking/{tripId}) ليقرأها تطبيق ولي الأمر مباشرة
-        $this->pushLocationToFirestore($tripId, $lat, $lng, $heading, $trip->status === 'in_progress');
+        $this->pushLocationToFirestore($tripId, $lat, $lng, $speed, $heading, $trip->status === 'in_progress');
 
         return [
             'status' => 'success',
@@ -82,9 +82,13 @@ class TripTrackingService
      * كتابة/تحديث موقع الرحلة اللحظي في Firestore بنفس صيغة الـ Document المتفق عليها مع الفرونت
      * (Collection: trips_tracking, Document ID = trip_id) — لا يوقف تدفق تحديث الموقع إذا فشل.
      */
-    protected function pushLocationToFirestore(int $tripId, float $lat, float $lng, ?float $heading, bool $isOnline): void
+    protected function pushLocationToFirestore(int $tripId, float $lat, float $lng, float $speed = 0, ?float $heading = null, bool $isOnline = true): void
     {
         $serviceAccountPath = config('firebase.credentials.file', storage_path('app/firebase/firebase-service-account.json'));
+
+        if (!file_exists($serviceAccountPath) && file_exists(base_path($serviceAccountPath))) {
+            $serviceAccountPath = base_path($serviceAccountPath);
+        }
 
         if (!file_exists($serviceAccountPath)) {
             return;
@@ -95,13 +99,12 @@ class TripTrackingService
             $database = $factory->createFirestore()->database();
 
             $database->collection('trips_tracking')->document((string) $tripId)->set([
-                'trip_id'      => $tripId,
-                'driver_lat'   => $lat,
-                'driver_lng'   => $lng,
-                'heading'      => (float) ($heading ?? 0.0),
-                'is_online'    => $isOnline,
-                'last_updated' => now()->toIso8601String(),
-            ]);
+                'driver_lat' => (float) $lat,
+                'driver_lng' => (float) $lng,
+                'speed'      => (float) $speed,
+                'heading'    => (float) ($heading ?? 0.0),
+                'status'     => 'active',
+            ], ['merge' => true]);
         } catch (Throwable $e) {
             Log::warning("فشل مزامنة موقع الرحلة رقم {$tripId} مع Firestore - " . $e->getMessage());
         }
@@ -123,6 +126,10 @@ class TripTrackingService
     {
         $serviceAccountPath = config('firebase.credentials.file', storage_path('app/firebase/firebase-service-account.json'));
 
+        if (!file_exists($serviceAccountPath) && file_exists(base_path($serviceAccountPath))) {
+            $serviceAccountPath = base_path($serviceAccountPath);
+        }
+
         if (!file_exists($serviceAccountPath)) {
             return;
         }
@@ -132,6 +139,7 @@ class TripTrackingService
             $database = $factory->createFirestore()->database();
 
             $database->collection('trips_tracking')->document((string) $tripId)->set([
+                'status'       => 'completed',
                 'is_online'    => false,
                 'last_updated' => now()->toIso8601String(),
             ], ['merge' => true]);

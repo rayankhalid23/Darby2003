@@ -131,19 +131,28 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
         // 7. إعادة تأهيل السائق (Reset AI): يصفّر نافذة 30 يوم ويرجع is_trusted=true
         Route::post('/{driverId}/ai-reset', [DriverAiPolicyController::class, 'resetDriver'])
+            ->middleware('permission:drivers.suspend')
             ->name('api.admin.drivers.ai-reset');
     });
 
     // =========================================================================
     // 🤖 تنبيهات محرك تقييم تعليقات الأولياء بالذكاء الاصطناعي
     // =========================================================================
-    Route::prefix('ai-alerts')->group(function () {
+    Route::prefix('ai-alerts')->middleware('permission:drivers.suspend')->group(function () {
         Route::get('/', [DriverAiPolicyController::class, 'alertsIndex'])
             ->name('api.admin.ai-alerts.index');
         Route::get('/{id}', [DriverAiPolicyController::class, 'alertsShow'])
             ->name('api.admin.ai-alerts.show');
         Route::post('/{id}/resolve', [DriverAiPolicyController::class, 'resolveAlert'])
             ->name('api.admin.ai-alerts.resolve');
+    });
+
+    // 📜 سجل تدقيق قرارات الذكاء الاصطناعي للمشرفين
+    Route::prefix('ai-audits')->middleware('permission:drivers.suspend')->group(function () {
+        Route::get('/', [DriverAiPolicyController::class, 'auditsIndex'])
+            ->name('api.admin.ai-audits.index');
+        Route::get('/{id}', [DriverAiPolicyController::class, 'auditsShow'])
+            ->name('api.admin.ai-audits.show');
     });
 
     // =========================================================================

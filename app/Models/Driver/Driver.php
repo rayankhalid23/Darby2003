@@ -45,6 +45,10 @@ class Driver extends Model implements Wallet
         'rating_avg',
         'license_expiry_notified_milestone',
         'ai_last_reset_at',
+        'suspension_count',
+        'suspended_until',
+        'active_warnings_count',
+        'last_incident_at',
     ];
 
     /**
@@ -53,26 +57,40 @@ class Driver extends Model implements Wallet
     protected function casts(): array
     {
         return [
-            'morning_go'       => 'boolean',
-            'morning_return'   => 'boolean',
-            'afternoon_go'     => 'boolean',
-            'afternoon_return' => 'boolean',
-            'current_lat'      => 'float',
-            'current_lng'      => 'float',
-            'last_ping_at'     => 'datetime',
-            'license_expiry'   => 'date',
-            'rating_avg'       => 'float',
-            'school_stages'    => 'array',
-            'ai_last_reset_at' => 'datetime',
+            'morning_go'            => 'boolean',
+            'morning_return'        => 'boolean',
+            'afternoon_go'          => 'boolean',
+            'afternoon_return'      => 'boolean',
+            'current_lat'           => 'float',
+            'current_lng'           => 'float',
+            'last_ping_at'          => 'datetime',
+            'license_expiry'        => 'date',
+            'rating_avg'            => 'float',
+            'school_stages'         => 'array',
+            'ai_last_reset_at'      => 'datetime',
+            'suspension_count'      => 'integer',
+            'suspended_until'       => 'datetime',
+            'active_warnings_count' => 'integer',
+            'last_incident_at'      => 'datetime',
         ];
     }
 
     /**
-     * خاصية محسوبة للتوافق: السائق قابل للبحث إذا كان معتمداً وحسابه موثوقاً ونشطاً
+     * هل السائق موقوف حالياً وفق سلم العقوبات؟
+     */
+    public function getIsSuspendedAttribute(): bool
+    {
+        return $this->suspended_until !== null && $this->suspended_until->isFuture();
+    }
+
+    /**
+     * خاصية محسوبة للتوافق: السائق قابل للبحث إذا كان معتمداً وحسابه موثوقاً ونشطاً وغير موقوف
      */
     public function getIsSearchableAttribute(): bool
     {
-        return $this->status === 'Approved' && (bool) ($this->user?->is_trusted && $this->user?->is_active);
+        return $this->status === 'Approved'
+            && !$this->is_suspended
+            && (bool) ($this->user?->is_trusted && $this->user?->is_active);
     }
 
     public function getHiddenFromSearchAttribute(): bool
@@ -82,14 +100,70 @@ class Driver extends Model implements Wallet
 
     /**
      * نطاق الفلترة بالسائقين القابلين للظهور في نتائج البحث والفلترة فقط
-     * يعتمد على حالة السائق Approved وموثوقية حسابه في جدول users (is_trusted)
+     * يعتمد على حالة السائق Approved وموثوقية حسابه في جدول users وعدم وجود إيقاف نشط
      */
     public function scopeSearchable(Builder $query): Builder
     {
         return $query->where('drivers.status', 'Approved')
+                     ->where(function ($q) {
+                         $q->whereNull('drivers.suspended_until')
+                           ->orWhere('drivers.suspended_until', '<=', now());
+                     })
                      ->whereHas('user', function ($q) {
                          $q->where('is_trusted', true)->where('is_active', true);
                      });
+    }
+
+    /**
+     * حساب مدة الإيقاف القادمة بالساعات وفق سلم العقوبات التصاعدي:
+     * - المرة الأولى (0 سابق): 24 ساعة (يوم)
+     * - المرة الثانية (1 سابق): 72 ساعة (3 أيام)
+     * - المرة الثالثة (2 سابق): 168 ساعة (7 أيام / أسبوع)
+     * - المرة الرابعة فأكثر: null (إيقاف دائم حتى مراجعة الإدارة يدوياً)
+     */
+    public function calculateNextSuspensionDurationHours(): ?int
+    {
+        return match ((int) $this->suspension_count) {
+            0 => 24,
+            1 => 72,
+            2 => 168,
+            default => null,
+        };
+    }
+
+    /**
+     * تطبيق الإيقاف الاحترازي وفق سلم العقوبات وزيادة عداد العقوبات
+     */
+    public function applySuspensionWithLadder(): array
+    {
+        $durationHours = $this->calculateNextSuspensionDurationHours();
+        $suspendedUntil = $durationHours !== null ? now()->addHours($durationHours) : null;
+        $newCount = (int) $this->suspension_count + 1;
+
+        $this->update([
+            'suspension_count' => $newCount,
+            'suspended_until'  => $suspendedUntil,
+            'last_incident_at' => now(),
+        ]);
+
+        return [
+            'suspension_count' => $newCount,
+            'duration_hours'   => $durationHours,
+            'suspended_until'  => $suspendedUntil,
+            'is_indefinite'    => $durationHours === null,
+        ];
+    }
+
+    /**
+     * استعادة السائق للبحث تلقائياً إذا انقضت مدة الإيقاف
+     */
+    public function restoreToSearch(): bool
+    {
+        if ($this->suspended_until && $this->suspended_until->isPast()) {
+            $this->update(['suspended_until' => null]);
+            return true;
+        }
+        return false;
     }
 
     /**

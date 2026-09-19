@@ -193,11 +193,22 @@ class TermsService
 
         $eligibleQuery = User::query();
         if ($version->audience === TermsVersion::AUDIENCE_PARENT) {
-            $eligibleQuery->where('role_id', 3);
+            $eligibleQuery->where(function ($q) {
+                $q->whereIn('role_id', [7, 3])
+                  ->orWhereHas('role', fn ($r) => $r->where('name', 'parent'));
+            });
         } elseif ($version->audience === TermsVersion::AUDIENCE_DRIVER) {
-            $eligibleQuery->where('role_id', 4);
+            $eligibleQuery->where(function ($q) {
+                $q->whereIn('role_id', [8, 4])
+                  ->orWhereHas('role', fn ($r) => $r->where('name', 'driver'))
+                  ->orWhereHas('driver');
+            });
         } else {
-            $eligibleQuery->whereIn('role_id', [3, 4]);
+            $eligibleQuery->where(function ($q) {
+                $q->whereIn('role_id', [7, 3, 8, 4])
+                  ->orWhereHas('role', fn ($r) => $r->whereIn('name', ['parent', 'driver']))
+                  ->orWhereHas('driver');
+            });
         }
 
         $totalEligible = $eligibleQuery->count();

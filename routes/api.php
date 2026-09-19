@@ -30,13 +30,13 @@ Route::prefix('terms')->group(function () {
 });
 
 // مسار تسجيل الدخول
-Route::post('/auth/login', [LoginController::class, 'login']);
+Route::post('/auth/login', [LoginController::class, 'login'])->middleware('throttle:login');
 
 // مسارات استعادة كلمة المرور (عامة - خارج الميدلوير)
 // مسارات استعادة كلمة المرور (عامة)
 Route::prefix('auth/password')->group(function () {
-    Route::post('/send-otp', [PasswordController::class, 'sendResetOtp']); // 1. إرسال الكود
-    Route::post('/verify-otp', [PasswordController::class, 'verifyOtp']);  // 2. التحقق من الكود (الجديدة)
+    Route::post('/send-otp', [PasswordController::class, 'sendResetOtp'])->middleware('throttle:otp'); // 1. إرسال الكود
+    Route::post('/verify-otp', [PasswordController::class, 'verifyOtp'])->middleware('throttle:otp');  // 2. التحقق من الكود (الجديدة)
     Route::post('/reset', [PasswordController::class, 'resetPassword']);   // 3. تغيير كلمة المرور
 });
 

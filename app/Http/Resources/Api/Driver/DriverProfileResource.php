@@ -5,6 +5,7 @@ namespace App\Http\Resources\Api\Driver;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class DriverProfileResource extends JsonResource
 {
@@ -16,11 +17,14 @@ class DriverProfileResource extends JsonResource
         $user = $this->user;
 
         // جلب آخر طلب تعديل معلق للسائق (إن وجد) لإعلام التطبيق بالبيانات التي تحت المراجعة
-        $pendingChange = DB::table('driver_profile_changes')
-            ->where('driver_id', $this->id)
-            ->where('status', 'Pending')
-            ->latest()
-            ->first();
+        $pendingChange = null;
+        if (Schema::hasTable('driver_profile_changes')) {
+            $pendingChange = DB::table('driver_profile_changes')
+                ->where('driver_id', $this->id)
+                ->where('status', 'Pending')
+                ->latest()
+                ->first();
+        }
 
         return [
             'driver_id'         => $this->id,
@@ -34,6 +38,16 @@ class DriverProfileResource extends JsonResource
             'gender'            => $this->gender,
             'account_status'    => $this->status, // Pending, Active, Incomplete, Rejected
             'is_active'         => $user->is_active ?? 0,
+
+            // 🤖 مؤشرات الأداء والذكاء الاصطناعي للسائق
+            'ai_performance' => [
+                'rating_avg'            => round((float) ($this->rating_avg ?? 5.0), 2),
+                'active_warnings_count' => (int) ($this->active_warnings_count ?? 0),
+                'is_suspended'          => (bool) ($this->is_suspended ?? false),
+                'suspended_until'       => $this->suspended_until ? $this->suspended_until->toIso8601String() : null,
+                'suspension_count'      => (int) ($this->suspension_count ?? 0),
+                'last_incident_at'      => $this->last_incident_at ? $this->last_incident_at->toIso8601String() : null,
+            ],
             
             // البيانات القانونية الحالية في السيرفر
             'legal_data' => [
@@ -43,7 +57,7 @@ class DriverProfileResource extends JsonResource
             ],
 
             // جلب المركبات المرتبطة بالسائق
-            'vehicles' => $this->vehicles->map(function ($vehicle) {
+            'vehicles' => ($this->vehicles ?? collect())->map(function ($vehicle) {
                 return [
                     'id'                => $vehicle->id,
                     'plate_number'      => $vehicle->plate_number,

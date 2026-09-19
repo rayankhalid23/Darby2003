@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>مخطط جانت والجداول الزمنية - منظومة Darby</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #1b4d54;
+      --planned-bar: #0f4c4c;
+      --actual-bar: #5c8d89;
+      --accent: #d39e00;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #cbd5e1;
+      --text: #1e293b;
+      --muted: #64748b;
+      --danger: #e11d48;
+      --success: #059669;
+    }
+    * { box-sizing: border-box; font-family: 'Cairo', sans-serif; }
+    body { background-color: var(--bg); color: var(--text); margin: 0; padding: 25px; line-height: 1.6; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .header { text-align: center; margin-bottom: 30px; background: var(--card); padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-top: 5px solid var(--primary); }
+    .header h1 { margin: 0 0 10px; color: var(--primary); font-size: 26px; }
+    .header p { margin: 5px 0; color: var(--muted); font-size: 15px; }
+    
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 25px; }
+    .stat-card { background: var(--card); padding: 18px; border-radius: 10px; border: 1px solid var(--border); text-align: center; }
+    .stat-card .val { font-size: 22px; font-weight: 700; color: var(--primary); }
+    .stat-card .lbl { font-size: 13px; color: var(--muted); margin-top: 4px; }
+
+    .section { background: var(--card); border-radius: 12px; padding: 25px; margin-bottom: 30px; border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+    .section-title { font-size: 20px; font-weight: 700; color: var(--primary); margin-top: 0; margin-bottom: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .badge { padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+    .badge-delay { background: #fee2e2; color: #b91c1c; }
+    .badge-vacation { background: #fef3c7; color: #b45309; }
+
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px; }
+    th, td { border: 1px solid var(--border); padding: 10px 14px; text-align: center; }
+    th { background-color: #f1f5f9; color: var(--primary); font-weight: 700; }
+    tr:nth-child(even) { background-color: #f8fafc; }
+    .text-right { text-align: right; }
+
+    /* Gantt Visual representation */
+    .gantt-legend { display: flex; gap: 20px; align-items: center; margin: 15px 0; justify-content: center; font-size: 14px; }
+    .legend-box { width: 22px; height: 14px; border-radius: 3px; display: inline-block; vertical-align: middle; margin-left: 6px; }
+    .legend-planned { background: var(--planned-bar); }
+    .legend-actual { background: var(--actual-bar); }
+
+    .note-box { background: #f8fafc; border: 1.5px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 15px; font-size: 13px; color: #334155; }
+    .note-box strong { color: var(--primary); }
+
+    @media print {
+      body { padding: 0; background: white; }
+      .section { page-break-inside: avoid; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>منظومة النقل المدرسي الذكي (Darby)</h1>
+      <p><strong>المخططات الزمنية التفصيلية ونموذج جانت (Gantt Chart) للمراحل الأربع والمرحلة التمهيدية</strong></p>
+      <p>فريق العمل: <strong>ريان</strong> (Backend + AI 1 + AI Docs) | <strong>شذى & آلاء</strong> (Frontend + AI 2 + Main Project Docs)</p>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="val">2026/05/03</div>
+        <div class="lbl">تاريخ البدء المعتمد</div>
+      </div>
+      <div class="stat-card">
+        <div class="val">2026/08/25</div>
+        <div class="lbl">تاريخ الانتهاء المخطط (115 يوماً)</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" style="color: var(--danger);">2026/09/08</div>
+        <div class="lbl">تاريخ الانتهاء الفعلي (129 يوماً)</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" style="color: var(--danger);">+14 يوماً</div>
+        <div class="lbl">تأخير أسبوعين موزع تدريجياً</div>
+      </div>
+      <div class="stat-card">
+        <div class="val" style="color: var(--accent);">25 - 31 مايو</div>
+        <div class="lbl">إجازة عيد الأضحى (توقف تام 7 أيام)</div>
+      </div>
+    </div>
+
+    <!-- Overall Table -->
+    <div class="section">
+      <div class="section-title">
+        <span>الجدول الزمني العام للمشروع (Overall Project Master Schedule)</span>
+        <span class="badge badge-delay">تأخير تراكمي: أسبوعين (+14 يوماً)</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>المرحلة / الدورة</th>
+            <th>البدء المخطط</th>
+            <th>الانتهاء المخطط</th>
+            <th>المدة المخططة</th>
+            <th>البدء الفعلي</th>
+            <th>الانتهاء الفعلي</th>
+            <th>المدة الفعلية</th>
+            <th>فارق التأخير</th>
+            <th>المسؤوليات</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-right"><strong>المرحلة التمهيدية (Inception)</strong></td>
+            <td>2026-05-03</td>
+            <td>2026-05-17</td>
+            <td>15 يوماً</td>
+            <td>2026-05-03</td>
+            <td>2026-05-18</td>
+            <td>16 يوماً</td>
+            <td>+1 يوم</td>
+            <td>الفريق كاملاً</td>
+          </tr>
+          <tr>
+            <td class="text-right"><strong>تأسيس النواة الأولية</strong></td>
+            <td>2026-05-19</td>
+            <td>2026-05-24</td>
+            <td>6 أيام</td>
+            <td>2026-05-19</td>
+            <td>2026-05-24</td>
+            <td>6 أيام</td>
+            <td>0 يوم</td>
+            <td>ريان + شذى + آلاء</td>
+          </tr>
+          <tr style="background: #fffbeb;">
+            <td class="text-right"><strong>إجازة عيد الأضحى المبارك</strong></td>
+            <td><strong>2026-05-25</strong></td>
+            <td><strong>2026-05-31</strong></td>
+            <td><strong>7 أيام</strong></td>
+            <td><strong>2026-05-25</strong></td>
+            <td><strong>2026-05-31</strong></td>
+            <td><strong>7 أيام</strong></td>
+            <td><span class="badge badge-vacation">إجازة رسمية</span></td>
+            <td>توقف تام عن العمل لكافة الفريق</td>
+          </tr>
+          <tr>
+            <td class="text-right"><strong>الدورة الأولى: المصادقة والمستخدمين والصلاحيات</strong></td>
+            <td>2026-06-01</td>
+            <td>2026-06-22</td>
+            <td>22 يوماً</td>
+            <td>2026-06-01</td>
+            <td>2026-06-24</td>
+            <td>24 يوماً</td>
+            <td>+2 يوم</td>
+            <td>ريان (Back) | شذى & آلاء (Front)</td>
+          </tr>
+          <tr>
+            <td class="text-right"><strong>الدورة الثانية: الاشتراكات والأسطول والمسارات والمالية</strong></td>
+            <td>2026-06-25</td>
+            <td>2026-07-16</td>
+            <td>22 يوماً</td>
+            <td>2026-06-25</td>
+            <td>2026-07-19</td>
+            <td>25 يوماً</td>
+            <td>+2 يوم</td>
+            <td>ريان (Back/Routes) | شذى & آلاء (Front/Maps)</td>
+          </tr>
+          <tr>
+            <td class="text-right"><strong>الدورة الثالثة: الرحلات الحية والتتبع والشكاوى (عرقلة 1)</strong></td>
+            <td>2026-07-17</td>
+            <td>2026-08-06</td>
+            <td>21 يوماً</td>
+            <td>2026-07-20</td>
+            <td>2026-08-13</td>
+            <td>25 يوماً</td>
+            <td><span class="badge badge-delay">+4 أيام</span></td>
+            <td>ريان (Live Back/Sockets) | شذى & آلاء (Live UI)</td>
+          </tr>
+          <tr>
+            <td class="text-right"><strong>الدورة الرابعة: الذكاء الاصطناعي والتكامل والنشر (عرقلة 2)</strong></td>
+            <td>2026-08-07</td>
+            <td>2026-08-25</td>
+            <td>19 يوماً</td>
+            <td>2026-08-14</td>
+            <td>2026-09-08</td>
+            <td>26 يوماً</td>
+            <td><span class="badge badge-delay">+5 أيام</span></td>
+            <td>ريان (AI 1 + AI Doc) | شذى & آلاء (AI 2 + Full Doc)</td>
+          </tr>
+          <tr style="background: #f1f5f9; font-weight: 700;">
+            <td class="text-right">المجموع الكلي للمشروع</td>
+            <td>2026-05-03</td>
+            <td>2026-08-25</td>
+            <td>115 يوماً</td>
+            <td>2026-05-03</td>
+            <td>2026-09-08</td>
+            <td>129 يوماً</td>
+            <td style="color: var(--danger);">+14 يوماً (أسبوعين)</td>
+            <td>تسليم المنظومة بنجاح</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Cycle 1 -->
+    <div class="section">
+      <div class="section-title">
+        <span>3.2 الجدول الزمني للدورة الأولى (المراحل الأربع) - شهر يونيو 2026</span>
+        <div class="gantt-legend">
+          <span><span class="legend-box legend-planned"></span> الوقت المخطط له</span>
+          <span><span class="legend-box legend-actual"></span> الوقت الفعلي</span>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>المراحل</th>
+            <th>تاريخ البداية</th>
+            <th>تاريخ النهاية</th>
+            <th>الأسبوع الأول</th>
+            <th>الأسبوع الثاني</th>
+            <th>الأسبوع الثالث</th>
+            <th>الأسبوع الرابع</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>تحليل</strong></td>
+            <td>2026-06-01</td>
+            <td>2026-06-05</td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (4 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (5 أيام)</div>
+            </td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>تصميم</strong></td>
+            <td>2026-06-06</td>
+            <td>2026-06-09</td>
+            <td></td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (4 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (4 أيام)</div>
+            </td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>تنفيذ</strong></td>
+            <td>2026-06-10</td>
+            <td>2026-06-19</td>
+            <td></td>
+            <td colspan="2">
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (9 أيام: الباك ريان، والفرونت شذى & آلاء بالتوازي)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (10 أيام: إنجاز تكامل الصلاحيات والـ Tokens)</div>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>إختبار</strong></td>
+            <td>2026-06-20</td>
+            <td>2026-06-24</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (3 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (4 أيام)</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note-box">
+        <strong>ملاحظة هندسية:</strong> تشير أسهم التغذية الراجعة من الاختبار إلى التنفيذ إلى إعادة تعديل صيغة توكن المصادقة وحالات انتهاء الجلسة.
+      </div>
+    </div>
+
+    <!-- Cycle 3 (Bottleneck 1) -->
+    <div class="section">
+      <div class="section-title">
+        <span>3.4 الجدول الزمني للدورة الثالثة: الرحلات الحية والتتبع (فترة العرقلة الأولى - نهاية شهر 7)</span>
+        <span class="badge badge-delay">+4 أيام تأخير مرحلي</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>المراحل</th>
+            <th>تاريخ البداية</th>
+            <th>تاريخ النهاية</th>
+            <th>الأسبوع 4 يوليو</th>
+            <th>الأسبوع 1 أغسطس</th>
+            <th>الأسبوع 2 أغسطس</th>
+            <th>الأسبوع 3 أغسطس</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>تحليل</strong></td>
+            <td>2026-07-20</td>
+            <td>2026-07-24</td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (4 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (5 أيام)</div>
+            </td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>تصميم</strong></td>
+            <td>2026-07-25</td>
+            <td>2026-07-28</td>
+            <td></td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (4 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (4 أيام)</div>
+            </td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>تنفيذ</strong></td>
+            <td>2026-07-29</td>
+            <td>2026-08-08</td>
+            <td></td>
+            <td colspan="2">
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (7 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (10 أيام: عرقلة ربط الـ WebSockets وبث المواقع)</div>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>إختبار</strong></td>
+            <td>2026-08-09</td>
+            <td>2026-08-13</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px; margin-bottom:2px;">مخطط (3 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:3px; border-radius:3px;">فعلي (5 أيام: معالجة سيناريوهات فقدان اتصال السائق)</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note-box">
+        <strong>سبب الانحراف والتأخير (نهاية يوليو):</strong> تباين استجابة الـ API Payload للرحلات الحية بين الباك إند والفرونت إند استلزم الرجوع من مرحلة الاختبار إلى التنفيذ والتصميم لتوحيد عقد البيانات وتجربة الاسترجاع اللحظي.
+      </div>
+    </div>
+
+    <!-- Cycle 4 (CRISP-DM AI Bottleneck 2) -->
+    <div class="section">
+      <div class="section-title">
+        <span>4.2.5 الجدول الزمني للدورة الرابعة: المراحل الستة للذكاء الاصطناعي (CRISP-DM) - شهر أغسطس</span>
+        <span class="badge badge-delay">+5 أيام تأخير (اكتمال الأسبوعين)</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 50px;">#</th>
+            <th>المراحل (CRISP-DM)</th>
+            <th>تاريخ البداية</th>
+            <th>تاريخ النهاية</th>
+            <th>من 08/14 لـ 08/20</th>
+            <th>من 08/21 لـ 08/27</th>
+            <th>من 08/28 لـ 09/03</th>
+            <th>من 09/04 لـ 09/08</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>1</td>
+            <td><strong>فهم العمل</strong></td>
+            <td>2026-08-14</td>
+            <td>2026-08-16</td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px; margin-bottom:2px;">مخطط (3 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px;">فعلي (3 أيام)</div>
+            </td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>2</td>
+            <td><strong>فهم البيانات</strong></td>
+            <td>2026-08-17</td>
+            <td>2026-08-20</td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px; margin-bottom:2px;">مخطط (3 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px;">فعلي (4 أيام)</div>
+            </td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>3</td>
+            <td><strong>إعداد البيانات</strong></td>
+            <td>2026-08-21</td>
+            <td>2026-08-25</td>
+            <td></td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px; margin-bottom:2px;">مخطط (4 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px;">فعلي (5 أيام: تنظيف 80k سجل)</div>
+            </td>
+            <td></td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>4</td>
+            <td><strong>النمذجة</strong></td>
+            <td>2026-08-26</td>
+            <td>2026-09-01</td>
+            <td></td>
+            <td colspan="2">
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px; margin-bottom:2px;">مخطط (5 أيام: ريان AI 1 + شذى & آلاء AI 2)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px;">فعلي (7 أيام: ضبط Hyperparameters وموازنة الفئات)</div>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>5</td>
+            <td><strong>التقييم</strong></td>
+            <td>2026-09-02</td>
+            <td>2026-09-05</td>
+            <td></td>
+            <td></td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px; margin-bottom:2px;">مخطط (3 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px;">فعلي (4 أيام)</div>
+            </td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>6</td>
+            <td><strong>النشر والتوثيق</strong></td>
+            <td>2026-09-06</td>
+            <td>2026-09-08</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td>
+              <div style="background: var(--planned-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px; margin-bottom:2px;">مخطط (3 أيام)</div>
+              <div style="background: var(--actual-bar); color:#fff; font-size:11px; padding:2px; border-radius:3px;">فعلي (3 أيام: تسليم التوثيق كاملاً)</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="note-box">
+        <strong>سبب الانحراف والتأخير (شهر 8):</strong> التدريب على مجموعة بيانات قرارات السائقين المليئة بالمتغيرات (80 ألف سطر)، ومعالجة عدم التوازن الإحصائي في قرارات القبول/الرفض، وضبط استجابة واجهة المستخدم الذكية.
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

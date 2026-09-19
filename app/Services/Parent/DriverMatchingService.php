@@ -62,10 +62,14 @@ class DriverMatchingService
             'child_ids'         => $children->pluck('id')->values()->all(),
         ];
 
-        // 2. الاستعلام الأساسي: السائق معتمد وموثوق ورخصته سارية
+        // 2. الاستعلام الأساسي: السائق معتمد وموثوق ورخصته سارية وغير محجوب مؤقتاً
         $query = Driver::query()
             ->select('drivers.*')
             ->whereIn('drivers.status', ['Approved', 'Active'])
+            ->where(function ($q) {
+                $q->whereNull('drivers.suspended_until')
+                  ->orWhere('drivers.suspended_until', '<=', now());
+            })
             ->whereHas('user', fn($u) => $u->where('is_trusted', true))
             ->where('drivers.license_expiry', '>=', now()->toDateString())
             ->with(['user', 'vehicles', 'zones']);

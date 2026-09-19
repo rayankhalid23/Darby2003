@@ -52,9 +52,9 @@ class LoginController extends Controller
 
             // 4. تحديد مدة الصلاحية الذكية
             $expiresAt = match ((int) $user->role_id) {
-                1, 2 => now()->addWeek(),   // 1 و 2 لمدة أسبوع
-                3, 4 => now()->addYear(),   // 3 و 4 لمدة سنة
-                default => now()->addDay(), // الحالة الافتراضية
+                1, 2, 5, 6 => now()->addWeek(),   // أدوار إدارية ومشرفين لمدة أسبوع
+                3, 4, 7, 8 => now()->addYear(),   // أولياء الأمور والسائقين لمدة سنة
+                default    => now()->addDay(),    // الحالة الافتراضية
             };
 
             // 5. إنشاء التوكن
@@ -79,20 +79,26 @@ class LoginController extends Controller
                 );
             }
 
-            // تحديد مسمى الدور (Role Name) بناءً على المعرف في قاعدة البيانات
+            // تحديد مسمى الدور (Role Name) بناءً على المعرف أو جدول الأدوار
             $roleName = match ((int) $user->role_id) {
                 1 => 'مدير النظام',
-                2 => 'مشرف',
-                3 => 'ولي أمر',
-                4 => 'سائق',
-                default => 'مستخدم',
+                2 => 'مشرف العمليات',
+                3 => ($user->role?->name === 'parent') ? 'ولي أمر' : 'مشرف الأسطول',
+                4 => ($user->role?->name === 'driver') ? 'سائق' : 'مشرف الدعم',
+                5 => 'المشرف المالي',
+                6 => 'مشرف الجغرافيا',
+                7 => 'ولي أمر',
+                8 => 'سائق',
+                default => $user->role?->display_name ?? 'مستخدم',
             };
 
             // 7. تحويل كائن المستخدم إلى الـ Resource المناسب لدوره
             $userResourceData = match ((int) $user->role_id) {
-                3 => new ParentResource($user), 
-                4 => new DriverResource($user),
-                1, 2, 5, 6, 7, 8 => new \App\Http\Resources\Api\Admin\AdminResource($user),
+                7       => new ParentResource($user),
+                8       => new DriverResource($user),
+                3       => ($user->role?->name === 'parent') ? new ParentResource($user) : new \App\Http\Resources\Api\Admin\AdminResource($user),
+                4       => ($user->role?->name === 'driver') ? new DriverResource($user) : new \App\Http\Resources\Api\Admin\AdminResource($user),
+                1, 2, 5, 6 => new \App\Http\Resources\Api\Admin\AdminResource($user),
                 default => new UserResource($user), 
             };
 

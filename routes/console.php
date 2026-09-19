@@ -32,3 +32,8 @@ Schedule::command('subscriptions:settle')->dailyAt('01:00')->withoutOverlapping(
 // فحص يومي للسلامة المالية — يسجّل Log::emergency عند أي انحراف بين أحواض
 // الخزينة والالتزامات الفعلية، دون تعديل أي بيانات (التصحيح يدوي عبر --fix).
 Schedule::command('finance:reconcile')->dailyAt('03:00')->withoutOverlapping();
+
+// ────────────────────────── نظام الذكاء الاصطناعي ──────────────────────────
+// يستعيد السائقين الذين انتهت مدة إيقافهم المؤقت تلقائياً (سلم العقوبات).
+// لا يُعيد السائقين ذوي الإيقاف الدائم (suspended_until = null + suspension_count > 0).
+Schedule::command('drivers:restore-suspended')->everyFifteenMinutes()->withoutOverlapping();

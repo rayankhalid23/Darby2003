@@ -689,6 +689,14 @@ class NotificationFormatter
                 $action = 'open';
                 break;
 
+            case self::TYPE_DRIVER_AI_ALERT:
+                $title = $customTitle ?? 'تنبيه نظام التقييم الذكي 🔔';
+                $message = $customMessage ?? 'تم تحديث سجل تقييمك في النظام.';
+                $screen = 'PROFILE';
+                $entityType = 'driver';
+                $action = 'open_profile';
+                break;
+
             case self::TYPE_GENERAL_ANNOUNCEMENT:
                 $title = $customTitle ?? 'إشعار من الإدارة 📢';
                 $message = $customMessage ?? 'إشعار وتنبيه عام لكافة مستخدمي المنصة.';

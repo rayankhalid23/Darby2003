@@ -34,6 +34,17 @@ class AdminDriverDetailResource extends JsonResource
                 'retention_rate'         => (float) ($this->retention_rate ?? 100.0),
             ],
 
+            // 🤖 حالة الذكاء الاصطناعي والحجب والتحذيرات لإدارة النظام
+            'ai_status' => [
+                'rating_avg'            => round((float) ($this->rating_avg ?? 5.0), 2),
+                'is_suspended'          => (bool) ($this->is_suspended ?? false),
+                'suspended_until'       => $this->suspended_until ? $this->suspended_until->toDateTimeString() : null,
+                'active_warnings_count' => (int) ($this->active_warnings_count ?? 0),
+                'suspension_count'      => (int) ($this->suspension_count ?? 0),
+                'last_incident_at'      => $this->last_incident_at ? $this->last_incident_at->toDateTimeString() : null,
+                'ai_last_reset_at'      => $this->ai_last_reset_at ? $this->ai_last_reset_at->toDateTimeString() : null,
+            ],
+
             // بيانات الحساب والمستخدم الأساسية
             'user_account' => [
                 'user_id'           => $this->user->id ?? null,

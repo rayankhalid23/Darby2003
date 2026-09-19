@@ -34,6 +34,12 @@ Thumbs.db
 /ai_service/**/*.pyc
 /ai_service/.pytest_cache/
 
+# ai-service (BERT driver reviews classifier)
+/ai-service/venv/
+/ai-service/**/__pycache__/
+/ai-service/**/*.pyc
+/ai-service/*.pt
+
 osrm-data/
 
 osrm-data/

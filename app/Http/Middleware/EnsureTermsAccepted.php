@@ -34,10 +34,17 @@ class EnsureTermsAccepted
             return $next($request);
         }
 
-        $role = match ((int) ($user->role_id ?? 0)) {
-            3       => TermsVersion::AUDIENCE_PARENT,
-            4       => TermsVersion::AUDIENCE_DRIVER,
-            default => null,
+        $roleName = $user->role?->name;
+        $role = match ($roleName) {
+            'parent' => TermsVersion::AUDIENCE_PARENT,
+            'driver' => TermsVersion::AUDIENCE_DRIVER,
+            default  => match ((int) ($user->role_id ?? 0)) {
+                7, 3    => TermsVersion::AUDIENCE_PARENT,
+                8, 4    => TermsVersion::AUDIENCE_DRIVER,
+                default => \App\Models\Driver\Driver::where('user_id', $user->id)->exists()
+                    ? TermsVersion::AUDIENCE_DRIVER
+                    : null,
+            },
         };
 
         // مستخدم بدور غير خاضع لهذا الميثاق (أدمن مثلاً) يمر بلا فحص

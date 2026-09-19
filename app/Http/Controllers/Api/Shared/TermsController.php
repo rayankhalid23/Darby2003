@@ -149,9 +149,24 @@ class TermsController extends Controller
             return null;
         }
 
+        // 1. فحص اسم الدور عبر جدول الأدوار
+        $roleName = $user->role?->name;
+        if ($roleName === 'parent') {
+            return TermsVersion::AUDIENCE_PARENT;
+        }
+        if ($roleName === 'driver') {
+            return TermsVersion::AUDIENCE_DRIVER;
+        }
+
+        // 2. فحص وجود بروفايل سائق بالسجل
+        if (\App\Models\Driver\Driver::where('user_id', $user->id)->exists()) {
+            return TermsVersion::AUDIENCE_DRIVER;
+        }
+
+        // 3. فحص المعرف الرقمي للدور (7 أو 3 لولي الأمر، 8 أو 4 للسائق)
         return match ((int) ($user->role_id ?? 0)) {
-            3       => TermsVersion::AUDIENCE_PARENT,
-            4       => TermsVersion::AUDIENCE_DRIVER,
+            7, 3    => TermsVersion::AUDIENCE_PARENT,
+            8, 4    => TermsVersion::AUDIENCE_DRIVER,
             default => null,
         };
     }

@@ -6,7 +6,7 @@
         "dev": "vite",
         "build": "vite build",
         "tunnel": "lt --port 8000 --subdomain darby-app-api",
-        "backend": "concurrently \"php artisan serve\" \"npm run tunnel\" \"php artisan queue:work\""
+        "backend": "concurrently \"php artisan serve\" \"npm run tunnel\" \"php artisan queue:work\" \"powershell -ExecutionPolicy Bypass -File scripts/start-ai.ps1\""
     },
     "devDependencies": {
         "axios": "^1.7.4",

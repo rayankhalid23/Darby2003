@@ -69,25 +69,26 @@ class DriverTripNextStopAndGeofencingTest extends TestCase
             'role_id'       => 3,
             'is_active'     => 1,
         ]);
-        $parent = ParentModel::create(['user_id' => $parentUser->id, 'is_trusted' => 1]);
+        $parent = ParentModel::findOrFail($parentUser->id);
+        $parent->update(['is_trusted' => 1]);
 
         $this->school = School::create([
             'name'    => 'مدرسة الفجر الجديد الابتدائية',
             'address' => 'شارع النصر، طرابلس',
             'lat'     => 32.895000,
             'lng'     => 13.185000,
-            'status'  => 'active',
+            'status'  => 'Approved',
         ]);
 
         $addr1 = Address::create([
-            'parent_id' => $parentUser->id,
+            'user_id' => $parentUser->id,
             'label'     => 'حي الأندلس، شارع 1',
             'lat'       => 32.871000,
             'lng'       => 13.156000,
         ]);
 
         $addr2 = Address::create([
-            'parent_id' => $parentUser->id,
+            'user_id' => $parentUser->id,
             'label'     => 'حي الأندلس، شارع 2',
             'lat'       => 32.873000,
             'lng'       => 13.158000,
@@ -249,6 +250,33 @@ class DriverTripNextStopAndGeofencingTest extends TestCase
         $response->assertStatus(422);
         $response->assertJsonPath('status', 'error');
         $response->assertJsonPath('error_code', 'OUT_OF_RANGE');
+    }
+
+    public function test_manual_pickup_fails_when_stop_location_is_unavailable(): void
+    {
+        // لا توجد إحداثيات لا في trip_stops ولا في الاشتراك ولا في عنوان الطفل،
+        // إذاً يستحيل التحقق من تواجد السائق في منطقة المنزل، فيجب رفض الطلب
+        // بدلاً من تمرير الصعود دون أي تحقق فعلي من الموقع.
+        $this->stop1->update(['lat' => null, 'lng' => null]);
+        $this->sub1->update(['pickup_lat' => null, 'pickup_lng' => null]);
+        $this->child1->update(['address_id' => null]);
+
+        $response = $this->actingAs($this->driverUser)
+            ->postJson("/api/v1/driver/trips/{$this->trip->id}/children/{$this->sub1->id}/status", [
+                'action'    => 'pickup',
+                'latitude'  => 32.871020,
+                'longitude' => 13.156010,
+            ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonPath('status', 'error');
+        $response->assertJsonPath('error_code', 'STOP_LOCATION_UNAVAILABLE');
+
+        // يجب ألا تتغير حالة المحطة أو يُسجَّل صعود دون تحقق فعلي من الموقع
+        $this->assertDatabaseHas('trip_stops', [
+            'id'     => $this->stop1->id,
+            'status' => 'pending',
+        ]);
     }
 
     public function test_manual_pickup_succeeds_within_geofence_and_returns_next_child_stop(): void

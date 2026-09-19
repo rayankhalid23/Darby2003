@@ -99,9 +99,13 @@ class ReviewClassifierService
         }
 
         return [
-            'label'    => $label,
-            'severity' => $severity,
-            'category' => $category,
+            'label'                => $label,
+            'severity'             => $severity,
+            'category'             => $category,
+            'sentiment_confidence' => isset($data['sentiment_confidence']) ? (float) $data['sentiment_confidence'] : null,
+            'category_confidence'  => isset($data['category_confidence']) ? (float) $data['category_confidence'] : null,
+            'sentiment_pred'       => isset($data['sentiment_pred']) ? (int) $data['sentiment_pred'] : null,
+            'category_pred'        => isset($data['category_pred']) ? (int) $data['category_pred'] : null,
         ];
     }
 }

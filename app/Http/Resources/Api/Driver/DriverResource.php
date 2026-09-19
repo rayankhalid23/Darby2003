@@ -59,8 +59,10 @@ class DriverResource extends JsonResource
                 'license_number'       => $driver?->license_number,
                 'license_expiry'       => $driver?->license_expiry,
                 'driver_status'        => $driver?->status ?? 'Pending',
-                
-            
+                'rating_avg'           => round((float) ($driver?->rating_avg ?? 5.0), 2),
+                'active_warnings_count'=> (int) ($driver?->active_warnings_count ?? 0),
+                'is_suspended'         => (bool) ($driver?->is_suspended ?? false),
+                'suspended_until'      => $driver?->suspended_until ? $driver->suspended_until->toIso8601String() : null,
             ];
 
         } catch (Exception $e) {

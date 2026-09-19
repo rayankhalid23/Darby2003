@@ -27,8 +27,8 @@ use App\Http\Controllers\Api\Trip\ParentTripController;
 */
 
 // 1. مسارات المصادقة العامة والتحقق (بدون توكن)
-Route::post('/send-otp', [ParentAuthController::class, 'sendOtp']);
-Route::post('/register', [ParentAuthController::class, 'register']);
+Route::post('/send-otp', [ParentAuthController::class, 'sendOtp'])->middleware('throttle:otp');
+Route::post('/register', [ParentAuthController::class, 'register'])->middleware('throttle:otp');
 
 /*
  * روابط موقّعة (Signed URLs) لتأكيد أو رفض تغيير البريد الإلكتروني لولي الأمر.
@@ -119,7 +119,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // مسارات تقييم السائقين لولي الأمر
     Route::prefix('driver-reviews')->group(function () {
         Route::get('/driver/{driverId}', [DriverReviewController::class, 'index']);
-        Route::post('/', [DriverReviewController::class, 'store']);
+        Route::post('/', [DriverReviewController::class, 'store'])->middleware('throttle:reviews');
         Route::put('/{id}', [DriverReviewController::class, 'update']);
         Route::delete('/{id}', [DriverReviewController::class, 'destroy']);
     });
