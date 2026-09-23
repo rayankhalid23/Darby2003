@@ -1411,7 +1411,11 @@ class SubscriptionRequestService
         }
 
         return DB::transaction(function () use ($activeSub) {
-            $activeSub->update(['status' => 'cancelled']);
+            $activeSub->update([
+                'status'       => 'cancelled',
+                'cancelled_by' => 'parent',
+                'cancelled_at' => now(),
+            ]);
 
             $this->releaseSeatsForSubscription($activeSub);
 
@@ -1466,7 +1470,12 @@ class SubscriptionRequestService
         }
 
         return DB::transaction(function () use ($activeSub, $driverId, $reason) {
-            $activeSub->update(['status' => 'cancelled']);
+            $activeSub->update([
+                'status'              => 'cancelled',
+                'cancelled_by'        => 'driver',
+                'cancelled_at'        => now(),
+                'cancellation_reason' => $reason,
+            ]);
 
             $this->releaseSeatsForSubscription($activeSub);
 
@@ -1858,6 +1867,28 @@ class SubscriptionRequestService
           ->exists();
     }
 
+    /**
+     * هل لدى ولي الأمر اشتراك "نشط" أو "مكتمل" فعليًا مع هذا السائق؟
+     * تُستخدم كشرط بوابة (gate) قبل السماح بإضافة تقييم/تعليق على السائق،
+     * بخلاف parentHasSubscriptionWithDriver التي تشمل أيضاً الاشتراكات الملغاة.
+     */
+    public function parentHasActiveOrCompletedSubscriptionWithDriver(int $userId, int $driverId): bool
+    {
+        $parent = ParentModel::where('user_id', $userId)->first();
+        if (!$parent) {
+            return false;
+        }
+
+        return ActiveSubscription::whereHas('subscriptionRequest', function ($q) use ($userId, $parent, $driverId) {
+            $q->where(function ($q2) use ($userId, $parent) {
+                $q2->where('parent_id', $parent->id)
+                   ->orWhere('parent_id', $userId);
+            })->where('driver_id', $driverId);
+        })
+          ->whereIn('status', ['active', 'completed'])
+          ->exists();
+    }
+
 
     public function getDriverActiveSubscriptions(int $userId, ?string $filter = null)
     {
@@ -2099,5 +2130,196 @@ class SubscriptionRequestService
             'total_fees' => (float) $approvedChanges->sum('fee_amount'),
             'requests'   => $approvedChanges,
         ];
+    }
+
+    /**
+     * 👥 جلب قائمة السائقين الذين تعامل معهم ولي الأمر
+     * يشمل الحالات: (اشتراك قيد الانتظار / اشتراك نشط / اشتراك مكتمل / اشتراك ملغي من ولي الأمر / اشتراك ملغي من السائق)
+     */
+    public function getParentContractedDrivers(int $userId, ?string $filter = null): array
+    {
+        $parent = ParentModel::where('user_id', $userId)->first();
+        $parentIds = array_filter(array_unique([$userId, $parent?->id]));
+
+        $requests = SubscriptionRequest::with([
+            'driver.user',
+            'driver.vehicles',
+            'activeSubscriptions'
+        ])
+        ->whereIn('parent_id', $parentIds)
+        ->orderBy('id', 'desc')
+        ->get();
+
+        $driversMap = [];
+
+        foreach ($requests as $request) {
+            $driver = $request->driver;
+            if (!$driver || !$driver->user) {
+                continue;
+            }
+
+            $driverId = (int) $driver->id;
+
+            if (!isset($driversMap[$driverId])) {
+                $driversMap[$driverId] = [
+                    'driver'        => $driver,
+                    'user'          => $driver->user,
+                    'subscriptions' => [],
+                ];
+            }
+
+            if ($request->activeSubscriptions->isNotEmpty()) {
+                foreach ($request->activeSubscriptions as $activeSub) {
+                    $status = strtolower((string) ($activeSub->status ?? ''));
+                    $cancelledBy = strtolower((string) ($activeSub->cancelled_by ?? ''));
+
+                    if ($status === 'cancelled') {
+                        $canonicalStatus = ($cancelledBy === 'driver') ? 'cancelled_by_driver' : 'cancelled_by_parent';
+                    } elseif ($status === 'completed') {
+                        $canonicalStatus = 'completed';
+                    } elseif ($status === 'active') {
+                        $endDate = $request->end_date;
+                        if ($endDate && \Carbon\Carbon::parse($endDate)->endOfDay()->isPast()) {
+                            $canonicalStatus = 'completed';
+                        } else {
+                            $canonicalStatus = 'active';
+                        }
+                    } elseif ($status === 'pending') {
+                        $canonicalStatus = 'pending';
+                    } else {
+                        $canonicalStatus = $status;
+                    }
+
+                    $driversMap[$driverId]['subscriptions'][] = [
+                        'type'                => 'active_subscription',
+                        'id'                  => $activeSub->id,
+                        'request_id'          => $request->id,
+                        'status'              => $canonicalStatus,
+                        'status_label'        => $this->getSubscriptionStatusLabel($canonicalStatus),
+                        'cancelled_by'        => $activeSub->cancelled_by,
+                        'cancellation_reason' => $activeSub->cancellation_reason,
+                    ];
+                }
+            } else {
+                $reqStatus = strtolower((string) ($request->status ?? 'pending'));
+                if (in_array($reqStatus, ['pending', 'acquired'])) {
+                    $canonicalStatus = 'pending';
+                } elseif ($reqStatus === 'cancelled') {
+                    $canonicalStatus = 'cancelled_by_parent';
+                } elseif ($reqStatus === 'rejected') {
+                    $canonicalStatus = 'cancelled_by_driver';
+                } elseif ($reqStatus === 'completed') {
+                    $canonicalStatus = 'completed';
+                } elseif (in_array($reqStatus, ['accepted', 'active'])) {
+                    $endDate = $request->end_date;
+                    if ($endDate && \Carbon\Carbon::parse($endDate)->endOfDay()->isPast()) {
+                        $canonicalStatus = 'completed';
+                    } else {
+                        $canonicalStatus = 'active';
+                    }
+                } else {
+                    $canonicalStatus = $reqStatus;
+                }
+
+                $driversMap[$driverId]['subscriptions'][] = [
+                    'type'                => 'request',
+                    'id'                  => null,
+                    'request_id'          => $request->id,
+                    'status'              => $canonicalStatus,
+                    'status_label'        => $this->getSubscriptionStatusLabel($canonicalStatus),
+                    'cancelled_by'        => ($canonicalStatus === 'cancelled_by_driver') ? 'driver' : (($canonicalStatus === 'cancelled_by_parent') ? 'parent' : null),
+                    'cancellation_reason' => $request->rejection_reason,
+                ];
+            }
+        }
+
+        $statusPriority = [
+            'active'              => 1,
+            'pending'             => 2,
+            'completed'           => 3,
+            'cancelled_by_parent' => 4,
+            'cancelled_by_driver' => 5,
+        ];
+
+        $filter = !empty($filter) ? strtolower(trim($filter)) : null;
+
+        $result = [];
+
+        foreach ($driversMap as $driverId => $item) {
+            $driver = $item['driver'];
+            $user = $item['user'];
+            $subs = $item['subscriptions'];
+
+            $uniqueStatuses = array_values(array_unique(array_column($subs, 'status')));
+
+            // تطبيق الفلتر إذا تم تحديده
+            if ($filter && $filter !== 'all') {
+                if ($filter === 'cancelled') {
+                    if (!in_array('cancelled_by_parent', $uniqueStatuses) && !in_array('cancelled_by_driver', $uniqueStatuses)) {
+                        continue;
+                    }
+                } elseif (!in_array($filter, $uniqueStatuses)) {
+                    continue;
+                }
+            }
+
+            // تحديد الحالة الأساسية للسائق
+            if ($filter && in_array($filter, $uniqueStatuses)) {
+                $primaryStatus = $filter;
+            } else {
+                $sortedStatuses = $uniqueStatuses;
+                usort($sortedStatuses, function ($a, $b) use ($statusPriority) {
+                    $pA = $statusPriority[$a] ?? 99;
+                    $pB = $statusPriority[$b] ?? 99;
+                    return $pA <=> $pB;
+                });
+                $primaryStatus = $sortedStatuses[0] ?? 'unknown';
+            }
+
+            $rawAvatar = $user->avatar_url;
+            $avatarUrl = \App\Http\Controllers\Api\Shared\MediaController::urlFor($rawAvatar);
+
+            $activeVehicle = $driver->vehicles?->where('status', 'Active')->first() ?? $driver->vehicles?->first();
+
+            $result[] = [
+                'id'                        => (int) $driver->id,
+                'user_id'                   => (int) $user->id,
+                'name'                      => $user->full_name,
+                'avatar_url'                => $avatarUrl,
+                'photo_url'                 => $avatarUrl,
+                'image'                     => $avatarUrl,
+                'phone_number'              => $user->phone_number,
+                'rating'                    => round((float) ($driver->rating_avg ?? 5.0), 1),
+                'subscription_status'       => $primaryStatus,
+                'subscription_status_label' => $this->getSubscriptionStatusLabel($primaryStatus),
+                'available_statuses'        => $uniqueStatuses,
+                'available_statuses_labels' => array_map(fn($s) => $this->getSubscriptionStatusLabel($s), $uniqueStatuses),
+                'subscriptions_count'       => count($subs),
+                'vehicle'                   => $activeVehicle ? [
+                    'brand'        => $activeVehicle->brand,
+                    'model'        => $activeVehicle->model,
+                    'color'        => $activeVehicle->color,
+                    'plate_number' => $activeVehicle->plate_number,
+                ] : null,
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * ترجمة مسمى حالة الاشتراك للعربية
+     */
+    public function getSubscriptionStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'pending'             => 'اشتراك قيد الانتظار',
+            'active'              => 'اشتراك نشط',
+            'completed'           => 'اشتراك مكتمل',
+            'cancelled_by_parent' => 'اشتراك ملغي من ولي الأمر',
+            'cancelled_by_driver' => 'اشتراك ملغي من السائق',
+            'cancelled'           => 'اشتراك ملغي',
+            default               => $status,
+        };
     }
 }

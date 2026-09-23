@@ -19,7 +19,7 @@ class AdminPendingChangeResource extends JsonResource
         // تحويل روابط الصور والوثائق القديمة والجديدة لروابط آمنة عبر MediaController
         $formatMediaMap = function (array $values) {
             $formatted = $values;
-            foreach (['avatar_url', 'vehicle_image_url', 'vehicle_image_path', 'doc_license_path', 'doc_logbook_path', 'doc_insurance_path', 'doc_booklet_page_path', 'doc_stamp_path', 'doc_technical_inspection_path'] as $key) {
+            foreach (['avatar_url', 'vehicle_image_url', 'vehicle_image_path', 'doc_license_path', 'license_image_url', 'doc_logbook_path', 'doc_insurance_path', 'doc_booklet_page_path', 'doc_stamp_path', 'doc_technical_inspection_path'] as $key) {
                 if (!empty($formatted[$key])) {
                     $formatted[$key] = MediaController::urlFor($formatted[$key]);
                 }
@@ -59,8 +59,10 @@ class AdminPendingChangeResource extends JsonResource
                 'national_id'       => $oldValues['national_id'] ?? null,
                 'license_number'    => $oldValues['license_number'] ?? null,
                 'license_expiry'    => $oldValues['license_expiry'] ?? null,
+                'license_image_url' => MediaController::urlFor($oldValues['license_image_url'] ?? $oldValues['doc_license_path'] ?? null),
                 'documents' => [
-                    'doc_license_path'              => MediaController::urlFor($oldValues['doc_license_path'] ?? null),
+                    'doc_license_path'              => MediaController::urlFor($oldValues['doc_license_path'] ?? $oldValues['license_image_url'] ?? null),
+                    'license_image_url'             => MediaController::urlFor($oldValues['license_image_url'] ?? $oldValues['doc_license_path'] ?? null),
                     'doc_logbook_path'              => MediaController::urlFor($oldValues['doc_logbook_path'] ?? null),
                     'doc_insurance_path'            => MediaController::urlFor($oldValues['doc_insurance_path'] ?? null),
                     'doc_booklet_page_path'         => MediaController::urlFor($oldValues['doc_booklet_page_path'] ?? null),
@@ -91,8 +93,10 @@ class AdminPendingChangeResource extends JsonResource
                 'national_id'       => $newValues['national_id'] ?? null,
                 'license_number'    => $newValues['license_number'] ?? null,
                 'license_expiry'    => $newValues['license_expiry'] ?? null,
+                'license_image_url' => MediaController::urlFor($newValues['license_image_url'] ?? $newValues['doc_license_path'] ?? null),
                 'documents' => [
-                    'doc_license_path'              => MediaController::urlFor($newValues['doc_license_path'] ?? null),
+                    'doc_license_path'              => MediaController::urlFor($newValues['doc_license_path'] ?? $newValues['license_image_url'] ?? null),
+                    'license_image_url'             => MediaController::urlFor($newValues['license_image_url'] ?? $newValues['doc_license_path'] ?? null),
                     'doc_logbook_path'              => MediaController::urlFor($newValues['doc_logbook_path'] ?? null),
                     'doc_insurance_path'            => MediaController::urlFor($newValues['doc_insurance_path'] ?? null),
                     'doc_booklet_page_path'         => MediaController::urlFor($newValues['doc_booklet_page_path'] ?? null),

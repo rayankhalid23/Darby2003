@@ -75,10 +75,11 @@ class TestDecisionLayer extends Command
         $allPassed = true;
 
         // -------------------------------------------------------------
-        // الحالة الأولى: REWARD (كود 1)
+        // الحالة الأولى: REWARD (كود 1) — الآن قرار النموذج الخام، إعلامي وليس صارماً
         // -------------------------------------------------------------
         $this->line("\n❶ الحالة الأولى: المكافأة والتشجيع (REWARD - كود 1)");
-        $this->line("   الشرط: نسبة إيجابي >= 80% من أولياء أمور مختلفين دون بلاغات سلامة.");
+        $this->line("   لا توجد قاعدة نسب هنا بعد الآن — القرار بالكامل لنموذج XGBoost الخام.");
+        $this->line("   هذا الفحص إعلامي (لا يُسقط الاختبار)، يعرض فقط ماذا يقرر النموذج فعلياً لتعليق إيجابي على سائق نظيف السجل.");
         $cleanup();
         $testDriver->update(['rating_avg' => 4.00, 'active_warnings_count' => 2]);
 
@@ -99,23 +100,13 @@ class TestDecisionLayer extends Command
         $res1 = $decisionService->evaluateDriverDecision($testDriver->fresh(), $r1);
         $testDriver->refresh();
 
-        $t1_pass = ($res1['decision_code'] === AiDecisionService::CODE_REWARD)
-            && (abs($testDriver->rating_avg - 4.12) < 0.02)
-            && ($testDriver->active_warnings_count === 1)
-            && ($testDriver->suspended_until === null);
-
-        if ($t1_pass) {
-            $this->info("   ✅ نجاح: القرار REWARD (+3%) | التقييم: 4.00 ➔ {$testDriver->rating_avg} | التحذيرات: 2 ➔ {$testDriver->active_warnings_count} | الحجب: لا");
-        } else {
-            $this->error("   ❌ فشل: القرار كود {$res1['decision_code']} | التقييم: {$testDriver->rating_avg}");
-            $allPassed = false;
-        }
+        $this->comment("   ℹ️ قرار النموذج: {$res1['decision_name']} | التقييم: 4.00 ➔ {$testDriver->rating_avg} | التحذيرات: 2 ➔ {$testDriver->active_warnings_count} | الحجب: " . ($testDriver->suspended_until ? 'نعم' : 'لا'));
 
         // -------------------------------------------------------------
         // الحالة الثانية: ADMIN_REVIEW_REQUIRED (كود 4)
         // -------------------------------------------------------------
         $this->line("\n❷ الحالة الثانية: التدخل الإداري الحرج (ADMIN_REVIEW_REQUIRED - كود 4)");
-        $this->line("   الشرط: بلاغ سلامة حرج (Safety) أو خطورة قصوى (severity=2) ➔ حجب فوري وتدخل الأدمن.");
+        $this->line("   [سقف أمان ثابت] الشرط: بلاغ سلامة حرج (Safety) أو خطورة قصوى (severity=2) ➔ حجب فوري وتدخل الأدمن، يتجاوز أي قرار للنموذج.");
         $cleanup();
         $testDriver->update(['rating_avg' => 4.00]);
 
@@ -153,7 +144,7 @@ class TestDecisionLayer extends Command
         // الحالة الثالثة: MODERATE_VIOLATION (كود 2)
         // -------------------------------------------------------------
         $this->line("\n❸ الحالة الثالثة: مخالفة متوسطة متكررة (MODERATE_VIOLATION - كود 2)");
-        $this->line("   الشرط: تكرار الشكوى في نفس التصنيف من أكثر من ولي أمر مختلف (>= 2) في 15 يوماً.");
+        $this->line("   [سقف أمان ثابت] الشرط: تكرار الشكوى في نفس التصنيف من أكثر من ولي أمر مختلف (>= 2) في 15 يوماً، يتجاوز أي قرار للنموذج.");
         $cleanup();
         $testDriver->update(['rating_avg' => 4.00, 'active_warnings_count' => 0]);
 
@@ -207,7 +198,8 @@ class TestDecisionLayer extends Command
         // الحالة الرابعة: FORMAL_WARNING (كود 3)
         // -------------------------------------------------------------
         $this->line("\n❹ الحالة الرابعة: إنذار رسمي (FORMAL_WARNING - كود 3)");
-        $this->line("   الشرط: نسبة الشكاوى السلبية >= 40% من أولياء أمور مختلفين (دون تكرار تصنيف متوسط ولا مساس بالسلامة).");
+        $this->line("   لا توجد قاعدة نسب هنا بعد الآن — القرار بالكامل لنموذج XGBoost الخام (دون تكرار تصنيف ولا مساس بالسلامة، فلا سقف أمان يتدخل).");
+        $this->line("   هذا الفحص إعلامي (لا يُسقط الاختبار).");
         $cleanup();
         $testDriver->update(['rating_avg' => 4.00, 'active_warnings_count' => 0]);
 
@@ -244,23 +236,14 @@ class TestDecisionLayer extends Command
         $res4 = $decisionService->evaluateDriverDecision($testDriver->fresh(), $r4_2);
         $testDriver->refresh();
 
-        $t4_pass = ($res4['decision_code'] === AiDecisionService::CODE_FORMAL_WARNING)
-            && (abs($testDriver->rating_avg - 3.80) < 0.02)
-            && ($testDriver->active_warnings_count === 1)
-            && ($testDriver->suspended_until === null);
-
-        if ($t4_pass) {
-            $this->info("   ✅ نجاح: القرار FORMAL_WARNING (-5%) | التقييم: 4.00 ➔ {$testDriver->rating_avg} | التحذيرات: 0 ➔ {$testDriver->active_warnings_count} | الحجب: لا (إنذار رسمي فقط دون حجب)");
-        } else {
-            $this->error("   ❌ فشل: القرار كود {$res4['decision_code']} | التقييم: {$testDriver->rating_avg}");
-            $allPassed = false;
-        }
+        $this->comment("   ℹ️ قرار النموذج: {$res4['decision_name']} | التقييم: 4.00 ➔ {$testDriver->rating_avg} | التحذيرات: 0 ➔ {$testDriver->active_warnings_count} | الحجب: " . ($testDriver->suspended_until ? 'نعم' : 'لا'));
 
         // -------------------------------------------------------------
         // الحالة الخامسة: NO_ACTION (كود 0)
         // -------------------------------------------------------------
         $this->line("\n❺ الحالة الخامسة: الاستقرار / لا إجراء (NO_ACTION - كود 0)");
-        $this->line("   الشرط: نسبة الشكاوى السلبية أقل من 40% والإيجابية أقل من 80% (ضمن الحدود الطبيعية المستقرة).");
+        $this->line("   لا توجد قاعدة نسب هنا بعد الآن — القرار بالكامل لنموذج XGBoost الخام لتعليق سلبي بسيط وسط أغلبية إيجابية.");
+        $this->line("   هذا الفحص إعلامي (لا يُسقط الاختبار).");
         $cleanup();
         $testDriver->update(['rating_avg' => 4.00, 'active_warnings_count' => 0]);
 
@@ -299,17 +282,7 @@ class TestDecisionLayer extends Command
         $res5 = $decisionService->evaluateDriverDecision($testDriver->fresh(), $r5);
         $testDriver->refresh();
 
-        $t5_pass = ($res5['decision_code'] === AiDecisionService::CODE_NO_ACTION)
-            && (abs($testDriver->rating_avg - 4.00) < 0.01)
-            && ($testDriver->active_warnings_count === 0)
-            && ($testDriver->suspended_until === null);
-
-        if ($t5_pass) {
-            $this->info("   ✅ نجاح: القرار NO_ACTION | التقييم لم يتغير: {$testDriver->rating_avg} | التحذيرات: 0 | الحجب: لا");
-        } else {
-            $this->error("   ❌ فشل: القرار كود {$res5['decision_code']} | التقييم: {$testDriver->rating_avg}");
-            $allPassed = false;
-        }
+        $this->comment("   ℹ️ قرار النموذج: {$res5['decision_name']} | التقييم: 4.00 ➔ {$testDriver->rating_avg} | التحذيرات: 0 ➔ {$testDriver->active_warnings_count} | الحجب: " . ($testDriver->suspended_until ? 'نعم' : 'لا'));
 
         // -------------------------------------------------------------
         // الحالة السادسة: التعافي الذاتي (30 Days Rule)
@@ -354,6 +327,56 @@ class TestDecisionLayer extends Command
             $this->info("   ✅ نجاح: سقط التحذير تلقائياً لمرور 35 يوماً دون شكاوى جديدة في (Punctuality) | عداد التحذيرات استُرجع إلى: {$testDriver->active_warnings_count}");
         } else {
             $this->error("   ❌ فشل التعافي الذاتي: تم تعافي {$healedCount} | العداد: {$testDriver->active_warnings_count}");
+            $allPassed = false;
+        }
+
+        // -------------------------------------------------------------
+        // الحالة السابعة: بلاغ سلامة نشط يمنع المكافأة (سقف أمان جديد)
+        // -------------------------------------------------------------
+        $this->line("\n❼ [سقف أمان ثابت] بلاغ سلامة نشط يمنع أي مكافأة رشّحها النموذج");
+        $this->line("   الشرط: بلاغ Safety ضمن نافذة 15 يوماً + تعليق جديد إيجابي جداً ⇒ لا يمكن أن يكون القرار REWARD.");
+        $cleanup();
+        $testDriver->update(['rating_avg' => 4.00, 'active_warnings_count' => 0]);
+
+        // بلاغ سلامة سابق قبل 5 أيام (لم يُحل بعد)
+        DriverReview::create([
+            'driver_id'               => $testDriverId,
+            'parent_id'               => $parentIds[1],
+            'rating'                  => 1,
+            'comment'                 => 'السائق كان يقود بتهور شديد وكاد يتسبب بحادث',
+            'ai_label'                => 'Negative',
+            'ai_category'             => 'Safety',
+            'ai_severity'             => 2,
+            'ai_sentiment_confidence' => 0.97,
+            'ai_category_confidence'  => 0.95,
+            'is_processed_in_decision'=> true,
+            'created_at'              => now()->subDays(5),
+        ]);
+
+        // تعليق إيجابي جداً اليوم من ولي أمر آخر
+        $r7 = DriverReview::create([
+            'driver_id'               => $testDriverId,
+            'parent_id'               => $parentIds[2],
+            'rating'                  => 5,
+            'comment'                 => 'سائق رائع جداً واليوم كان ممتازاً بكل شيء',
+            'ai_label'                => 'Positive',
+            'ai_category'             => 'General',
+            'ai_severity'             => 0,
+            'ai_sentiment_confidence' => 0.97,
+            'ai_category_confidence'  => 0.95,
+            'is_processed_in_decision'=> false,
+            'created_at'              => now(),
+        ]);
+
+        $res7 = $decisionService->evaluateDriverDecision($testDriver->fresh(), $r7);
+        $testDriver->refresh();
+
+        $t7_pass = ($res7['decision_code'] !== AiDecisionService::CODE_REWARD);
+
+        if ($t7_pass) {
+            $this->info("   ✅ نجاح: القرار {$res7['decision_name']} (ليس REWARD رغم أن التعليق إيجابي 100%) | التقييم: {$testDriver->rating_avg}");
+        } else {
+            $this->error("   ❌ فشل: النموذج كافأ سائقاً رغم بلاغ سلامة نشط لم يُحل بعد | التقييم: {$testDriver->rating_avg}");
             $allPassed = false;
         }
 

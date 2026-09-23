@@ -32,6 +32,11 @@ class CompleteProfileRequest extends FormRequest
         if ($this->hasFile('insurance_photo') && empty($data['doc_insurance'])) {
             $data['doc_insurance'] = $this->file('insurance_photo');
         }
+        foreach (['avatar_url', 'photo', 'driver_photo', 'personal_photo'] as $alias) {
+            if ($this->hasFile($alias) && empty($data['avatar'])) {
+                $data['avatar'] = $this->file($alias);
+            }
+        }
         if (!empty($data['vehicle_type']) && empty($data['type'])) {
             $data['type'] = $data['vehicle_type'];
         }
@@ -71,6 +76,11 @@ class CompleteProfileRequest extends FormRequest
         }
         if ($this->hasFile('insurance_photo') && !$this->hasFile('doc_insurance')) {
             $this->files->set('doc_insurance', $this->file('insurance_photo'));
+        }
+        foreach (['avatar_url', 'photo', 'driver_photo', 'personal_photo'] as $alias) {
+            if ($this->hasFile($alias) && !$this->hasFile('avatar')) {
+                $this->files->set('avatar', $this->file($alias));
+            }
         }
 
         $merge = [];
@@ -145,6 +155,7 @@ class CompleteProfileRequest extends FormRequest
             'insurance_expiry' => 'required|date|after:today',
             'stamp_expiry'                => 'required|date|after:today',
             'technical_inspection_expiry' => 'required|date|after:today',
+            'avatar'           => 'nullable|file|mimes:jpeg,png,jpg,webp,heic,heif|max:10240',
 
             // بيانات المركبة
             'plate_number'    => 'required|string|max:20',

@@ -142,6 +142,33 @@ class DriverProfileService
     }
 
     /**
+     * تغيير كلمة المرور للسائق: يتطلب كلمة المرور الحالية للتحقق قبل الاعتماد.
+     */
+    public function changePassword(int $userId, string $oldPassword, string $newPassword): User
+    {
+        Log::info("Service: Starting changePassword for Driver User ID: {$userId}");
+
+        $user = User::findOrFail($userId);
+
+        if (!Hash::check($oldPassword, $user->password)) {
+            Log::warning("Service: changePassword blocked. Wrong current password for Driver User ID: {$userId}");
+            throw new Exception("كلمة المرور الحالية غير صحيحة.");
+        }
+
+        if (Hash::check($newPassword, $user->password)) {
+            Log::warning("Service: changePassword blocked. New password matches current password for Driver User ID: {$userId}");
+            throw new Exception("كلمة المرور الجديدة يجب أن تختلف عن كلمة المرور الحالية.");
+        }
+
+        $user->password_hash = Hash::make($newPassword);
+        $user->save();
+
+        Log::info("Service: Password changed successfully for Driver User ID: {$userId}");
+
+        return $user;
+    }
+
+    /**
      * دالة اعتماد البريد الجديد للسائق عبر الرابط الموقّع المفتوح من الإيميل
      */
     public function approveEmailChange(int $userId): bool
@@ -280,7 +307,8 @@ class DriverProfileService
                 'insurance_expiry'              => $existingDocs->get('INSURANCE')?->insurance_expiry_date,
                 'stamp_expiry'                  => $existingDocs->get('STAMP')?->stamp_expiry_date,
                 'technical_inspection_expiry'   => $existingDocs->get('TECHNICAL_INSPECTION')?->technical_inspection_expiry_date,
-                'doc_license_path'              => $existingDocs->get('LICENSE')?->file_url,
+                'doc_license_path'              => $driver->license_image_url ?? $existingDocs->get('LICENSE')?->file_url,
+                'license_image_url'             => $driver->license_image_url,
                 'doc_logbook_path'              => $existingDocs->get('VEHICLE_LOGBOOK')?->file_url,
                 'doc_insurance_path'            => $existingDocs->get('INSURANCE')?->file_url,
                 'doc_booklet_page_path'         => $existingDocs->get('BOOKLET_PERSONAL_PAGE')?->file_url,
@@ -297,6 +325,12 @@ class DriverProfileService
                 if (array_key_exists($field, $data)) {
                     $driverUpdate[$field] = $data[$field];
                 }
+            }
+
+            if (!empty($data['doc_license_path'])) {
+                $driverUpdate['license_image_url'] = $data['doc_license_path'];
+            } elseif (!empty($data['license_image_url'])) {
+                $driverUpdate['license_image_url'] = $data['license_image_url'];
             }
 
             if (array_key_exists('license_expiry', $data)) {

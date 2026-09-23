@@ -146,7 +146,12 @@ class DriverRegisterService
         }
 
         // المعاملة محصورة في تحديث الجداول فقط لتستغرق بضع ميلي ثوانٍ
-        DB::transaction(function () use ($driver, $data) {
+        DB::transaction(function () use ($driver, $data, $user) {
+            // 0. تحديث الصورة الشخصية لحساب المستخدم إن رُفعت
+            if (!empty($data['avatar_path'])) {
+                $user->update(['avatar_url' => $data['avatar_path']]);
+            }
+
             // 1. تحديث بيانات السائق ورخصته
             $driver->update([
                 'national_id'       => $data['national_id'],

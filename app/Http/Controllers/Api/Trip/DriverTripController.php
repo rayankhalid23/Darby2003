@@ -1002,106 +1002,68 @@ class DriverTripController extends Controller
                 ->where('stop_type', 'home')
                 ->first();
 
-            $isQr = strtolower($request->verification_method ?? 'manual') === 'qr';
-
-            // 🎯 المرونة مع الأمان: QR يمنح سرعة وتجاوزاً للنطاق، الزر اليدوي يُقيَّد بـ GPS
+            // 🔒 تأكيد الصعود/النزول يدوي فقط بالزر، ويُقيَّد دائماً بموقع GPS الفعلي للسائق
+            // (لا يوجد بديل QR يتجاوز هذا الفحص).
             if (in_array($action, ['pickup', 'dropoff'], true)) {
-                if ($isQr) {
-                    $providedToken = $request->qr_code_token;
-                    if (!$providedToken || $providedToken !== ($sub->child->qr_code_token ?? null)) {
-                        return response()->json([
-                            'status'     => 'error',
-                            'error_code' => 'QR_MISMATCH',
-                            'message'    => 'كود الـ QR غير متطابق مع هذا الطفل.',
-                        ], 400);
-                    }
+                $driverLat = $request->has('latitude') ? (float) $request->latitude : ($request->has('lat') ? (float) $request->lat : null);
+                $driverLng = $request->has('longitude') ? (float) $request->longitude : ($request->has('lng') ? (float) $request->lng : null);
 
-                    // الـ QR يمنح مرونة في النطاق (لا يُلزم السائق بالوقوف على النقطة بالضبط)
-                    // لكنه لا يُعفي من الوجود في المنطقة: بدون هذا كان يمكن تأكيد صعود طفل
-                    // من مئات الكيلومترات بمجرد امتلاك الكود.
-                    $qrLat = $request->has('latitude') ? (float) $request->latitude : ($request->has('lat') ? (float) $request->lat : null);
-                    $qrLng = $request->has('longitude') ? (float) $request->longitude : ($request->has('lng') ? (float) $request->lng : null);
+                if ($driverLat === null || $driverLng === null) {
+                    return response()->json([
+                        'status'     => 'error',
+                        'error_code' => 'LOCATION_REQUIRED',
+                        'message'    => 'يجب إرسال الموقع الجغرافي الحالي (latitude, longitude) للتأكيد.',
+                    ], 422);
+                }
 
-                    if ($qrLat !== null && $qrLng !== null) {
-                        $qrTargetLat = $homeStop?->lat ?? $sub->pickup_lat;
-                        $qrTargetLng = $homeStop?->lng ?? $sub->pickup_lng;
+                // اتجاه الرحلة يحدد أين يصعد/ينزل الطفل فعلياً: ذهاب => المنزل ثم المدرسة، إياب => المدرسة ثم المنزل.
+                $isGoTrip = \App\Models\Driver\DriverSeatSlot::isGoSlot($trip->shift_slot ?? '')
+                    || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
 
-                        if ($action === 'dropoff') {
-                            $isGoTripQr = \App\Models\Driver\DriverSeatSlot::isGoSlot($trip->shift_slot ?? '')
-                                || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
-                            if ($isGoTripQr) {
-                                $qrTargetLat = $sub->dropoff_lat ?? $sub->school?->lat ?? $sub->child?->school?->lat;
-                                $qrTargetLng = $sub->dropoff_lng ?? $sub->school?->lng ?? $sub->child?->school?->lng;
-                            }
-                        }
-
-                        if ($qrTargetLat !== null && $qrTargetLng !== null) {
-                            $distanceMeters = \App\Support\GeoEstimator::haversineKm(
-                                $qrLat, $qrLng, (float) $qrTargetLat, (float) $qrTargetLng
-                            ) * 1000;
-
-                            if ($distanceMeters > \App\Services\Trip\GeofenceService::QR_MAX_RADIUS_METERS) {
-                                return response()->json([
-                                    'status'     => 'error',
-                                    'error_code' => 'OUT_OF_RANGE',
-                                    'message'    => sprintf(
-                                        'أنت بعيد جداً عن موقع المحطة (%.0f م) لتأكيد المسح. يرجى الاقتراب من الموقع.',
-                                        $distanceMeters
-                                    ),
-                                ], 422);
-                            }
-                        }
-                    }
-                } else {
-                    $driverLat = $request->has('latitude') ? (float) $request->latitude : ($request->has('lat') ? (float) $request->lat : null);
-                    $driverLng = $request->has('longitude') ? (float) $request->longitude : ($request->has('lng') ? (float) $request->lng : null);
-
-                    if ($driverLat === null || $driverLng === null) {
-                        return response()->json([
-                            'status'     => 'error',
-                            'error_code' => 'LOCATION_REQUIRED',
-                            'message'    => 'يجب إرسال الموقع الجغرافي الحالي (latitude, longitude) للتأكيد اليدوي، أو استخدام مسح QR.',
-                        ], 422);
-                    }
-
-                    if ($action === 'pickup') {
+                // ⚠️ في رحلة الإياب يصعد الطفل للحافلة من المدرسة لا من المنزل؛ فحص الصعود هنا
+                // كان يقارن دائماً بموقع المنزل بغض النظر عن اتجاه الرحلة، فيرفض أي تأكيد صعود
+                // فعلي عند المدرسة بخطأ OUT_OF_RANGE. يجب أن يتبع نفس منطق dropoff بالضبط.
+                if ($action === 'pickup') {
+                    if ($isGoTrip) {
                         $targetLat = $homeStop?->lat ?? $sub->pickup_lat ?? $sub->child?->latitude ?? $sub->child?->address?->lat;
                         $targetLng = $homeStop?->lng ?? $sub->pickup_lng ?? $sub->child?->longitude ?? $sub->child?->address?->lng;
                         $stopType = \App\Models\Shared\TripStop::TYPE_HOME;
                     } else {
-                        // dropoff
-                        $isGoTrip = \App\Models\Driver\DriverSeatSlot::isGoSlot($trip->shift_slot ?? '')
-                            || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
-                        if ($isGoTrip) {
-                            $targetLat = $sub->dropoff_lat ?? $sub->school?->lat ?? $sub->child?->school?->lat;
-                            $targetLng = $sub->dropoff_lng ?? $sub->school?->lng ?? $sub->child?->school?->lng;
-                            $stopType = \App\Models\Shared\TripStop::TYPE_SCHOOL;
-                        } else {
-                            $targetLat = $homeStop?->lat ?? $sub->pickup_lat ?? $sub->child?->latitude ?? $sub->child?->address?->lat;
-                            $targetLng = $homeStop?->lng ?? $sub->pickup_lng ?? $sub->child?->longitude ?? $sub->child?->address?->lng;
-                            $stopType = \App\Models\Shared\TripStop::TYPE_HOME;
-                        }
+                        $targetLat = $sub->dropoff_lat ?? $sub->school?->lat ?? $sub->child?->school?->lat;
+                        $targetLng = $sub->dropoff_lng ?? $sub->school?->lng ?? $sub->child?->school?->lng;
+                        $stopType = \App\Models\Shared\TripStop::TYPE_SCHOOL;
                     }
+                } else {
+                    // dropoff
+                    if ($isGoTrip) {
+                        $targetLat = $sub->dropoff_lat ?? $sub->school?->lat ?? $sub->child?->school?->lat;
+                        $targetLng = $sub->dropoff_lng ?? $sub->school?->lng ?? $sub->child?->school?->lng;
+                        $stopType = \App\Models\Shared\TripStop::TYPE_SCHOOL;
+                    } else {
+                        $targetLat = $homeStop?->lat ?? $sub->pickup_lat ?? $sub->child?->latitude ?? $sub->child?->address?->lat;
+                        $targetLng = $homeStop?->lng ?? $sub->pickup_lng ?? $sub->child?->longitude ?? $sub->child?->address?->lng;
+                        $stopType = \App\Models\Shared\TripStop::TYPE_HOME;
+                    }
+                }
 
-                    // 🔒 لا يجوز تغيير حالة الطفل دون التحقق الفعلي من موقع المحطة: إن تعذّر
-                    // تحديد إحداثيات المحطة (منزل/مدرسة) نرفض الطلب بدلاً من تمريره بلا تحقق.
-                    if ($targetLat === null || $targetLng === null) {
-                        return response()->json([
-                            'status'     => 'error',
-                            'error_code' => 'STOP_LOCATION_UNAVAILABLE',
-                            'message'    => 'تعذر تحديد موقع المحطة (منزل/مدرسة) للتحقق من تواجدك، يرجى التواصل مع الدعم الفني.',
-                        ], 422);
-                    }
+                // 🔒 لا يجوز تغيير حالة الطفل دون التحقق الفعلي من موقع المحطة: إن تعذّر
+                // تحديد إحداثيات المحطة (منزل/مدرسة) نرفض الطلب بدلاً من تمريره بلا تحقق.
+                if ($targetLat === null || $targetLng === null) {
+                    return response()->json([
+                        'status'     => 'error',
+                        'error_code' => 'STOP_LOCATION_UNAVAILABLE',
+                        'message'    => 'تعذر تحديد موقع المحطة (منزل/مدرسة) للتحقق من تواجدك، يرجى التواصل مع الدعم الفني.',
+                    ], 422);
+                }
 
-                    try {
-                        $this->geofenceService->assertWithinCoordinates($driverLat, $driverLng, (float) $targetLat, (float) $targetLng, $stopType);
-                    } catch (\App\Services\Trip\GeofenceViolationException $e) {
-                        return response()->json([
-                            'status'     => 'error',
-                            'error_code' => $e->getErrorCode(),
-                            'message'    => $e->getMessage(),
-                        ], $e->getCode());
-                    }
+                try {
+                    $this->geofenceService->assertWithinCoordinates($driverLat, $driverLng, (float) $targetLat, (float) $targetLng, $stopType);
+                } catch (\App\Services\Trip\GeofenceViolationException $e) {
+                    return response()->json([
+                        'status'     => 'error',
+                        'error_code' => $e->getErrorCode(),
+                        'message'    => $e->getMessage(),
+                    ], $e->getCode());
                 }
             }
 
@@ -1301,6 +1263,8 @@ class DriverTripController extends Controller
                         return;
                     }
 
+                    // ⚠️ عمود trip_events.reason غير موجود فعلياً بقاعدة البيانات (خلافاً لـ trip_stops.reason
+                    // الذي يُحدَّث تحت) — تمريره هنا كان يسبب فشل SQL في كل استدعاء لهذا الفرع.
                     TripEvent::create([
                         'trip_id'         => $tripId,
                         'child_id'        => $childId,
@@ -1311,7 +1275,6 @@ class DriverTripController extends Controller
                         'location_lat'    => $sub->pickup_lat ?? 0,
                         'location_lng'    => $sub->pickup_lng ?? 0,
                         'trip_cost'       => 0,
-                        'reason'          => $reasonInput,
                     ]);
 
                     $stopUpdate = ['status' => $stopStatusMap[$action]];
@@ -1529,13 +1492,6 @@ class DriverTripController extends Controller
     public function skip(Request $request, $tripId, $childId): JsonResponse
     {
         $request->merge(['action' => 'skip']);
-        return $this->updateChildTripStatus($request, $tripId, $childId);
-    }
-
-    public function verifyQr(Request $request, $tripId, $childId): JsonResponse
-    {
-        $stage = strtolower($request->stage ?? 'pickup') === 'dropoff' ? 'dropoff' : 'pickup';
-        $request->merge(['action' => $stage, 'verification_method' => 'qr']);
         return $this->updateChildTripStatus($request, $tripId, $childId);
     }
 

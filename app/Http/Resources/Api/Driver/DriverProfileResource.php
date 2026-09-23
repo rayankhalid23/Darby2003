@@ -51,9 +51,12 @@ class DriverProfileResource extends JsonResource
             
             // البيانات القانونية الحالية في السيرفر
             'legal_data' => [
-                'national_id'    => $this->national_id,
-                'license_number' => $this->license_number,
-                'license_expiry' => $this->license_expiry,
+                'national_id'            => $this->national_id,
+                'license_number'         => $this->license_number,
+                'license_expiry'         => $this->license_expiry,
+                'license_image_url'      => \App\Http\Controllers\Api\Shared\MediaController::urlFor($this->license_image_url),
+                'license_image_data_url' => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($this->license_image_url),
+                'doc_license_url'        => \App\Http\Controllers\Api\Shared\MediaController::urlFor($this->license_image_url),
             ],
 
             // جلب المركبات المرتبطة بالسائق
@@ -75,21 +78,48 @@ class DriverProfileResource extends JsonResource
             }),
 
             'documents' => $this->whenLoaded('documents', function () {
-                return $this->documents->map(fn ($doc) => [
-                    'id'                               => $doc->id,
-                    'doc_type'                         => $doc->doc_type,
-                    'file_url'                         => \App\Http\Controllers\Api\Shared\MediaController::urlFor($doc->file_url),
-                    'expiry_date'                      => $doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null,
-                    'is_verified'                      => (bool) $doc->is_verified,
-                    'state'                            => $doc->state ?? 'pending',
-                    'state_label'                      => $doc->state_label ?? 'معلقة',
-                    'insurance_expiry_date'            => $doc->insurance_expiry_date ?? ($doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null),
-                    'stamp_expiry_date'                => $doc->stamp_expiry_date,
-                    'technical_inspection_expiry_date' => $doc->technical_inspection_expiry_date,
-                    'status'                           => $doc->state ?? ($doc->status ?? 'pending'),
-                    'feedback'                         => $doc->feedback,
-                    'uploaded_at'                      => $doc->uploaded_at ?? ($doc->created_at ? $doc->created_at->toDateTimeString() : null),
-                ]);
+                $docs = collect();
+
+                if (!empty($this->license_image_url)) {
+                    $rawLicenseUrl = $this->license_image_url;
+                    $docs->push([
+                        'id'                               => null,
+                        'doc_type'                         => 'LICENSE',
+                        'file_url'                         => \App\Http\Controllers\Api\Shared\MediaController::urlFor($rawLicenseUrl),
+                        'document_data_url'                => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($rawLicenseUrl),
+                        'expiry_date'                      => $this->license_expiry ? (\Carbon\Carbon::parse($this->license_expiry)->format('Y-m-d')) : null,
+                        'is_verified'                      => $this->status === 'Approved',
+                        'state'                            => $this->status === 'Approved' ? 'active' : ($this->status === 'Rejected' ? 'rejected' : 'pending'),
+                        'state_label'                      => $this->status === 'Approved' ? 'معتمدة' : ($this->status === 'Rejected' ? 'مرفوضة' : 'معلقة'),
+                        'insurance_expiry_date'            => null,
+                        'stamp_expiry_date'                => null,
+                        'technical_inspection_expiry_date' => null,
+                        'status'                           => $this->status === 'Approved' ? 'approved' : ($this->status === 'Rejected' ? 'rejected' : 'pending'),
+                        'feedback'                         => null,
+                        'uploaded_at'                      => $this->created_at ? $this->created_at->toDateTimeString() : null,
+                    ]);
+                }
+
+                foreach ($this->documents as $doc) {
+                    $docs->push([
+                        'id'                               => $doc->id,
+                        'doc_type'                         => $doc->doc_type,
+                        'file_url'                         => \App\Http\Controllers\Api\Shared\MediaController::urlFor($doc->file_url),
+                        'document_data_url'                => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($doc->file_url),
+                        'expiry_date'                      => $doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null,
+                        'is_verified'                      => (bool) $doc->is_verified,
+                        'state'                            => $doc->state ?? 'pending',
+                        'state_label'                      => $doc->state_label ?? 'معلقة',
+                        'insurance_expiry_date'            => $doc->insurance_expiry_date ?? ($doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null),
+                        'stamp_expiry_date'                => $doc->stamp_expiry_date,
+                        'technical_inspection_expiry_date' => $doc->technical_inspection_expiry_date,
+                        'status'                           => $doc->state ?? ($doc->status ?? 'pending'),
+                        'feedback'                         => $doc->feedback,
+                        'uploaded_at'                      => $doc->uploaded_at ?? ($doc->created_at ? $doc->created_at->toDateTimeString() : null),
+                    ]);
+                }
+
+                return $docs;
             }),
 
             // هندسة ذكية لواجهة التطبيق: إعلام التطبيق بوجود تحديثات بانتظار موافقة الأدمن

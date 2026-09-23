@@ -257,6 +257,13 @@ class AdminDriverService
             if (isset($data['is_active'])) {
                 $userUpdates['is_active'] = (bool) $data['is_active'];
             }
+            if (!empty($data['avatar_path'])) {
+                if (!empty($user->avatar_url) && !str_starts_with($user->avatar_url, 'http')) {
+                    $oldPath = str_replace('storage/', '', $user->avatar_url);
+                    \Illuminate\Support\Facades\Storage::disk('public')->delete($oldPath);
+                }
+                $userUpdates['avatar_url'] = $data['avatar_path'];
+            }
 
             if (!empty($userUpdates)) {
                 $user->update($userUpdates);
@@ -281,6 +288,11 @@ class AdminDriverService
                         ->where('status', 'Expired')
                         ->update(['status' => 'Pending']);
                 }
+            }
+            if (!empty($data['doc_license_path'])) {
+                $driverUpdates['license_image_url'] = $data['doc_license_path'];
+            } elseif (!empty($data['license_image_url'])) {
+                $driverUpdates['license_image_url'] = $data['license_image_url'];
             }
             if (isset($data['status'])) {
                 $driverUpdates['status'] = ucfirst(strtolower($data['status']));
@@ -369,8 +381,10 @@ class AdminDriverService
 
             $expiryOldSnapshot = [];
             $hasDriverDocs = \Illuminate\Support\Facades\Schema::hasTable('driver_documents');
+            $canQueryDocColumns = $hasDriverDocs && \Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'doc_type');
+
             foreach ($expiryFieldMap as $docType => $map) {
-                $expiryOldSnapshot[$map['input']] = $hasDriverDocs
+                $expiryOldSnapshot[$map['input']] = ($canQueryDocColumns && \Illuminate\Support\Facades\Schema::hasColumn('driver_documents', $map['column']))
                     ? DriverDocument::where('driver_id', $driver->id)->where('doc_type', $docType)->value($map['column'])
                     : null;
             }
@@ -380,18 +394,22 @@ class AdminDriverService
                     $updateFields = [
                         'file_url'    => $data[$pathKey],
                         'status'      => 'Pending',
-                        'uploaded_at' => now(),
                     ];
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'uploaded_at')) {
+                        $updateFields['uploaded_at'] = now();
+                    }
 
                     if (isset($expiryFieldMap[$docType])) {
-                        $updateFields['expiry_notified_milestone'] = null;
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'expiry_notified_milestone')) {
+                            $updateFields['expiry_notified_milestone'] = null;
+                        }
                         $expiryInput = $expiryFieldMap[$docType]['input'];
-                        if (array_key_exists($expiryInput, $data)) {
+                        if (array_key_exists($expiryInput, $data) && \Illuminate\Support\Facades\Schema::hasColumn('driver_documents', $expiryFieldMap[$docType]['column'])) {
                             $updateFields[$expiryFieldMap[$docType]['column']] = $data[$expiryInput];
                         }
                     }
 
-                    if ($hasDriverDocs) {
+                    if ($canQueryDocColumns) {
                         DriverDocument::updateOrCreate(
                             ['driver_id' => $driver->id, 'doc_type' => $docType],
                             $updateFields
@@ -404,7 +422,7 @@ class AdminDriverService
             foreach ($expiryFieldMap as $docType => $map) {
                 $pathKey = array_search($docType, $docFileMap, true);
                 if (array_key_exists($map['input'], $data) && empty($data[$pathKey])) {
-                    if ($hasDriverDocs) {
+                    if ($canQueryDocColumns && \Illuminate\Support\Facades\Schema::hasColumn('driver_documents', $map['column'])) {
                         DriverDocument::where('driver_id', $driver->id)
                             ->where('doc_type', $docType)
                             ->update([
@@ -418,7 +436,7 @@ class AdminDriverService
 
             $expiryNewSnapshot = [];
             foreach ($expiryFieldMap as $docType => $map) {
-                $expiryNewSnapshot[$map['input']] = $hasDriverDocs
+                $expiryNewSnapshot[$map['input']] = ($canQueryDocColumns && \Illuminate\Support\Facades\Schema::hasColumn('driver_documents', $map['column']))
                     ? DriverDocument::where('driver_id', $driver->id)->where('doc_type', $docType)->value($map['column'])
                     : null;
             }
@@ -577,6 +595,11 @@ class AdminDriverService
                 // ب) تحديث البيانات الأساسية لملف السائق (Driver)
                 $driverFields = ['national_id', 'license_number', 'license_expiry'];
                 $driverDataToUpdate = array_intersect_key($newValues, array_flip($driverFields));
+                if (!empty($newValues['doc_license_path'])) {
+                    $driverDataToUpdate['license_image_url'] = $newValues['doc_license_path'];
+                } elseif (!empty($newValues['license_image_url'])) {
+                    $driverDataToUpdate['license_image_url'] = $newValues['license_image_url'];
+                }
                 if (!empty($driverDataToUpdate)) {
                     $driver->update($driverDataToUpdate);
                 }
@@ -733,6 +756,92 @@ class AdminDriverService
             }
 
             return true;
+        });
+    }
+
+    /**
+     * إيقاف حساب السائق: يجمّد تسجيل الدخول (is_active=false) وحالة النشاط التشغيلي (status=Suspended) معاً
+     */
+    public function suspendDriver(int $driverId, ?string $reason, int $adminId): Driver
+    {
+        return DB::transaction(function () use ($driverId, $reason, $adminId) {
+            $driver = Driver::with('user')->lockForUpdate()->findOrFail($driverId);
+
+            if (!$driver->user) {
+                throw new Exception('لا يوجد حساب مستخدم مرتبط بهذا السائق.');
+            }
+
+            $driver->user->update(['is_active' => false]);
+            $driver->update(['status' => 'Suspended']);
+
+            $this->auditLogService->record(
+                action: 'suspend_driver',
+                entityType: 'driver',
+                entityId: $driver->id,
+                entityName: $driver->user->full_name,
+                result: 'suspended',
+                reason: $reason,
+                changes: [],
+                adminId: $adminId
+            );
+
+            try {
+                $this->notificationService->sendToUser($driver->user, 'driver_suspended', [
+                    'title'       => '⛔ تم إيقاف حسابك مؤقتاً',
+                    'message'     => $reason ? "تم إيقاف حسابك من قبل الإدارة للسبب التالي: {$reason}" : 'تم إيقاف حسابك من قبل إدارة النظام، يرجى التواصل مع الدعم.',
+                    'entity_type' => 'driver',
+                    'entity_id'   => (string) $driver->id,
+                    'screen'      => 'DRIVER_PROFILE',
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning("فشل إرسال إشعار إيقاف حساب السائق #{$driver->id}: " . $e->getMessage());
+            }
+
+            return $driver->fresh(['user']);
+        });
+    }
+
+    /**
+     * إعادة تفعيل حساب السائق الموقوف
+     */
+    public function activateDriver(int $driverId, int $adminId): Driver
+    {
+        return DB::transaction(function () use ($driverId, $adminId) {
+            $driver = Driver::with('user')->lockForUpdate()->findOrFail($driverId);
+
+            if (!$driver->user) {
+                throw new Exception('لا يوجد حساب مستخدم مرتبط بهذا السائق.');
+            }
+
+            $driver->user->update(['is_active' => true]);
+            if ($driver->status === 'Suspended') {
+                $driver->update(['status' => 'Approved']);
+            }
+
+            $this->auditLogService->record(
+                action: 'activate_driver',
+                entityType: 'driver',
+                entityId: $driver->id,
+                entityName: $driver->user->full_name,
+                result: 'activated',
+                reason: null,
+                changes: [],
+                adminId: $adminId
+            );
+
+            try {
+                $this->notificationService->sendToUser($driver->user, 'driver_activated', [
+                    'title'       => '✅ تم إعادة تفعيل حسابك',
+                    'message'     => 'تمت إعادة تفعيل حسابك من قبل إدارة النظام، يمكنك الآن استئناف نشاطك بشكل طبيعي.',
+                    'entity_type' => 'driver',
+                    'entity_id'   => (string) $driver->id,
+                    'screen'      => 'DRIVER_PROFILE',
+                ]);
+            } catch (\Throwable $e) {
+                Log::warning("فشل إرسال إشعار تفعيل حساب السائق #{$driver->id}: " . $e->getMessage());
+            }
+
+            return $driver->fresh(['user']);
         });
     }
 

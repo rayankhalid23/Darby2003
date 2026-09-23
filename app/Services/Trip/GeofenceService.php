@@ -23,20 +23,13 @@ class GeofenceViolationException extends Exception
 }
 
 /**
- * يفرض قيود الـ GPS على التأكيد اليدوي (بدون QR) فقط:
+ * يفرض قيود الـ GPS على تأكيد الصعود/النزول اليدوي (زر السائق):
  * ≤100م للمنازل، ≤200م للمدارس — لمنع التأكيد الوهمي عن بُعد.
- * التأكيد عبر QR يستخدم نطاقاً أوسع (QR_MAX_RADIUS_METERS) بدل تجاوز الفحص كلياً.
  */
 class GeofenceService
 {
     public const HOME_RADIUS_METERS   = 100;
     public const SCHOOL_RADIUS_METERS = 200;
-
-    /**
-     * نطاق أوسع للتأكيد عبر مسح QR: يمنح السائق مرونة حقيقية في الموقع
-     * دون أن يسمح بتأكيد صعود طفل من مدينة أخرى بمجرد امتلاك الكود.
-     */
-    public const QR_MAX_RADIUS_METERS = 1000;
 
     public function isWithinRadius(float $lat1, float $lng1, float $lat2, float $lng2, float $maxMeters): bool
     {
@@ -72,7 +65,7 @@ class GeofenceService
         if ($distanceMeters > $maxMeters) {
             throw new GeofenceViolationException(
                 sprintf(
-                    'أنت بعيد عن موقع المحطة (%.0f م)، الحد المسموح %d م. يرجى الاقتراب أو استخدام مسح QR.',
+                    'أنت بعيد عن موقع المحطة (%.0f م)، الحد المسموح %d م. يرجى الاقتراب من الموقع.',
                     $distanceMeters,
                     $maxMeters
                 ),

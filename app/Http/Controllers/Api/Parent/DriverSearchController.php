@@ -54,6 +54,7 @@ class DriverSearchController extends Controller
 
                 // يلخّص بيانات الاشتراك المشتركة (النوع/الاتجاه/المدة) والأطفال
                 // المشمولين، كما طُبِّقت فعلياً بالفلترة والتسعير التقديري أدناه.
+                'ranking_mode'   => $result['ranking_mode'] ?? 'DEFAULT_RATING',
                 'search_context' => $result['context'],
 
                 'meta' => [

@@ -80,7 +80,7 @@ class AdminAuditLogService
         if ($adminId === null) {
             $user = Auth::user();
             if ($user) {
-                $admin = Admin::where('user_id', $user->id)->first();
+                $admin = Admin::find($user->id);
                 $adminId   = $admin?->id ?? $user->id;
                 $adminName = $adminName ?? $user->full_name ?? ('مستخدم #' . $user->id);
                 $adminRole = $adminRole ?? self::resolveRoleLabel($user->role_id ?? null);

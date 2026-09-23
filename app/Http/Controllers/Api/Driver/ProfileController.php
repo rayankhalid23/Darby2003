@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Driver;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Driver\ProfileUpdateRequest;
 use App\Http\Requests\Api\Driver\UpdateLegalDocumentsRequest;
+use App\Http\Requests\Api\Driver\ChangePasswordRequest;
 use App\Services\Driver\DriverProfileService;
 use App\Http\Resources\Api\Driver\DriverResource;
 use App\Http\Resources\Api\Driver\DriverProfileResource;
@@ -78,6 +79,40 @@ class ProfileController extends Controller
                 'success' => false,
                 'message' => $e->getMessage() ?: 'تعذر تحديث البيانات بسبب مشكلة تقنية.',
             ], 500);
+        }
+    }
+
+    /**
+     * تغيير كلمة المرور للسائق: يتطلب كلمة المرور الحالية + الجديدة، مع نفس شروط
+     * كلمة المرور المعتمدة عند إنشاء الحساب (ChangePasswordRequest).
+     * POST /api/driver/profile/change-password
+     */
+    public function changePassword(ChangePasswordRequest $request): JsonResponse
+    {
+        $user = auth()->user();
+
+        Log::info("Driver: Change password attempt for user ID: " . $user->id);
+
+        try {
+            $this->profileService->changePassword(
+                $user->id,
+                $request->old_password,
+                $request->password
+            );
+
+            Log::info("Driver: Password changed successfully for user ID: " . $user->id);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'تم تغيير كلمة المرور بنجاح.',
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::warning("Driver Change Password Error for User {$user->id}: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 400);
         }
     }
 
@@ -377,6 +412,12 @@ public function showLegalData(Request $request)
 
     // بناء روابط ومصفوفات مخصصة وسهلة للواجهة الأمامية
     $documentsMap = [];
+
+    if (!empty($user->driver->license_image_url)) {
+        $licenseUrl = MediaController::urlFor($user->driver->license_image_url);
+        $documentsMap['LICENSE'] = $licenseUrl;
+    }
+
     $uploadedFiles = $documents->map(function ($document) use (&$documentsMap) {
         $fileUrl = MediaController::urlFor($document->file_url);
 
@@ -405,15 +446,38 @@ public function showLegalData(Request $request)
         ];
     });
 
+    if (!empty($user->driver->license_image_url)) {
+        $licenseUrl = MediaController::urlFor($user->driver->license_image_url);
+        $uploadedFiles->prepend([
+            'id'                               => null,
+            'vehicle_id'                       => null,
+            'doc_type'                         => 'LICENSE',
+            'file_url'                         => $licenseUrl,
+            'expiry_date'                      => $user->driver->license_expiry ? \Carbon\Carbon::parse($user->driver->license_expiry)->format('Y-m-d') : null,
+            'is_verified'                      => $user->driver->status === 'Approved',
+            'state'                            => $user->driver->status === 'Approved' ? 'active' : 'pending',
+            'state_label'                      => $user->driver->status === 'Approved' ? 'معتمدة' : 'معلقة',
+            'license_expiry_date'              => $user->driver->license_expiry ? \Carbon\Carbon::parse($user->driver->license_expiry)->format('Y-m-d') : null,
+            'insurance_expiry_date'            => null,
+            'stamp_expiry_date'                => null,
+            'technical_inspection_expiry_date' => null,
+            'document_status'                  => $user->driver->status === 'Approved' ? 'approved' : 'pending',
+            'feedback'                         => null,
+            'uploaded_at'                      => $user->driver->created_at ? $user->driver->created_at->toDateTimeString() : null,
+        ]);
+    }
+
     return response()->json([
         'status'  => true,
         'message' => 'تم استرجاع الوثائق الرسمية بنجاح.',
         'data'    => [
             // 1. البيانات الأساسية من جدول drivers
-            'national_id'    => $user->driver->national_id,
-            'license_number' => $user->driver->license_number,
-            'license_expiry' => $user->driver->license_expiry,
-            'driver_status'  => $user->driver->status, // حالة السائق العامة
+            'national_id'            => $user->driver->national_id,
+            'license_number'         => $user->driver->license_number,
+            'license_expiry'         => $user->driver->license_expiry,
+            'license_image_url'      => MediaController::urlFor($user->driver->license_image_url),
+            'license_image_data_url' => MediaController::dataUrlFor($user->driver->license_image_url),
+            'driver_status'          => $user->driver->status, // حالة السائق العامة
 
             // 2. قائمة الوثائق الكاملة
             'uploaded_files' => $uploadedFiles,
@@ -422,7 +486,7 @@ public function showLegalData(Request $request)
             'documents_map'  => $documentsMap,
 
             // 4. اختصارات مباشرة للروابط الأكثر استخداماً في الفرونت
-            'doc_license_url'   => $documentsMap['LICENSE'] ?? null,
+            'doc_license_url'   => MediaController::urlFor($user->driver->license_image_url) ?? ($documentsMap['LICENSE'] ?? null),
             'doc_logbook_url'   => $documentsMap['VEHICLE_LOGBOOK'] ?? null,
             'doc_insurance_url' => $documentsMap['INSURANCE'] ?? null,
         ]

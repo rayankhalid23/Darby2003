@@ -73,7 +73,7 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
             'lat'     => 32.89000000,
             'lng'     => 13.19000000,
             'address' => 'طرابلس - طريق الشط',
-            'status'  => 'active',
+            'status'  => 'Approved',
         ]);
 
         // 1. إنشاء ولي الأمر
@@ -86,17 +86,15 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
             'is_active'     => 1,
         ]);
 
-        $this->parent = ParentModel::create([
-            'user_id'    => $this->parentUser->id,
-            'is_trusted' => 1,
-        ]);
+        $this->parentUser->update(['is_trusted' => 1]);
+        $this->parent = ParentModel::find($this->parentUser->id);
         $this->parent->deposit(100000);
 
         $this->homeAddress = Address::create([
-            'parent_id' => $this->parentUser->id,
-            'label'     => 'المنزل',
-            'lat'       => 32.88000000,
-            'lng'       => 13.18000000,
+            'user_id' => $this->parentUser->id,
+            'label'   => 'المنزل',
+            'lat'     => 32.88000000,
+            'lng'     => 13.18000000,
         ]);
 
         // 2. إنشاء السائق الأصلي المعطل
@@ -187,10 +185,10 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         ]);
 
         DriverSeatSlot::create([
-            'driver_id'      => $this->substituteDriver1->id,
-            'slot'           => 'morning_go',
-            'total_seats'    => 12,
-            'reserved_seats' => 2,
+            'driver_id' => $this->substituteDriver1->id,
+            'slot'      => 'morning_go',
+            'date'      => Carbon::today()->toDateString(),
+            'booked'    => 2,
         ]);
 
         // السائق البديل الثاني
@@ -237,10 +235,10 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         ]);
 
         DriverSeatSlot::create([
-            'driver_id'      => $this->substituteDriver2->id,
-            'slot'           => 'morning_go',
-            'total_seats'    => 10,
-            'reserved_seats' => 1,
+            'driver_id' => $this->substituteDriver2->id,
+            'slot'      => 'morning_go',
+            'date'      => Carbon::today()->toDateString(),
+            'booked'    => 1,
         ]);
 
         // 4. إنشاء أطفال واشتراكات نشطة مع السائق الأصلي
@@ -285,12 +283,21 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
             'children_count'              => 2,
         ]);
 
+        // child_id/driver_id/parent_id لم يعودوا أعمدة فعلية على active_subscriptions
+        // (تُشتق الآن عبر request_child_id/subscription_request_id — انظر
+        // ActiveSubscription::getChildIdAttribute). لازم نمرّ عبر pivot الطلب
+        // request_children حتى تعمل ActiveSubscription::forChildren() في الخدمة.
+        $req->children()->attach([
+            $this->child1->id => ['total_amount_after_discount' => 100.00],
+            $this->child2->id => ['total_amount_after_discount' => 100.00],
+        ]);
+        $requestChildId1 = \App\Models\Shared\RequestChild::where('request_id', $req->id)->where('child_id', $this->child1->id)->value('id');
+        $requestChildId2 = \App\Models\Shared\RequestChild::where('request_id', $req->id)->where('child_id', $this->child2->id)->value('id');
+
         ActiveSubscription::create([
             'subscription_request_id' => $req->id,
-            'child_id'                => $this->child1->id,
-            'driver_id'               => $this->originalDriver->id,
+            'request_child_id'        => $requestChildId1,
             'route_id'                => $route->id,
-            'parent_id'               => $this->parentUser->id,
             'pickup_lat'              => 32.88000000,
             'pickup_lng'              => 13.18000000,
             'dropoff_lat'             => 32.89000000,
@@ -300,10 +307,8 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
 
         ActiveSubscription::create([
             'subscription_request_id' => $req->id,
-            'child_id'                => $this->child2->id,
-            'driver_id'               => $this->originalDriver->id,
+            'request_child_id'        => $requestChildId2,
             'route_id'                => $route->id,
-            'parent_id'               => $this->parentUser->id,
             'pickup_lat'              => 32.88000000,
             'pickup_lng'              => 13.18000000,
             'dropoff_lat'             => 32.89000000,

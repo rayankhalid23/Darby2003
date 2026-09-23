@@ -493,4 +493,55 @@ class ParentSubscriptionController extends Controller
             ], 400);
         }
     }
+
+    /**
+     * 👥 جلب قائمة السائقين الذين تعامل معهم ولي الأمر
+     * يشمل الحالات: (اشتراك قيد الانتظار / اشتراك نشط / اشتراك مكتمل / اشتراك ملغي من ولي الأمر / اشتراك ملغي من السائق)
+     * مع إمكانية الفلترة عبر query parameter: ?status= أو ?filter=
+     */
+    public function getDrivers(Request $request): JsonResponse
+    {
+        try {
+            $request->validate([
+                'status' => 'nullable|string|in:all,pending,active,completed,cancelled,cancelled_by_parent,cancelled_by_driver',
+                'filter' => 'nullable|string|in:all,pending,active,completed,cancelled,cancelled_by_parent,cancelled_by_driver',
+            ], [
+                'status.in' => 'قيمة الفلتر غير صالحة. القيم المتاحة: all, pending, active, completed, cancelled, cancelled_by_parent, cancelled_by_driver',
+                'filter.in' => 'قيمة الفلتر غير صالحة. القيم المتاحة: all, pending, active, completed, cancelled, cancelled_by_parent, cancelled_by_driver',
+            ]);
+
+            $filter = $request->query('status', $request->query('filter'));
+            $userId = (int) $request->user()->id;
+
+            $drivers = $this->subscriptionService->getParentContractedDrivers($userId, $filter);
+
+            return response()->json([
+                'status'  => true,
+                'success' => true,
+                'message' => 'تم جلب قائمة السائقين بنجاح.',
+                'count'   => count($drivers),
+                'data'    => $drivers,
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status'  => false,
+                'success' => false,
+                'message' => $e->getMessage(),
+                'errors'  => $e->errors(),
+            ], 422);
+
+        } catch (Exception $e) {
+            Log::error('Error in ParentSubscriptionController@getDrivers: ' . $e->getMessage(), [
+                'user_id' => $request->user()->id ?? null,
+                'filter'  => $request->query('status') ?? $request->query('filter'),
+            ]);
+
+            return response()->json([
+                'status'  => false,
+                'success' => false,
+                'message' => 'حدث خطأ أثناء جلب قائمة السائقين: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
 }

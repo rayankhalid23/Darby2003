@@ -109,6 +109,14 @@ class DriverRegisterController extends Controller
         try {
             $data = $request->validated();
 
+            // رفع الصورة الشخصية للسائق إن أُرسلت
+            if ($request->hasFile('avatar')) {
+                $avatarFile = $request->file('avatar');
+                $path = $avatarFile->store('drivers/avatars', 'public');
+                $data['avatar_path'] = 'storage/' . $path;
+                $uploadedPaths[] = $path;
+            }
+
             // رفع صورة المركبة
             $vehicleFile = $request->file('vehicle_image') ?? $request->file('vehicle_photo');
             $path = $vehicleFile->store('drivers/vehicles', 'public');

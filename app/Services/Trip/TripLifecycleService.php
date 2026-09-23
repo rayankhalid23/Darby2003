@@ -14,6 +14,7 @@ use App\Models\Driver\Driver;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache; // ✅ استيراد الفيساد الصحيح للكاش
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 use Exception;
 
@@ -453,6 +454,105 @@ class TripLifecycleService
         ]);
 
         return $createdAbsences;
+    }
+
+    /**
+     * الفحص الدوري لاكتشاف "غياب السائق" تلقائياً: رحلة لم تبدأ (status = pending) رغم
+     * مرور 90 دقيقة على موعدها المحدد، بلا أي نبضة GPS منذ إنشائها، وبلا أي طفل تغيرت
+     * حالته (كل محطاته الفعلية لسه pending) — أي مؤشرات متطابقة على أن السائق لم يتحرك إطلاقاً.
+     *
+     * عمداً لا تُفحص هنا حالة suspended_breakdown: فرحلة بهذه الحالة بدأت أصلاً (in_progress
+     * سابقاً) وليست "لم تبدأ"، ولها مسارها الخاص عبر EmergencyBreakdownService.
+     *
+     * @return array<int> معرّفات الرحلات التي تم تسجيل غياب تلقائي عنها في هذه الدفعة
+     */
+    public function detectAndFlagNoShowDrivers(): array
+    {
+        $cutoff = Carbon::now()->subMinutes(90);
+        $today = Carbon::now(config('app.timezone', 'Africa/Tripoli'))->toDateString();
+
+        $candidateTrips = Trip::where('trip_date', $today)
+            ->where('status', 'pending')
+            ->whereNotNull('driver_id')
+            ->whereNotNull('scheduled_start_time')
+            ->where('scheduled_start_time', '<=', $cutoff)
+            ->get();
+
+        $flaggedTripIds = [];
+
+        foreach ($candidateTrips as $trip) {
+            // تجاهل الرحلات المسجَّل عنها غياب بالفعل (سواء أعلنه السائق مسبقاً أو اكتُشف تلقائياً سابقاً)
+            $alreadyDeclared = DriverAbsence::where('driver_id', $trip->driver_id)
+                ->whereDate('absence_date', $trip->trip_date)
+                ->whereHas('trips', fn($q) => $q->where('trips.id', $trip->id))
+                ->exists();
+
+            if ($alreadyDeclared) {
+                continue;
+            }
+
+            // لازم يكون فيه أطفال فعليون مطلوب نقلهم أصلاً (sequence_order = 0 يعني غائب مسبقاً
+            // من التوليد اليومي)، وإلا فرحلة فارغة لا معنى لتسجيل غياب سائق عنها
+            $actionableStopsCount = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                ->where('sequence_order', '>', 0)
+                ->count();
+
+            if ($actionableStopsCount === 0) {
+                continue;
+            }
+
+            // لو أي طفل تحرّكت حالته (صعود، غياب مسجَّل يدوياً...) فهذا يعني تفاعلاً فعلياً حصل
+            $anyChildMoved = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                ->where('sequence_order', '>', 0)
+                ->where('status', '!=', \App\Models\Shared\TripStop::STATUS_PENDING)
+                ->exists();
+
+            if ($anyChildMoved) {
+                continue;
+            }
+
+            // لو وصلت أي نبضة GPS واحدة لهذه الرحلة فالسائق ليس غائباً، فقط لم يضغط "بدء" بعد
+            $hasAnyTracking = \App\Models\Shared\TripTracking::where('trip_id', $trip->id)->exists();
+
+            if ($hasAnyTracking) {
+                continue;
+            }
+
+            $driverId = $trip->driver_id;
+
+            DB::transaction(function () use ($trip, $driverId) {
+                $absence = DriverAbsence::create([
+                    'driver_id'    => $driverId,
+                    'absence_date' => $trip->trip_date,
+                    'reason'       => 'غياب تلقائي: لم تبدأ الرحلة خلال 90 دقيقة من موعدها المحدد.',
+                    'status'       => DriverAbsence::STATUS_APPROVED,
+                    'source'       => DriverAbsence::SOURCE_AUTO_NO_SHOW,
+                    'reviewed_at'  => now(),
+                ]);
+
+                $absence->trips()->sync([$trip->id]);
+
+                // فصل السائق عن هذه الرحلة بالذات فقط، لتمكين تدبير سائق بديل لاحقاً
+                $trip->update(['driver_id' => null]);
+
+                $driverUser = User::whereHas('driver', fn($q) => $q->where('id', $driverId))->first();
+
+                if ($driverUser) {
+                    $this->notificationService->sendToUser($driverUser, 'driver_trip_no_show', [
+                        'trip_id'   => $trip->id,
+                        'entity_id' => (string) $trip->id,
+                    ]);
+                }
+            });
+
+            Log::warning("تم تسجيل غياب تلقائي للسائق ID:{$driverId} عن الرحلة ID:{$trip->id} لعدم بدئها خلال 90 دقيقة من موعدها.");
+
+            $flaggedTripIds[] = $trip->id;
+        }
+
+        return $flaggedTripIds;
     }
 
     /**

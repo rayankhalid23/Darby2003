@@ -96,7 +96,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{tripId}/absent', [DriverTripController::class, 'absent']);
         Route::post('{tripId}/dropoff', [DriverTripController::class, 'dropoff']);
         Route::post('{tripId}/skip/{childId}', [DriverTripController::class, 'skip']);
-        Route::post('{tripId}/verify-qr/{childId}', [DriverTripController::class, 'verifyQr']);
         Route::post('{tripId}/children/{tripChildId}/status', [DriverTripController::class, 'updateChildTripStatus']);
         Route::post('register-absence', [DriverTripController::class, 'registerAbsence']);
         Route::post('{tripId}/report-breakdown', [DriverTripController::class, 'reportBreakdown']);
@@ -129,6 +128,8 @@ Route::middleware('auth:sanctum')->group(function () {
     ->name('api.driver.preferences.update');
     Route::match(['post', 'put'], 'profile', [ProfileController::class, 'update']);
     Route::match(['post', 'put'], 'profile/update', [ProfileController::class, 'update']);
+    Route::post('profile/change-password', [ProfileController::class, 'changePassword'])
+        ->name('api.driver.profile.change-password');
     Route::get('profile/email-change/status', [ProfileController::class, 'checkEmailChangeStatus']);
     Route::post('profile/email-change/cancel', [ProfileController::class, 'cancelEmailChange']);
     Route::post('profile/email-change/resend', [ProfileController::class, 'resendEmailChange']);
@@ -269,16 +270,6 @@ Route::get('zones', [ZoneController::class, 'index'])
     Route::prefix('location-change-requests')->group(function () {
         Route::get('/', [App\Http\Controllers\Api\Driver\LocationChangeController::class, 'index']);
         Route::post('/{id}/respond', [App\Http\Controllers\Api\Driver\LocationChangeController::class, 'respond']);
-    });
-
-    // -------------------------------------------------------------
-    // 🕓 التأكيد اليدوي لرحلات سابقة لم يوثّقها التطبيق
-    // -------------------------------------------------------------
-    Route::prefix('trip-manual-confirmations')->group(function () {
-        Route::get('/parents-and-children', [App\Http\Controllers\Api\Driver\TripManualConfirmationController::class, 'subscribedParentsAndChildren']);
-        Route::get('/incomplete-trips', [App\Http\Controllers\Api\Driver\TripManualConfirmationController::class, 'incompleteTrips']);
-        Route::get('/trips/{tripId}/children', [App\Http\Controllers\Api\Driver\TripManualConfirmationController::class, 'tripChildren']);
-        Route::post('/', [App\Http\Controllers\Api\Driver\TripManualConfirmationController::class, 'store']);
     });
 
     // -------------------------------------------------------------

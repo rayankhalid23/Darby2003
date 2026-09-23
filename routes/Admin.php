@@ -3,7 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Admin\SchoolController;
-use App\Http\Controllers\Api\Admin\AdminDriverController; 
+use App\Http\Controllers\Api\Admin\AdminDriverController;
+use App\Http\Controllers\Api\Admin\AdminParentController;
 use App\Http\Controllers\Api\Admin\ZoneController;
 use App\Http\Controllers\Api\Admin\DriverReviewController as AdminDriverReviewController;
 use App\Http\Controllers\Api\Admin\ComplaintController as AdminComplaintController;
@@ -133,6 +134,39 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/{driverId}/ai-reset', [DriverAiPolicyController::class, 'resetDriver'])
             ->middleware('permission:drivers.suspend')
             ->name('api.admin.drivers.ai-reset');
+
+        // 8. إيقاف حساب السائق (تجميد الدخول + الحالة التشغيلية)
+        Route::post('/{id}/suspend', [AdminDriverController::class, 'suspend'])
+            ->middleware('permission:drivers.suspend')
+            ->name('api.admin.drivers.suspend');
+
+        // 9. إعادة تفعيل حساب السائق الموقوف
+        Route::post('/{id}/activate', [AdminDriverController::class, 'activate'])
+            ->middleware('permission:drivers.suspend')
+            ->name('api.admin.drivers.activate');
+    });
+
+    // --- 👨‍👩‍👧 مجموعة روابط التحكم في أولياء الأمور ---
+    Route::prefix('parents')->group(function () {
+        // 1. عرض جميع أولياء الأمور مع بياناتهم وأبنائهم
+        Route::get('/', [AdminParentController::class, 'index'])
+            ->middleware('permission:parents.view')
+            ->name('api.admin.parents.index');
+
+        // 2. عرض تفاصيل ولي أمر معين بالكامل
+        Route::get('/{id}', [AdminParentController::class, 'show'])
+            ->middleware('permission:parents.view')
+            ->name('api.admin.parents.show');
+
+        // 3. إيقاف حساب ولي الأمر
+        Route::post('/{id}/suspend', [AdminParentController::class, 'suspend'])
+            ->middleware('permission:parents.suspend')
+            ->name('api.admin.parents.suspend');
+
+        // 4. إعادة تفعيل حساب ولي الأمر الموقوف
+        Route::post('/{id}/activate', [AdminParentController::class, 'activate'])
+            ->middleware('permission:parents.suspend')
+            ->name('api.admin.parents.activate');
     });
 
     // =========================================================================

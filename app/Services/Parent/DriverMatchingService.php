@@ -103,11 +103,31 @@ class DriverMatchingService
            }
        }
 
-        // 5. الترتيب والتصفح
-        $drivers = $query
-            ->orderByDesc('rating_avg')
-            ->orderByDesc('id')
-            ->paginate(15);
+        // 5. الترتيب والتصفح (دعم نموذج الذكاء الاصطناعي مع التراجع التلقائي للترتيب العادي)
+        $matchingDrivers = $query->get();
+
+        $aiRanked = false;
+        if ($matchingDrivers->isNotEmpty()) {
+            $aiRanked = $this->applyAiRankingIfAvailable($matchingDrivers);
+        }
+
+        if (!$aiRanked) {
+            $matchingDrivers = $matchingDrivers->sortByDesc(fn($d) => [$d->rating_avg ?? 0, $d->id])->values();
+        }
+
+        $page = \Illuminate\Pagination\Paginator::resolveCurrentPage('page');
+        $perPage = 15;
+        $items = $matchingDrivers->forPage($page, $perPage)->values();
+        $drivers = new \Illuminate\Pagination\LengthAwarePaginator(
+            $items,
+            $matchingDrivers->count(),
+            $perPage,
+            $page,
+            [
+                'path'     => \Illuminate\Pagination\Paginator::resolveCurrentPath(),
+                'pageName' => 'page',
+            ]
+        );
 
         // 6. حساب مسافات الأطفال والتسعير الفعلي لكل سائق
         if ($children->isNotEmpty()) {
@@ -162,7 +182,11 @@ class DriverMatchingService
             });
         }
 
-        return ['drivers' => $drivers, 'context' => $context];
+        return [
+            'drivers'      => $drivers,
+            'context'      => $context,
+            'ranking_mode' => $aiRanked ? 'AI_LIGHTGBM_RANKER' : 'DEFAULT_RATING',
+        ];
     }
 
     private function applyTextSearch($query, string $keyword): void
@@ -529,5 +553,150 @@ class DriverMatchingService
 
         // استخدام Haversine كـ Fallback عند انقطاع الاتصال بـ OSRM
         return $this->calculateHaversineDistance($lat1, $lon1, $lat2, $lon2);
+    }
+
+    /**
+     * محاولة ترتيب السائقين باستخدام نموذج الذكاء الاصطناعي (LightGBM LambdaRank).
+     * في حال كانت خدمة الـ AI متوقفة أو غير متاحة، يتم التراجع تلقائياً دون أي تعطيل أو خطأ.
+     */
+    protected function applyAiRankingIfAvailable(Collection &$drivers): bool
+    {
+        try {
+            $aiBaseUrl = config('services.ai_classifier.base_url', 'http://127.0.0.1:8001');
+            $payload = $this->buildBatchRankingPayload($drivers);
+
+            $response = Http::timeout(5)
+                ->acceptJson()
+                ->asJson()
+                ->post(rtrim($aiBaseUrl, '/') . '/rank', [
+                    'drivers' => $payload,
+                ]);
+
+            if ($response->successful() && isset($response->json()['drivers'])) {
+                $rankedData = $response->json()['drivers'];
+                $rankMap = [];
+                foreach ($rankedData as $item) {
+                    $rankMap[$item['driver_id']] = [
+                        'score'   => $item['ai_score'],
+                        'rank'    => $item['ai_rank'],
+                        'reasons' => $item['reasons'] ?? [],
+                    ];
+                }
+
+                $drivers = $drivers->sortBy(fn($d) => $rankMap[$d->id]['rank'] ?? 9999)->values();
+
+                foreach ($drivers as $driver) {
+                    if (isset($rankMap[$driver->id])) {
+                        $driver->ai_score   = $rankMap[$driver->id]['score'];
+                        $driver->ai_rank    = $rankMap[$driver->id]['rank'];
+                        $driver->ai_reasons = $rankMap[$driver->id]['reasons'];
+                    }
+                }
+
+                return true;
+            }
+        } catch (\Throwable $e) {
+            // خدمة الـ AI غير شغالة أو أغلقت في التيرمينال — تراجع تلقائي وصامت للترتيب العادي
+            Log::info('DriverMatchingService: AI Ranker unavailable, falling back to rating: ' . $e->getMessage());
+        }
+
+        return false;
+    }
+
+    /**
+     * تجميع الخصائص التشغيلية الثمانية لنموذج LightGBM Ranker دفعة واحدة (Batch)
+     */
+    protected function buildBatchRankingPayload(Collection $drivers): array
+    {
+        $driverIds = $drivers->pluck('id')->all();
+
+        // 1. تقييمات آخر 30 يوماً
+        $recentReviews = \App\Models\Shared\DriverReview::whereIn('driver_id', $driverIds)
+            ->where('created_at', '>=', now()->subDays(30))
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, AVG(rating) as avg_recent')
+            ->pluck('avg_recent', 'driver_id');
+
+        // 2. إحصائيات الرحلات (المكتملة مقابل الإجمالي)
+        $tripStats = \App\Models\Shared\Trip::whereIn('driver_id', $driverIds)
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, COUNT(*) as total_trips, SUM(CASE WHEN status = "completed" THEN 1 ELSE 0 END) as completed_trips')
+            ->get()
+            ->keyBy('driver_id');
+
+        // 3. نسبة الالتزام بالمواعيد
+        $punctualityStats = \App\Models\Shared\Trip::whereIn('driver_id', $driverIds)
+            ->where('status', 'completed')
+            ->whereNotNull('scheduled_start_time')
+            ->whereNotNull('actual_start_time')
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, COUNT(*) as scheduled_trips, SUM(CASE WHEN TIMESTAMPDIFF(MINUTE, scheduled_start_time, actual_start_time) <= 15 THEN 1 ELSE 0 END) as on_time_trips')
+            ->get()
+            ->keyBy('driver_id');
+
+        // 4. الشكاوى المؤكدة
+        $complaints = \App\Models\Shared\Complaint::whereIn('driver_id', $driverIds)
+            ->whereIn('status', ['approved', 'resolved', 'under_investigation'])
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, COUNT(*) as cnt')
+            ->pluck('cnt', 'driver_id');
+
+        // 5. الأعطال
+        $breakdowns = \App\Models\Shared\Trip::whereIn('driver_id', $driverIds)
+            ->where(function ($q) {
+                $q->where('status', 'suspended_breakdown')->orWhereNotNull('suspension_reason');
+            })
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, COUNT(*) as cnt')
+            ->pluck('cnt', 'driver_id');
+
+        // 6. الغيابات
+        $absences = \App\Models\Driver\DriverAbsence::whereIn('driver_id', $driverIds)
+            ->where('absence_date', '>=', now()->subDays(30)->toDateString())
+            ->groupBy('driver_id')
+            ->selectRaw('driver_id, COUNT(*) as cnt')
+            ->pluck('cnt', 'driver_id');
+
+        $payload = [];
+        foreach ($drivers as $driver) {
+            $rawRating = (float) ($driver->rating_avg ?? 5.0);
+            $normRating = round($rawRating / 5.0, 4);
+
+            $recentAvg = $recentReviews[$driver->id] ?? null;
+            $normRecent = $recentAvg ? round(((float)$recentAvg) / 5.0, 4) : $normRating;
+
+            $tStat = $tripStats[$driver->id] ?? null;
+            $totalT = $tStat ? (int) $tStat->total_trips : 0;
+            $compT  = $tStat ? (int) $tStat->completed_trips : 0;
+            $tripComp = $totalT > 0 ? round($compT / $totalT, 4) : 1.0;
+
+            $pStat = $punctualityStats[$driver->id] ?? null;
+            $schedT = $pStat ? (int) $pStat->scheduled_trips : 0;
+            $onTimeT = $pStat ? (int) $pStat->on_time_trips : 0;
+            $punct = $schedT > 0 ? round($onTimeT / $schedT, 4) : 1.0;
+
+            $compCnt = (int) ($complaints[$driver->id] ?? 0);
+            $normComp = round(min(1.0, $compCnt / 5.0), 4);
+
+            $bkCnt = (int) ($breakdowns[$driver->id] ?? 0);
+            $normBk = round(min(1.0, $bkCnt / 3.0), 4);
+
+            $absCnt = (int) ($absences[$driver->id] ?? 0);
+            $normAbs = round(min(1.0, $absCnt / 5.0), 4);
+
+            $payload[] = [
+                'driver_id'            => $driver->id,
+                'rating'               => $normRating,
+                'recent_rating'        => $normRecent,
+                'trip_completion'      => $tripComp,
+                'successful_stops'     => 1.0,
+                'punctuality'          => $punct,
+                'confirmed_complaints' => $normComp,
+                'breakdown'            => $normBk,
+                'driver_absence'       => $normAbs,
+            ];
+        }
+
+        return $payload;
     }
 }

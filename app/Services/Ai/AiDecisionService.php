@@ -15,17 +15,24 @@ use Illuminate\Support\Facades\DB;
 /**
  * خدمة قرار السائقين المحدثة لمنصة دربي (Darby Decision Layer).
  *
- * القواعد الحاكمة:
- * 1. النافذة الزمنية التراكمية: آخر 15 يوماً.
- * 2. شرط تعدد المصادر: قياس النسب بناءً على أولياء أمور مختلفين (DISTINCT parent_id).
- * 3. سيادة القرار البشري (Admin-Only): الإيقاف النهائي حصرياً بيد الأدمن؛ الـ AI يطبق حجباً مؤقتاً احترازياً وتنبيهات فقط.
- * 4. التعافي الذاتي النسبي (30 يوماً): يزول الإنذار ذاتياً إذا مرت 30 يوماً كاملة دون شكوى جديدة من نفس التصنيف.
- * 5. الحالات التشغيلية الأربع:
- *    - 0 = NO_ACTION             → لا إجراء (النسب ضمن الحدود الطبيعية أو محايد)
- *    - 1 = REWARD                → مكافأة تشجيعية (+3% تقييم وتخفيض التحذيرات عند إيجابي >= 80%)
- *    - 2 = MODERATE_VIOLATION    → المستوى الثاني: مخالفة متوسطة متكررة (خفض 5% + حجب مؤقت 24 ساعة من البحث)
- *    - 3 = FORMAL_WARNING        → المستوى الأول: شكاوى سلبية بسيطة (خفض 5% + تحذير عند سلبي >= 40%)
- *    - 4 = ADMIN_REVIEW_REQUIRED → المستوى الثالث: خطورة قصوى / سلامة (خفض 10% + حجب مؤقت فوري + تنبيه أدمن حرج)
+ * القرار النهائي يصدر عن نموذج XGBoost مباشرة (/decision/predict)، تحت سقف أمان
+ * من ثلاث قواعد ثابتة لا يستطيع النموذج تجاوزها (لأنها تعتمد على بيانات لا يستقبلها
+ * أصلاً: تعدد المصادر عبر نافذة 15 يوماً):
+ * 1. مساس بالسلامة أو خطورة حرجة (severity=2) على التعليق الحالي ⇒ مراجعة إدارية فورية،
+ *    بصرف النظر عمّا يقرره النموذج.
+ * 2. تكرار نفس فئة الشكوى من ولِيَّي أمر مختلفَين (2+) خلال 15 يوماً ⇒ مخالفة متوسطة فورية.
+ * 3. بلاغ سلامة نشط ضمن نافذة الـ15 يوماً ⇒ يمنع أي مكافأة، حتى لو رشّح النموذج مكافأة.
+ * غير ذلك، القرار بالكامل للنموذج. سيادة القرار البشري (Admin-Only) تبقى قائمة: الإيقاف
+ * النهائي حصرياً بيد الأدمن؛ الـ AI يطبق حجباً مؤقتاً احترازياً (٢٤ ساعة كحد أقصى) وتنبيهات فقط.
+ * التعافي الذاتي النسبي (30 يوماً) يبقى كما هو: يزول الإنذار ذاتياً إذا مرت 30 يوماً كاملة
+ * دون شكوى جديدة من نفس التصنيف.
+ *
+ * الحالات التشغيلية الخمس:
+ *    - 0 = NO_ACTION             → لا إجراء
+ *    - 1 = REWARD                → مكافأة تشجيعية (+3% تقييم وتخفيض التحذيرات)
+ *    - 2 = MODERATE_VIOLATION    → مخالفة متوسطة (خفض 5% + حجب مؤقت 24 ساعة من البحث)
+ *    - 3 = FORMAL_WARNING        → إنذار رسمي (خفض 5%)
+ *    - 4 = ADMIN_REVIEW_REQUIRED → خطورة قصوى / سلامة (خفض 10% + حجب مؤقت فوري + تنبيه أدمن حرج)
  */
 class AiDecisionService
 {
@@ -51,11 +58,9 @@ class AiDecisionService
     private const WARNING_FACTOR        = 0.95;   // -5%
     private const ADMIN_REVIEW_FACTOR   = 0.90;   // -10%
 
-    // ---- النوافذ الزمنية والعتبات النسبية ----
-    public const WINDOW_DAYS            = 15;     // نافذة التحليل التراكمي (15 يوماً)
+    // ---- النوافذ الزمنية (لسقف الأمان فقط — القرار نفسه للنموذج) ----
+    public const WINDOW_DAYS            = 15;     // نافذة تعدد المصادر لسقف الأمان (15 يوماً)
     public const SELF_HEALING_DAYS      = 30;     // نافذة التعافي الذاتي لكل تصنيف (30 يوماً)
-    public const REWARD_THRESHOLD       = 0.80;   // عتبة الإيجابي للمكافأة (80%)
-    public const WARNING_THRESHOLD      = 0.40;   // عتبة السلبي البسيط للتحذير (40%)
 
     public function __construct(
         private readonly string $aiBaseUrl,
@@ -104,7 +109,7 @@ class AiDecisionService
 
             $ratingBefore = (float) ($driver->rating_avg ?? self::RATING_MAX);
 
-            // 6. طبقة القرار الذكية والحوكمة (Decision Layer Guardrails)
+            // 6. القرار النهائي: قرار النموذج + سقف الأمان (Decision Layer Guardrails)
             $decisionCode       = $this->determineFinalDecision($review, $windowStats, $modelCode);
             $decisionConfidence = max(0.90, $modelConfidence);
 
@@ -152,11 +157,19 @@ class AiDecisionService
     }
 
     // =========================================================
-    //  طبقة الحوكمة واتخاذ القرار المنطقي
+    //  سقف الأمان + القرار النهائي (النموذج يقرر، وثلاث قواعد ثابتة تعلوه)
     // =========================================================
 
     /**
-     * تحديد القرار النهائي استناداً للقواعد المحددة ومستويات الخطورة الثلاثة
+     * القرار الفعلي هو قرار نموذج XGBoost الخام ($modelCode) في كل الحالات،
+     * إلا في ثلاث حالات سقف أمان لا يستطيع النموذج رؤيتها أصلاً (لأنها تعتمد على
+     * تعدد المصادر عبر نافذة 15 يوماً، وهذه بيانات لا تُرسَل له كخصائص):
+     *
+     *   1. مساس بالسلامة أو خطورة حرجة على التعليق الحالي ⇒ مراجعة إدارية فورية.
+     *   2. تكرار نفس فئة الشكوى من ولِيَّي أمر مختلفَين (2+) خلال 15 يوماً ⇒ مخالفة متوسطة فورية.
+     *   3. بلاغ سلامة نشط ضمن النافذة ⇒ يمنع أي مكافأة رشّحها النموذج.
+     *
+     * كل حالة غير هذي الثلاث تمر مباشرة بقرار النموذج كما هو.
      */
     private function determineFinalDecision(DriverReview $review, array $windowStats, int $modelCode): int
     {
@@ -164,55 +177,34 @@ class AiDecisionService
         $category   = ucfirst(strtolower(trim((string) ($review->ai_category ?? 'General'))));
         $userRating = (int) ($review->rating ?? 0);
         $severity   = (int) ($review->ai_severity ?? 0);
-        $confidence = (float) ($review->ai_sentiment_confidence ?? 0);
 
         $isNegative = ($nlpLabel === 'negative' || $userRating <= 2);
 
-        // ── 1. المستوى الثالث: الخطورة القصوى والمساس بالسلامة (ADMIN REVIEW REQUIRED - كود 4) ──
-        // استجابة فورية دون انتظار نسب عند المساس بالسلامة أو خطورة حرجة (severity = 2)
+        // ── سقف الأمان 1: مساس بالسلامة أو خطورة حرجة (severity = 2) ──
         $isSafetyViolation  = ($isNegative && $category === 'Safety');
         $isCriticalSeverity = ($isNegative && $severity === 2);
 
         if ($isSafetyViolation || $isCriticalSeverity) {
-            return self::CODE_ADMIN_REVIEW_REQUIRED; // كود 4
+            return self::CODE_ADMIN_REVIEW_REQUIRED; // كود 4 — يتجاوز أي قرار للنموذج
         }
 
-        // ── 2. المستوى الثاني: تعليقات الخطورة المتوسطة المتكررة (MODERATE VIOLATION - كود 2) ──
-        // تكرار نفس نوع الشكوى من أكثر من ولي أمر مختلف (>= 2) في نافذة الـ 15 يوماً
+        // ── سقف الأمان 2: تكرار نفس فئة الشكوى من 2+ أولياء أمور مختلفين خلال 15 يوماً ──
         $distinctParentsInThisCat = count($windowStats['distinct_parents_by_category'][$category] ?? []);
         $hasRecurringCategory     = ($distinctParentsInThisCat >= 2);
 
         if ($isNegative && $hasRecurringCategory) {
-            return self::CODE_MODERATE_VIOLATION; // كود 2
+            return self::CODE_MODERATE_VIOLATION; // كود 2 — يتجاوز أي قرار للنموذج
         }
 
-        // ── 3. المستوى الأول: التعليقات السلبية البسيطة (FORMAL WARNING - كود 3) ──
-        // إذا بلغت نسبة أولياء الأمور السلبيين 40% أو أكثر في الـ 15 يوماً الماضية
-        if ($isNegative) {
-            if ($windowStats['negative_ratio'] >= self::WARNING_THRESHOLD) {
-                return self::CODE_FORMAL_WARNING; // كود 3
-            }
-
-            // إذا كانت النسبة أقل من 40% ولا يوجد تكرار متوسط -> لا إجراء (ضمن هامش الملاحظة)
-            return self::CODE_NO_ACTION;
-        }
-
-        // ── 4. الحالة الأولى: المكافأة والتشجيع النسبي (REWARD - كود 1) ──
-        // نسبة التعليقات الإيجابية تصل إلى 80% أو أكثر من إجمالي أولياء الأمور في الـ 15 يوماً مع خلو السجل من بلاغات السلامة
+        // ── سقف الأمان 3: بلاغ سلامة نشط يمنع أي مكافأة رشّحها النموذج ──
         $hasActiveSafetyComplaint = !empty($windowStats['distinct_parents_by_category']['Safety'] ?? []);
-        $isPositiveReview         = ($nlpLabel === 'positive' || ($userRating >= 4 && $nlpLabel !== 'negative'));
 
-        if ($isPositiveReview && !$hasActiveSafetyComplaint) {
-            if ($windowStats['positive_ratio'] >= self::REWARD_THRESHOLD) {
-                return self::CODE_REWARD; // كود 1
-            }
-
-            // إيجابي لكن لم يصل بعد لنسبة 80% من إجمالي أولياء الأمور -> لا إجراء
+        if ($modelCode === self::CODE_REWARD && $hasActiveSafetyComplaint) {
             return self::CODE_NO_ACTION;
         }
 
-        // ── 5. الحالة الرابعة: الحالة المستقرة / لا إجراء (NO ACTION - كود 0) ──
-        return self::CODE_NO_ACTION;
+        // ── غير ذلك: القرار بالكامل لنموذج XGBoost ──
+        return $modelCode;
     }
 
     // =========================================================

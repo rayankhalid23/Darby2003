@@ -416,7 +416,15 @@ class ReportService
         $sortBy = $filters['sort_by'] ?? 'trips'; // trips, rating, retention
         $search = $filters['search'] ?? null;
 
-        $query = Driver::with(['user', 'vehicles']);
+        $query = Driver::with(['user', 'vehicles'])
+            ->withCount([
+                'trips as completed_trips_count' => function ($q) {
+                    $q->where('status', 'completed');
+                },
+                'activeSubscriptions as active_subs_count' => function ($q) {
+                    $q->where('active_subscriptions.status', 'active');
+                },
+            ]);
 
         if (!empty($search)) {
             $query->whereHas('user', function ($q) use ($search) {

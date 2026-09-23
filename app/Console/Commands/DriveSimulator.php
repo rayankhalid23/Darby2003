@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Http;
 /**
  * أداة اختبار يدوية: تبث إحداثيات سائق حقيقية (من ملف JSON) دورياً إلى
  * POST /driver/trips/{tripId}/location كأن السائق يتحرك فعلياً على الخريطة،
- * وتتوقف تلقائياً عند كل محطة لتعطيك فرصة تنفيذ مسح QR (أو أي إجراء آخر)
- * يدوياً من جهازك قبل أن تكمل بقية المسار.
+ * وتتوقف تلقائياً عند كل محطة لتعطيك فرصة تنفيذ تأكيد الصعود/النزول اليدوي
+ * (أو أي إجراء آخر) من جهازك قبل أن تكمل بقية المسار.
  *
  * الاستخدام (بتسجيل دخول حقيقي بالإيميل/الباسورد — لا مشاكل PowerShell مع الرمز |):
  *   php artisan trip:drive-simulator storage/app/drive-simulations/drive_route_215.json --email=driver@x.ly --password=xxxx
@@ -27,7 +27,7 @@ class DriveSimulator extends Command
         {--base-url=http://127.0.0.1:8000 : عنوان السيرفر المحلي}
         {--interval=3 : ثواني الانتظار بين كل نقطة والتالية}';
 
-    protected $description = 'يبث إحداثيات سائق من ملف بشكل دوري لمحاكاة رحلة حقيقية، ويتوقف عند كل محطة لمسح QR يدوياً';
+    protected $description = 'يبث إحداثيات سائق من ملف بشكل دوري لمحاكاة رحلة حقيقية، ويتوقف عند كل محطة لتأكيد الصعود/النزول يدوياً';
 
     public function handle(): int
     {
@@ -127,7 +127,7 @@ class DriveSimulator extends Command
                 }
             }
 
-            // توقف عند نهاية المرحلة لإعطائك فرصة تنفيذ الإجراء يدوياً (مسح QR مثلاً)
+            // توقف عند نهاية المرحلة لإعطائك فرصة تنفيذ الإجراء يدوياً (تأكيد صعود/نزول مثلاً)
             $action = $leg['pause_action'] ?? null;
             if ($action) {
                 $this->newLine();
@@ -170,8 +170,6 @@ class DriveSimulator extends Command
         $this->line("curl -s -X POST {$baseUrl}/api/v1/driver/trips/{$tripId}/{$action} \\");
         $this->line("  -H \"Authorization: Bearer {$token}\" -H \"Accept: application/json\" \\");
         $this->line("  -d \"trip_child_id={$subId}\" \\");
-        $this->line("  -d \"verification_method=qr\" \\");
-        $this->line("  -d \"qr_code_token={$qrToken}\" \\");
         $this->line("  -d \"latitude={$lat}\" -d \"longitude={$lng}\"");
     }
 

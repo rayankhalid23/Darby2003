@@ -53,7 +53,7 @@ Content-Type: application/json
 | | 29. تحديث مسار تشغيلي | `PUT` | `/api/driver/routes/{route}` |
 | | 30. بدء رحلة حية (صباحية/مسائية) | `POST` | `/api/driver/trips/start` |
 | | 31. بث وتحديث موقع الـ GPS المباشر | `POST` | `/api/driver/trips/{tripId}/location` |
-| | 32. مسح كود QR عند صعود/نزول الطفل | `POST` | `/api/driver/trips/{tripId}/verify-qr/{childId}` |
+| | 32. تأكيد صعود/نزول الطفل يدوياً (زر) | `POST` | `/api/driver/trips/{tripId}/pickup` أو `/dropoff` |
 | | 33. تخطي محطة طفل وتحديث المسار | `POST` | `/api/driver/trips/{tripId}/skip/{childId}` |
 | | 34أ. عرض الرحلات القادمة لاختيار الغياب منها | `GET` | `/api/driver/trips/upcoming-for-absence` |
 | | 34. تسجيل غياب مجدول للسائق عن رحلات محددة | `POST` | `/api/driver/trips/register-absence` |
@@ -385,23 +385,25 @@ Content-Type: application/json
 }
 ```
 
-#### 5.3 مسح كود QR عند صعود/نزول الطفل (Verify QR)
+#### 5.3 تأكيد صعود/نزول الطفل يدوياً (زر "تم الصعود" / "تم النزول")
 * **Method:** `POST`
-* **URL:** `/api/driver/trips/{tripId}/verify-qr/{childId}`
-* **Path Parameters:** `tripId` (int), `childId` (int)
+* **URL:** `/api/driver/trips/{tripId}/pickup` (صعود) أو `/api/driver/trips/{tripId}/dropoff` (نزول)
+* **Path Parameters:** `tripId` (int)
 * **Body (JSON):**
 ```json
 {
-  "qr_code_token": "CHILD_QR_TOKEN_ABC123",
+  "trip_child_id": 101,
   "latitude": 32.89200000,
   "longitude": 13.17500000
 }
 ```
+* **ملاحظة:** `latitude`/`longitude` إلزاميان دائماً — يُرفض الطلب بموقع السائق الفعلي إذا كان بعيداً عن محطة الطفل (≤100م للمنزل، ≤200م للمدرسة).
 * **Success Response (200 OK):**
 ```json
 {
   "status": "success",
-  "message": "تم توثيق صعود/نزول الطفل ومسح الكود بنجاح"
+  "message": "تم تأكيد الصعود وإرسال الإشعار لولي الأمر.",
+  "next_stop": { }
 }
 ```
 

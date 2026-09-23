@@ -40,7 +40,7 @@ class TripConstraintsAuditTest extends TripAuditFixture
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/start", ['latitude' => 32.875, 'longitude' => 13.175]);
 
         $far = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'manual',
+            'trip_child_id' => $s['sub']->id,
             'latitude' => 32.95, 'longitude' => 13.25,
         ]);
         $this->out('B02 far pickup(' . $far->status() . '): ' . json_encode($far->json(), JSON_UNESCAPED_UNICODE));
@@ -48,37 +48,19 @@ class TripConstraintsAuditTest extends TripAuditFixture
         $this->assertEquals('OUT_OF_RANGE', $far->json('error_code'));
 
         $noLoc = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'manual',
+            'trip_child_id' => $s['sub']->id,
         ]);
         $this->out('B02 no-location pickup(' . $noLoc->status() . '): ' . json_encode($noLoc->json(), JSON_UNESCAPED_UNICODE));
         $noLoc->assertStatus(422);
         $this->assertEquals('LOCATION_REQUIRED', $noLoc->json('error_code'));
 
-        // wrong QR token
-        $badQr = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => 'NOT-THE-TOKEN',
+        // التأكيد اليدوي ينجح فقط عند التواجد الفعلي قرب محطة المنزل (لا يوجد أي مسار بديل يتجاوز هذا الفحص)
+        $nearPickup = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
+            'trip_child_id' => $s['sub']->id,
+            'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ]);
-        $this->out('B02 wrong QR(' . $badQr->status() . '): ' . json_encode($badQr->json(), JSON_UNESCAPED_UNICODE));
-        $badQr->assertStatus(400);
-
-        // QR from very far away (QR intentionally bypasses geofence)
-        $farQr = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr',
-            'qr_code_token' => $s['child']->fresh()->qr_code_token,
-            'latitude' => 20.0, 'longitude' => 5.0,
-        ]);
-        $this->out('B02 QR pickup from 1000km away(' . $farQr->status() . '): ' . json_encode($farQr->json(), JSON_UNESCAPED_UNICODE));
-        $farQr->assertStatus(422);
-        $this->assertEquals('OUT_OF_RANGE', $farQr->json('error_code'));
-
-        // ولكن الـ QR يظل مرناً داخل النطاق المعقول (خلافاً للتأكيد اليدوي الضيق)
-        $nearQr = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr',
-            'qr_code_token' => $s['child']->fresh()->qr_code_token,
-            'latitude' => 32.8845, 'longitude' => 13.1845,
-        ]);
-        $this->out('B02 QR pickup ~600m away(' . $nearQr->status() . ')');
-        $nearQr->assertStatus(200);
+        $this->out('B02 near pickup(' . $nearPickup->status() . ')');
+        $nearPickup->assertStatus(200);
     }
 
     public function test_B03_state_machine_order_and_duplicates(): void
@@ -86,20 +68,19 @@ class TripConstraintsAuditTest extends TripAuditFixture
         $s = $this->makeSubscription('Wissam');
         $tripId = $this->generateTodayTrip();
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/start", ['latitude' => 32.875, 'longitude' => 13.175]);
-        $qr = $s['child']->fresh()->qr_code_token;
 
         $d1 = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/dropoff", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG,
         ]);
         $this->out('B03 dropoff-before-pickup(' . $d1->status() . '): ' . json_encode($d1->json(), JSON_UNESCAPED_UNICODE));
         $this->assertEquals(409, $d1->status());
 
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ])->assertStatus(200);
 
         $p2 = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ]);
         $this->out('B03 duplicate pickup(' . $p2->status() . '): ' . json_encode($p2->json(), JSON_UNESCAPED_UNICODE));
         $this->assertEquals(409, $p2->status());
@@ -109,10 +90,10 @@ class TripConstraintsAuditTest extends TripAuditFixture
         $this->assertEquals(409, $ab->status());
 
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/dropoff", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG,
         ])->assertStatus(200);
         $d2 = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/dropoff", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG,
         ]);
         $this->out('B03 duplicate dropoff(' . $d2->status() . '): ' . json_encode($d2->json(), JSON_UNESCAPED_UNICODE));
         $this->assertEquals(409, $d2->status());
@@ -122,11 +103,10 @@ class TripConstraintsAuditTest extends TripAuditFixture
     {
         $s = $this->makeSubscription('Karim');
         $tripId = $this->generateTodayTrip();
-        $qr = $s['child']->fresh()->qr_code_token;
 
         $this->out('B04 trip status before any start: ' . Trip::find($tripId)->status);
         $p = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ]);
         $this->out('B04 pickup on NOT-STARTED trip(' . $p->status() . '): ' . json_encode($p->json(), JSON_UNESCAPED_UNICODE));
         $p->assertStatus(409);
@@ -136,10 +116,10 @@ class TripConstraintsAuditTest extends TripAuditFixture
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/start", ['latitude' => 32.875, 'longitude' => 13.175])
             ->assertStatus(200);
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ])->assertStatus(200);
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/dropoff", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG,
         ])->assertStatus(200);
         $c = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/complete");
         $this->out('B04 complete(' . $c->status() . ') status=' . Trip::find($tripId)->status);
@@ -152,7 +132,7 @@ class TripConstraintsAuditTest extends TripAuditFixture
         $this->assertEquals('completed', Trip::find($tripId)->status, 'a completed trip was re-opened');
 
         $pAfter = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ]);
         $this->out('B04 pickup on COMPLETED trip(' . $pAfter->status() . '): ' . json_encode($pAfter->json(), JSON_UNESCAPED_UNICODE));
         $pAfter->assertStatus(409);
@@ -184,8 +164,7 @@ class TripConstraintsAuditTest extends TripAuditFixture
             'another driver injected fake tracking points');
 
         $r3 = $this->actingAs($other['user'], 'sanctum')->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr',
-            'qr_code_token' => $s['child']->fresh()->qr_code_token,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ]);
         $this->out('B05 other-driver pickup(' . $r3->status() . ')');
 
@@ -250,10 +229,9 @@ class TripConstraintsAuditTest extends TripAuditFixture
     {
         $s = $this->makeSubscription('SecretChildName');
         $tripId = $this->generateTodayTrip();
-        $qr = $s['child']->fresh()->qr_code_token;
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/start", ['latitude' => 32.875, 'longitude' => 13.175]);
         $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
-            'trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr,
+            'trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ])->assertStatus(200);
 
         $stranger = $this->makeOtherParent();

@@ -28,6 +28,9 @@ class DriverMatchResource extends JsonResource
             'rating'            => round((float)($this->rating_avg ?? 5.0), 1),
             'completed_trips'   => $this->completed_trips_count ?? 0,
             'status'            => $this->status,
+            'ai_rank'           => $this->ai_rank ?? null,
+            'ai_score'          => isset($this->ai_score) ? round((float)$this->ai_score, 4) : null,
+            'ai_ranking_reasons'=> $this->ai_reasons ?? [],
 
             'vehicle' => $activeVehicle ? [
                 'brand'           => $activeVehicle->brand,

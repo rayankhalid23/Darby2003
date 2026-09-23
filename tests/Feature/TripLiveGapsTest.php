@@ -160,10 +160,10 @@ class TripLiveGapsTest extends TestCase
             ['latitude' => 32.881, 'longitude' => 13.191]
         )->assertStatus(200);
 
-        // طھط£ظƒظٹط¯ ط§ظ„طµط¹ظˆط¯ ط¹ط¨ط± QR (ظ†ط·ط§ظ‚ ظ…ظˆط³ط¹)
+        // تأكيد الصعود يدوياً (زر) — يتطلب موقع GPS ضمن نطاق المحطة
         $this->actingAs($this->driverUser)->postJson(
-            "/api/v1/driver/trips/{$tripId}/verify-qr/{$sub->id}",
-            ['qr_code_token' => $this->child->qr_code_token]
+            "/api/v1/driver/trips/{$tripId}/pickup",
+            ['trip_child_id' => $sub->id, 'latitude' => 32.881, 'longitude' => 13.191]
         )->assertStatus(200);
 
         // ط¨ط¹ط¯ ط§ظ„طµط¹ظˆط¯: boarded (ظˆظ„ظٹط³ ط§ظ„ظ‚ظٹظ…ط© ط§ظ„ظ‚ط¯ظٹظ…ط© picked_up)

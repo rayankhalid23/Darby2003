@@ -7,6 +7,7 @@ from pydantic import BaseModel
 import uvicorn
 import pandas as pd
 import xgboost as xgb
+import lightgbm as lgb
 
 MODEL_NAME = "UBC-NLP/MARBERTv2"
 MAX_LEN = 32
@@ -87,6 +88,18 @@ decision_booster.load_model(str(DECISION_MODEL_PATH))
 print("[AI Service] XGBoost decision model ready:", DECISION_MODEL_PATH.name)
 
 # =====================================================
+#  LightGBM: تحميل نموذج ترتيب وتوصية السائقين
+# =====================================================
+
+RANKER_MODEL_PATH = BASE_DIR / "models" / "darbi_lgb_ranker_robust.txt"
+if not RANKER_MODEL_PATH.exists():
+    RANKER_MODEL_PATH = BASE_DIR.parent / "python" / "models" / "darbi_lgb_ranker_robust.txt"
+
+print("[AI Service] Loading LightGBM ranker model...")
+ranker_booster = lgb.Booster(model_file=str(RANKER_MODEL_PATH))
+print("[AI Service] LightGBM ranker model ready:", RANKER_MODEL_PATH.name)
+
+# =====================================================
 #  FastAPI Application
 # =====================================================
 
@@ -106,11 +119,84 @@ class DecisionInput(BaseModel):
     category_pred:        int
     category_confidence:  float
 
+class DriverRankItem(BaseModel):
+    driver_id:            int
+    rating:               float = 1.0
+    recent_rating:        float = 1.0
+    trip_completion:      float = 1.0
+    successful_stops:     float = 1.0
+    punctuality:          float = 1.0
+    confirmed_complaints: float = 0.0
+    breakdown:            float = 0.0
+    driver_absence:       float = 0.0
+
+class DriverRankRequest(BaseModel):
+    drivers: list[DriverRankItem]
+
 # ----- نقاط النهاية -----
 
 @app.get("/")
 def health_check():
-    return {"status": "الخدمة شغالة", "nlp_model": "MARBERTv2", "decision_model": "XGBoost-87k"}
+    return {
+        "status": "الخدمة شغالة",
+        "nlp_model": "MARBERTv2",
+        "decision_model": "XGBoost-87k",
+        "ranker_model": "LightGBM-LambdaRank",
+    }
+
+@app.post("/rank")
+def rank_drivers(payload: DriverRankRequest):
+    """ترتيب قائمة السائقين بناءً على نموذج LightGBM LambdaRank ومقاييس الأداء الثمانية"""
+    try:
+        if not payload.drivers:
+            return {"status": "success", "total_ranked": 0, "drivers": []}
+
+        records = [d.model_dump() for d in payload.drivers]
+        df = pd.DataFrame(records)[ranker_booster.feature_name()]
+        raw_scores = ranker_booster.predict(df)
+
+        ranked_list = []
+        for rec, score in zip(records, raw_scores):
+            sc = float(score)
+            reasons = []
+            if rec["punctuality"] >= 0.95:
+                reasons.append("التزام استثنائي بالمواعيد (>=95%)")
+            elif rec["punctuality"] < 0.80:
+                reasons.append("انخفاض في دقة المواعيد (<80%)")
+
+            if rec["confirmed_complaints"] == 0:
+                reasons.append("سجل نظيف خالٍ من الشكاوى")
+            else:
+                reasons.append(f"توجد شكاوى مسجلة ({round(rec['confirmed_complaints']*5)})")
+
+            if rec["trip_completion"] >= 0.95:
+                reasons.append("نسبة إنجاز رحلات عالية (>=95%)")
+
+            if rec["driver_absence"] == 0:
+                reasons.append("انضباط تام بدون غيابات")
+            else:
+                reasons.append(f"سجل غيابات مسجل ({round(rec['driver_absence']*5)})")
+
+            ranked_list.append({
+                "driver_id": rec["driver_id"],
+                "ai_score": round(sc, 4),
+                "reasons": reasons,
+                "metrics": rec,
+            })
+
+        # فرز تنازلي حسب نقاط الذكاء الاصطناعي
+        ranked_list.sort(key=lambda x: x["ai_score"], reverse=True)
+        for idx, item in enumerate(ranked_list, 1):
+            item["ai_rank"] = idx
+
+        return {
+            "status": "success",
+            "model": "LightGBM-LambdaRank",
+            "total_ranked": len(ranked_list),
+            "drivers": ranked_list,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ranking error: {str(e)}")
 
 @app.post("/classify")
 def classify(payload: CommentInput):

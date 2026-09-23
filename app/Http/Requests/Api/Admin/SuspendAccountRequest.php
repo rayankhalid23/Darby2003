@@ -1,40 +1,38 @@
 <?php
 
-namespace App\Http\Requests\Api\Parent;
+namespace App\Http\Requests\Api\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Http\Exceptions\HttpResponseException;
 
-class RespondTripManualConfirmationRequest extends FormRequest
+class SuspendAccountRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return auth()->check() && auth()->user()->role_id !== null;
     }
 
     public function rules(): array
     {
         return [
-            'confirmed' => ['required', 'boolean'],
+            'reason' => ['nullable', 'string', 'max:500'],
         ];
     }
 
     public function messages(): array
     {
         return [
-            'confirmed.required' => 'يجب تحديد إجابتك (نعم أو لا).',
-            'confirmed.boolean'  => 'قيمة الإجابة غير صالحة.',
+            'reason.max' => 'سبب الإيقاف طويل جداً، يرجى الاختصار.',
         ];
     }
 
     protected function failedValidation(Validator $validator)
     {
         throw new HttpResponseException(response()->json([
-            'status'     => false,
-            'error_code' => 'VALIDATION_ERROR',
-            'message'    => '',
-            'errors'     => $validator->errors(),
+            'status'  => false,
+            'message' => 'عذراً، مدخلات الطلب تحتوي على أخطاء.',
+            'errors'  => $validator->errors()
         ], 422));
     }
 }

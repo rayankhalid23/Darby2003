@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Admin\DriverFilterRequest;
 use App\Http\Requests\Api\Admin\DriverReviewRequest;
+use App\Http\Requests\Api\Admin\SuspendAccountRequest;
 use App\Http\Requests\Api\Admin\ReviewProfileChangeRequest; // الجديد الخاص بفحص قرار التعديل
 use App\Http\Resources\Api\Admin\AdminDriverDetailResource;
 use App\Http\Resources\Api\Admin\AdminDriverListResource;
@@ -85,6 +86,15 @@ class AdminDriverController extends Controller
         try {
             $adminId = auth()->user()->admin->id ?? auth()->id();
             $data = $request->validated();
+
+            // رفع الصورة الشخصية للسائق إن أُرسلت
+            if ($request->hasFile('avatar')) {
+                $path = $request->file('avatar')->store('drivers/avatars', 'public');
+                $data['avatar_path'] = 'storage/' . $path;
+                $uploadedPaths[] = $path;
+            } elseif (!empty($data['avatar_url']) && is_string($data['avatar_url']) && !str_starts_with($data['avatar_url'], 'data:')) {
+                $data['avatar_path'] = $data['avatar_url'];
+            }
 
             // رفع صورة المركبة الجديدة إن أُرسلت
             if ($request->hasFile('vehicle_image')) {
@@ -175,6 +185,60 @@ class AdminDriverController extends Controller
         }
     }
 
+    /**
+     * إيقاف حساب السائق (تجميد الدخول وإيقاف النشاط التشغيلي)
+     * POST /api/admin/drivers/{id}/suspend
+     */
+    public function suspend(SuspendAccountRequest $request, int $id): JsonResponse
+    {
+        try {
+            $adminId = auth()->user()->admin->id ?? auth()->id();
+            $driver = $this->adminDriverService->suspendDriver($id, $request->input('reason'), $adminId);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'تم إيقاف حساب السائق بنجاح.',
+                'data'    => [
+                    'id'         => $driver->id,
+                    'status'     => $driver->status,
+                    'is_active'  => (bool) ($driver->user->is_active ?? false),
+                ]
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['status' => false, 'message' => 'عذراً، السائق المطلوب غير موجود في النظام.'], 404);
+        } catch (Exception $e) {
+            Log::error("Admin Suspend Driver Error: " . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'تعذر إيقاف حساب السائق: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * إعادة تفعيل حساب السائق الموقوف
+     * POST /api/admin/drivers/{id}/activate
+     */
+    public function activate(int $id): JsonResponse
+    {
+        try {
+            $adminId = auth()->user()->admin->id ?? auth()->id();
+            $driver = $this->adminDriverService->activateDriver($id, $adminId);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'تم إعادة تفعيل حساب السائق بنجاح.',
+                'data'    => [
+                    'id'         => $driver->id,
+                    'status'     => $driver->status,
+                    'is_active'  => (bool) ($driver->user->is_active ?? false),
+                ]
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['status' => false, 'message' => 'عذراً، السائق المطلوب غير موجود في النظام.'], 404);
+        } catch (Exception $e) {
+            Log::error("Admin Activate Driver Error: " . $e->getMessage());
+            return response()->json(['status' => false, 'message' => 'تعذر إعادة تفعيل حساب السائق: ' . $e->getMessage()], 500);
+        }
+    }
+
     /*
     |--------------------------------------------------------------------------
     | 🚀 الدوال الثلاث الجديدة للتحكم في تحديثات الملفات المعلقة وإشعاراتها
@@ -239,10 +303,7 @@ class AdminDriverController extends Controller
     {
         try {
             $adminId = auth()->id() ?? 1;
-            if (\Illuminate\Support\Facades\Schema::hasTable('admins')) {
-                $adminId = \Illuminate\Support\Facades\DB::table('admins')->where('user_id', auth()->id())->value('id') ?? $adminId;
-            }
-    
+
             $decision = $request->input('decision');
             $rejectionReason = $request->input('rejection_reason');
     
@@ -323,10 +384,7 @@ class AdminDriverController extends Controller
     public function approveAbsenceRequest(Request $request, int $id): JsonResponse
     {
         try {
-            $userId = auth()->id();
-            $adminId = \Illuminate\Support\Facades\DB::table('admins')
-                ->where('user_id', $userId)
-                ->value('id') ?? 1;
+            $adminId = auth()->id() ?? 1;
 
             $notes = $request->input('notes') ?? $request->input('admin_notes');
             $absence = $this->adminDriverService->approveDriverAbsence($id, $notes, $adminId);
@@ -368,10 +426,7 @@ class AdminDriverController extends Controller
         ]);
 
         try {
-            $userId = auth()->id();
-            $adminId = \Illuminate\Support\Facades\DB::table('admins')
-                ->where('user_id', $userId)
-                ->value('id') ?? 1;
+            $adminId = auth()->id() ?? 1;
 
             $reason = $request->input('reason');
             $absence = $this->adminDriverService->rejectDriverAbsence($id, $reason, $adminId);

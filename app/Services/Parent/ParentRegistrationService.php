@@ -214,6 +214,33 @@ class ParentRegistrationService
         }
     }
 
+    /**
+     * تغيير كلمة المرور لولي الأمر: يتطلب كلمة المرور الحالية للتحقق قبل الاعتماد.
+     */
+    public function changePassword(int $userId, string $oldPassword, string $newPassword): User
+    {
+        Log::info("Service: Starting changePassword for Parent User ID: {$userId}");
+
+        $user = User::findOrFail($userId);
+
+        if (!Hash::check($oldPassword, $user->password)) {
+            Log::warning("Service: changePassword blocked. Wrong current password for User ID: {$userId}");
+            throw new Exception("كلمة المرور الحالية غير صحيحة.");
+        }
+
+        if (Hash::check($newPassword, $user->password)) {
+            Log::warning("Service: changePassword blocked. New password matches current password for User ID: {$userId}");
+            throw new Exception("كلمة المرور الجديدة يجب أن تختلف عن كلمة المرور الحالية.");
+        }
+
+        $user->password_hash = Hash::make($newPassword);
+        $user->save();
+
+        Log::info("Service: Password changed successfully for Parent User ID: {$userId}");
+
+        return $user;
+    }
+
     public function approveEmailChange(int $userId): bool
     {
         Log::info("Service: Attempting to approve email change for User ID: {$userId}");

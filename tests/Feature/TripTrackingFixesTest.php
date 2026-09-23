@@ -302,10 +302,10 @@ class TripTrackingFixesTest extends TestCase
         $trip = $this->makeInProgressTrip();
         $data = $this->makeChildWithSubscription($trip);
 
-        // نستخدم QR لتفادي فحص الـ Geofence وعزل اختبار حماية الترتيب المنطقي (لا نزول قبل صعود) فقط
+        // موقع صحيح عند محطة المدرسة، لعزل اختبار حماية الترتيب المنطقي (لا نزول قبل صعود) فقط
         $response = $this->actingAs($this->driverUser)->postJson(
             "/api/v1/driver/trips/{$trip->id}/children/{$data['sub']->id}/status",
-            ['action' => 'dropoff', 'verification_method' => 'qr', 'qr_code_token' => $data['child']->qr_code_token]
+            ['action' => 'dropoff', 'latitude' => 32.90, 'longitude' => 13.20]
         );
 
         $response->assertStatus(409);
@@ -317,7 +317,7 @@ class TripTrackingFixesTest extends TestCase
         $trip = $this->makeInProgressTrip();
         $data = $this->makeChildWithSubscription($trip);
         $url = "/api/v1/driver/trips/{$trip->id}/children/{$data['sub']->id}/status";
-        $dropoffPayload = ['action' => 'dropoff', 'verification_method' => 'qr', 'qr_code_token' => $data['child']->qr_code_token];
+        $dropoffPayload = ['action' => 'dropoff', 'latitude' => 32.90, 'longitude' => 13.20];
 
         $this->actingAs($this->driverUser)->postJson($url, ['action' => 'pickup', 'latitude' => 32.88, 'longitude' => 13.19])
             ->assertStatus(200);

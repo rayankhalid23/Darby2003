@@ -14,18 +14,20 @@ class DriverDocument extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'driver_id', 'vehicle_id', 'doc_type', 'file_url',
+        'driver_id', 'vehicle_id', 'doc_type', 'document_type', 'file_url',
         'license_expiry_date', 'insurance_expiry_date',
         'stamp_expiry_date', 'technical_inspection_expiry_date',
         'expiry_notified_milestone', 'status',
-        'reviewed_by', 'feedback', 'uploaded_at' // أضفنا uploaded_at
+        'reviewed_by', 'feedback', 'uploaded_at', 'expires_at'
     ];
 
-    // تحديث uploaded_at تلقائياً عند إنشاء سجل جديد
+    // تحديث uploaded_at تلقائياً عند إنشاء سجل جديد في حال كان العمود موجوداً
     protected static function booted()
     {
         static::creating(function ($model) {
-            $model->uploaded_at = Carbon::now();
+            if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'uploaded_at')) {
+                $model->uploaded_at = Carbon::now();
+            }
         });
     }
 

@@ -28,6 +28,9 @@ class ActiveSubscription extends Model
         'dropoff_time',
         'sort_order',
         'status',
+        'cancelled_at',
+        'cancelled_by',
+        'cancellation_reason',
     ];
 
     protected $casts = [

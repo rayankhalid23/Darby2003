@@ -28,4 +28,14 @@ class TripDispute extends Model
     {
         return $this->belongsTo(Trip::class, 'trip_id');
     }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'parent_id');
+    }
+
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Driver\Driver::class, 'driver_id');
+    }
 }

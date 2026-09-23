@@ -220,20 +220,19 @@ class EmergencyBreakdownService
      */
     protected function checkDriverSeatCapacity(Driver $driver, int $neededSeats, string $shiftSlot): bool
     {
-        // فحص DriverSeatSlot إن وجد
-        $slot = $driver->seatSlots->firstWhere('slot', $shiftSlot);
-        if ($slot) {
-            return (int) $slot->available_seats >= $neededSeats;
-        }
-
-        // فحص سعة المركبة النشطة مقارنة بالطلاب المسجلين
+        // السعة تُشتق من المركبة النشطة، والمقاعد المحجوزة تُقرأ من DriverSeatSlot
+        // لخانة (سائق × فترة × تاريخ اليوم) — نفس المنطق المستخدم في باقي النظام
+        // (RouteFeasibilityService/DriverSeatSlot::available). عمود available_seats
+        // لم يعد موجوداً على الجدول منذ التطبيع V2.
         $activeVehicle = $driver->vehicles->where('status', 'Active')->first() ?? $driver->vehicles->first();
         $capacity = (int) ($activeVehicle?->capacity_manual ?? $activeVehicle?->capacity ?? 10);
-        $currentSubsCount = ActiveSubscription::forDriver($driver->id)
-            ->where('status', '!=', 'cancelled')
-            ->count();
 
-        $available = max(0, $capacity - $currentSubsCount);
+        if ($capacity <= 0) {
+            return false;
+        }
+
+        $available = DriverSeatSlot::available($driver->id, $shiftSlot, Carbon::today()->toDateString(), $capacity);
+
         return $available >= $neededSeats;
     }
 
@@ -609,7 +608,7 @@ class EmergencyBreakdownService
      */
     protected function notifyParentsInitialSuspension(Trip $trip, Collection $strandedStops): void
     {
-        $parentUserIds = $strandedStops->pluck('child.parent.user_id')->filter()->unique();
+        $parentUserIds = $strandedStops->pluck('child.parent_id')->filter()->unique();
         $users = User::whereIn('id', $parentUserIds)->get();
 
         if ($users->isNotEmpty()) {

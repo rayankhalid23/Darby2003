@@ -10,6 +10,7 @@ use App\Models\Driver\Driver;
 use App\Models\Parent\ParentModel;
 use App\Models\Shared\DriverReview;
 use App\Models\Shared\SubscriptionRequest;
+use App\Models\Shared\ActiveSubscription;
 
 /**
  * اختبار وحدة "تقييمات السائقين" (Admin + Parent) بعد إصلاح:
@@ -89,12 +90,33 @@ class DriverReviewsTest extends TestCase
         $this->parent = ParentModel::findOrFail($this->parentUser->id);
     }
 
+    /**
+     * ينشئ اشتراكاً "نشطاً"/"مكتملاً" فعلياً بين ولي الأمر والسائق (سطر في
+     * active_subscriptions) — مطلوب الآن كبوابة إلزامية قبل السماح بإضافة
+     * تقييم/تعليق، بعد إضافة شرط "الاشتراك نشط أو مكتمل".
+     */
+    protected function makeActiveSubscription(User $parentUser, Driver $driver, string $status = 'active'): ActiveSubscription
+    {
+        $request = SubscriptionRequest::create([
+            'parent_id' => $parentUser->id,
+            'driver_id' => $driver->id,
+            'status'    => SubscriptionRequest::STATUS_ACCEPTED,
+        ]);
+
+        return ActiveSubscription::create([
+            'subscription_request_id' => $request->id,
+            'status'                  => $status,
+        ]);
+    }
+
     // =========================================================
     // Driver Reviews
     // =========================================================
 
     public function test_parent_can_submit_driver_review(): void
     {
+        $this->makeActiveSubscription($this->parentUser, $this->driver, 'active');
+
         $response = $this->actingAs($this->parentUser)->postJson('/api/parent/driver-reviews', [
             'driver_id' => $this->driver->id,
             'rating'    => 5,
@@ -136,11 +158,7 @@ class DriverReviewsTest extends TestCase
      */
     public function test_parent_with_subscription_can_submit_more_than_one_review_for_same_driver(): void
     {
-        SubscriptionRequest::create([
-            'parent_id' => $this->parentUser->id,
-            'driver_id' => $this->driver->id,
-            'status'    => SubscriptionRequest::STATUS_ACCEPTED,
-        ]);
+        $this->makeActiveSubscription($this->parentUser, $this->driver, 'completed');
 
         DriverReview::create([
             'parent_id' => $this->parentUser->id,
@@ -181,6 +199,44 @@ class DriverReviewsTest extends TestCase
         $response = $this->actingAs($this->parentUser)->postJson('/api/parent/driver-reviews', [
             'driver_id' => $this->driver->id,
             'rating'    => 5,
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['driver_id']);
+    }
+
+    /**
+     * بوابة "الاشتراك نشط/مكتمل": ولي الأمر بلا أي اشتراك إطلاقاً مع السائق
+     * يُمنع من إضافة تقييم/تعليق، حتى لو كان تعليقه الأول.
+     */
+    public function test_parent_without_any_subscription_cannot_submit_review(): void
+    {
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/driver-reviews', [
+            'driver_id' => $this->driver->id,
+            'rating'    => 5,
+            'comment'   => 'تعليق بدون أي اشتراك سابق مع هذا السائق.',
+        ]);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['driver_id']);
+        $this->assertDatabaseMissing('driver_reviews', [
+            'driver_id' => $this->driver->id,
+            'parent_id' => $this->parentUser->id,
+        ]);
+    }
+
+    /**
+     * بوابة "الاشتراك نشط/مكتمل": اشتراك بحالة "ملغي" (cancelled) لا يكفي
+     * للسماح بإضافة تقييم/تعليق، رغم أنه يكفي لتجاوز قيد "تعليق واحد فقط".
+     */
+    public function test_parent_with_only_cancelled_subscription_cannot_submit_review(): void
+    {
+        $this->makeActiveSubscription($this->parentUser, $this->driver, 'cancelled');
+
+        $response = $this->actingAs($this->parentUser)->postJson('/api/parent/driver-reviews', [
+            'driver_id' => $this->driver->id,
+            'rating'    => 5,
+            'comment'   => 'تعليق باشتراك ملغي فقط.',
         ]);
 
         $response->assertStatus(422);

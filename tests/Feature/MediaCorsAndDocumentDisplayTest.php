@@ -20,8 +20,8 @@ class MediaCorsAndDocumentDisplayTest extends TestCase
     protected User $driverUser;
     protected Driver $driver;
     protected Vehicle $vehicle;
-    protected DriverDocument $docLicense;
-    protected DriverDocument $docInsurance;
+    protected $docLicense;
+    protected $docInsurance;
 
     protected function setUp(): void
     {
@@ -64,25 +64,41 @@ class MediaCorsAndDocumentDisplayTest extends TestCase
         // تخزين ملفات حقيقية على القرص الوهمي
         $licenseFile = UploadedFile::fake()->image('my_license.webp');
         $licensePath = $licenseFile->store('drivers/documents', 'public');
+        $this->driver->update(['license_image_url' => 'storage/' . $licensePath]);
 
         $insuranceFile = UploadedFile::fake()->create('my_insurance.pdf', 500, 'application/pdf');
         $insurancePath = $insuranceFile->store('drivers/documents', 'public');
 
-        $this->docLicense = DriverDocument::create([
-            'driver_id'   => $this->driver->id,
-            'doc_type'    => 'LICENSE',
-            'file_url'    => 'storage/' . $licensePath,
-            'status'      => 'Verified',
-            'uploaded_at' => now(),
+        $this->vehicle = Vehicle::create([
+            'driver_id'         => $this->driver->id,
+            'plate_number'      => '5 12345',
+            'brand'             => 'Toyota',
+            'model'             => 'Corolla',
+            'year'              => 2022,
+            'color'             => 'White',
+            'type'              => 'Sedan',
+            'capacity_manual'   => 4,
+            'has_ac'            => true,
+            'vehicle_image_url' => 'storage/' . $licensePath,
+            'status'            => 'Active',
+            'is_verified'       => true,
         ]);
 
-        $this->docInsurance = DriverDocument::create([
-            'driver_id'             => $this->driver->id,
+        $this->docLicense = \App\Models\Driver\VehicleDocument::create([
+            'vehicle_id'  => $this->vehicle->id,
+            'doc_type'    => 'LOGBOOK',
+            'file_url'    => 'storage/' . $licensePath,
+            'is_verified' => true,
+            'state'       => 'active',
+        ]);
+
+        $this->docInsurance = \App\Models\Driver\VehicleDocument::create([
+            'vehicle_id'            => $this->vehicle->id,
             'doc_type'              => 'INSURANCE',
             'file_url'              => 'storage/' . $insurancePath,
-            'insurance_expiry_date' => now()->addYears(1)->format('Y-m-d'),
-            'status'                => 'Verified',
-            'uploaded_at'           => now(),
+            'expiry_date'           => now()->addYears(1)->format('Y-m-d'),
+            'is_verified'           => true,
+            'state'                 => 'active',
         ]);
     }
 

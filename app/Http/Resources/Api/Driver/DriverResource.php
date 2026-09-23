@@ -55,14 +55,17 @@ class DriverResource extends JsonResource
                 ),
 
                 // 2. البيانات المهنية (تُجلب بأمان من كائن السائق المحلول)
-                'national_id'          => $driver?->national_id,
-                'license_number'       => $driver?->license_number,
-                'license_expiry'       => $driver?->license_expiry,
-                'driver_status'        => $driver?->status ?? 'Pending',
-                'rating_avg'           => round((float) ($driver?->rating_avg ?? 5.0), 2),
-                'active_warnings_count'=> (int) ($driver?->active_warnings_count ?? 0),
-                'is_suspended'         => (bool) ($driver?->is_suspended ?? false),
-                'suspended_until'      => $driver?->suspended_until ? $driver->suspended_until->toIso8601String() : null,
+                'national_id'            => $driver?->national_id,
+                'license_number'         => $driver?->license_number,
+                'license_expiry'         => $driver?->license_expiry,
+                'license_image_url'      => \App\Http\Controllers\Api\Shared\MediaController::urlFor($driver?->license_image_url),
+                'license_image_data_url' => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($driver?->license_image_url),
+                'doc_license_url'        => \App\Http\Controllers\Api\Shared\MediaController::urlFor($driver?->license_image_url),
+                'driver_status'          => $driver?->status ?? 'Pending',
+                'rating_avg'             => round((float) ($driver?->rating_avg ?? 5.0), 2),
+                'active_warnings_count'  => (int) ($driver?->active_warnings_count ?? 0),
+                'is_suspended'           => (bool) ($driver?->is_suspended ?? false),
+                'suspended_until'        => $driver?->suspended_until ? $driver->suspended_until->toIso8601String() : null,
             ];
 
         } catch (Exception $e) {

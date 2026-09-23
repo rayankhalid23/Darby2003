@@ -25,7 +25,8 @@ class SupportTicketController extends Controller
 
     protected function currentAdmin(): Admin
     {
-        return Admin::where('user_id', auth()->id())->first() ?? Admin::firstOrFail();
+        // Admin موديل proxy فوق جدول users (id = id)، لا عمود user_id
+        return Admin::find(auth()->id()) ?? Admin::firstOrFail();
     }
 
     protected function paginatedResponse($tickets): JsonResponse

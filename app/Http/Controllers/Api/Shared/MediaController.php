@@ -77,14 +77,97 @@ class MediaController extends Controller
     }
 
     /**
-     * تحويل قيمة مسار مخزَّن في قاعدة البيانات (مثل "storage/drivers/documents/xyz.jpg"
-     * أو "drivers/documents/xyz.jpg") إلى رابط يمر عبر لارافيل ويحصل على ترويسات CORS.
-     * ترجع null إن لم تكن هناك قيمة، وتترك الروابط الخارجية المستقلة كما هي.
+     * هل يجب تضمين ملف الوسائط كـ Data URI (Base64) لتجاوز صفحة حماية LocalTunnel أو عند طلبه صراحة؟
+     */
+    public static function shouldEmbedAsDataUrl(): bool
+    {
+        // 1. هل تم تفعيل التضمين الصريح عبر .env؟
+        if (config('filesystems.media_embed_base64') || env('MEDIA_EMBED_BASE64') === true) {
+            return true;
+        }
+
+        // 2. فحص الطلب الحالي إن وُجد
+        $request = request();
+        if (!$request) {
+            return false;
+        }
+
+        // طلب التضمين عبر ترويسة أو بارامتر
+        if ($request->boolean('embed_media') || $request->boolean('data_url') || $request->header('X-Embed-Media') === 'true') {
+            return true;
+        }
+
+        // كشف استخدام LocalTunnel تلقائياً: خدمة loca.lt تفرض صفحة وسيطة تكسر وسم <img>
+        $host = $request->getHost();
+        if (str_contains($host, 'loca.lt')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * تحويل الملف المخزن محلياً إلى Data URI (Base64) ليعرض في وسم <img> مباشرة دون أي طلب شبكي إضافي.
+     */
+    public static function dataUrlFor(?string $storedPath): ?string
+    {
+        if (empty($storedPath)) {
+            return null;
+        }
+
+        // إذا كان الرابط يبدأ بـ data: فهو جاهز بالفعل
+        if (str_starts_with($storedPath, 'data:')) {
+            return $storedPath;
+        }
+
+        // الروابط الخارجية الكاملة
+        if (str_starts_with($storedPath, 'http://') || str_starts_with($storedPath, 'https://')) {
+            $parsedPath = parse_url($storedPath, PHP_URL_PATH);
+            if ($parsedPath && str_contains($parsedPath, 'storage/')) {
+                $storedPath = preg_replace('#^.*?storage/#', '', $parsedPath);
+            } elseif ($parsedPath && str_contains($parsedPath, 'api/media/')) {
+                $storedPath = preg_replace('#^.*?api/media/#', '', $parsedPath);
+            } else {
+                return null;
+            }
+        }
+
+        $relative = ltrim(preg_replace('#^storage/#', '', trim($storedPath)), '/');
+        $disk = Storage::disk('public');
+
+        if (!$disk->exists($relative)) {
+            return null;
+        }
+
+        // تجنب تحميل ملفات ضخمة جداً في الذاكرة (الحد الأقصى 10 ميغابايت)
+        $size = $disk->size($relative);
+        if ($size > 10 * 1024 * 1024) {
+            return null;
+        }
+
+        $mime = $disk->mimeType($relative) ?: 'application/octet-stream';
+        $content = $disk->get($relative);
+        $base64 = base64_encode($content);
+
+        return "data:{$mime};base64,{$base64}";
+    }
+
+    /**
+     * تحويل قيمة مسار مخزَّن في قاعدة البيانات إلى رابط يمر عبر لارافيل ويحصل على ترويسات CORS.
+     * في حال كان الاتصال عبر LocalTunnel أو طُلب التضمين صراحة، يتم إرجاع Data URI تلقائياً لتجاوز حجب الصور.
      */
     public static function urlFor(?string $storedPath): ?string
     {
         if (empty($storedPath)) {
             return null;
+        }
+
+        // إذا طُلب تضمين الصور كـ Data URI أو تم اكتشاف LocalTunnel
+        if (self::shouldEmbedAsDataUrl()) {
+            $dataUrl = self::dataUrlFor($storedPath);
+            if ($dataUrl !== null) {
+                return $dataUrl;
+            }
         }
 
         // إذا كان الرابط كاملاً، استخراج المسار النسبي إن كان يشير إلى storage على نفس الدومين

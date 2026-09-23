@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Parent;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Parent\ParentRegisterRequest;
 use App\Http\Requests\Api\Parent\UpdateParentProfileRequest;
+use App\Http\Requests\Api\Parent\ChangePasswordRequest;
 use App\Http\Requests\Api\Shared\OtpRequest; 
 use App\Http\Resources\Api\Parent\ParentResource;
 use App\Services\Parent\ParentRegistrationService;
@@ -158,6 +159,39 @@ $user = $this->registrationService->registerParent($data);
         } catch (Exception $e) {
             Log::error("Parent Update Profile Error for User {$request->user()->id}: " . $e->getMessage());
             return $this->errorResponse($e->getMessage());
+        }
+    }
+
+    /**
+     * تغيير كلمة المرور لولي الأمر: يتطلب كلمة المرور الحالية + الجديدة، مع نفس شروط
+     * كلمة المرور المعتمدة عند إنشاء الحساب (ChangePasswordRequest).
+     * POST /api/parent/profile/change-password
+     */
+    public function changePassword(ChangePasswordRequest $request): JsonResponse
+    {
+        Log::info("Parent: Change password attempt for user ID: " . $request->user()->id);
+
+        try {
+            $this->registrationService->changePassword(
+                $request->user()->id,
+                $request->old_password,
+                $request->password
+            );
+
+            Log::info("Parent: Password changed successfully for user ID: " . $request->user()->id);
+
+            return response()->json([
+                'status'  => true,
+                'message' => 'تم تغيير كلمة المرور بنجاح.',
+            ], 200);
+
+        } catch (Exception $e) {
+            Log::warning("Parent Change Password Error for User {$request->user()->id}: " . $e->getMessage());
+            return response()->json([
+                'status'     => false,
+                'error_code' => 'CHANGE_PASSWORD_FAILED',
+                'message'    => $e->getMessage(),
+            ], 400);
         }
     }
 

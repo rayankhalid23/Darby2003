@@ -234,7 +234,7 @@ class ParentChildController extends Controller
     }
 
     /**
-     * التأكيد اليدوي لصعود الطفل (بديل الـ QR في حال تعطل هاتف السائق أو كاميرته)
+     * التأكيد اليدوي لصعود الطفل (بديل فوري في حال تعذّر تأكيد السائق بنفسه)
      */
     public function confirmManualPickup($param1 = null, $param2 = null): JsonResponse
     {

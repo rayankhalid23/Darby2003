@@ -25,6 +25,7 @@ class NotificationFormatter
     public const TYPE_CHILD_DIRECT_PARENT_HANDLING = 'child_direct_parent_handling';
     public const TYPE_MANUAL_PICKUP_CONFIRMED   = 'manual_pickup_confirmed';
     public const TYPE_DRIVER_ABSENCE            = 'driver_absence';
+    public const TYPE_DRIVER_TRIP_NO_SHOW       = 'driver_trip_no_show';
 
     // --- طوارئ وتوقف المركبة واستبدال السائقين ---
     public const TYPE_EMERGENCY_SUBSTITUTE_REQUEST           = 'emergency_substitute_request';
@@ -90,6 +91,9 @@ class NotificationFormatter
     public const TYPE_NEW_COMPLAINT_SUBMITTED          = 'new_complaint_submitted';
     public const TYPE_COMPLAINT_RESOLVED               = 'complaint_resolved';
     public const TYPE_DRIVER_SUSPENDED                 = 'driver_suspended';
+    public const TYPE_DRIVER_ACTIVATED                 = 'driver_activated';
+    public const TYPE_PARENT_SUSPENDED                 = 'parent_suspended';
+    public const TYPE_PARENT_ACTIVATED                 = 'parent_activated';
     // ملاحظة: اسم النوع 'driver_ai_alert' مُبقى كما هو حفاظاً على توافق تطبيقات الواجهة
     // التي تتعامل معه، لكنه الآن تنبيه إداري بحت يرسله الأدمن عند البت في شكوى.
     public const TYPE_DRIVER_AI_ALERT                  = 'driver_ai_alert';
@@ -266,6 +270,17 @@ class NotificationFormatter
                 $screen = 'TRIP_DETAILS';
                 $entityType = 'driver_absence';
                 $action = 'open';
+                break;
+
+            case self::TYPE_DRIVER_TRIP_NO_SHOW:
+                $title = $customTitle ?? 'تسجيل غياب تلقائي ⚠️';
+                $message = $customMessage ?? ($tripId
+                    ? "تم تسجيل غيابك تلقائياً عن الرحلة رقم #{$tripId} لعدم بدئها خلال 90 دقيقة من موعدها المحدد، وتم فصلك عنها."
+                    : "تم تسجيل غيابك تلقائياً عن إحدى رحلاتك لعدم بدئها خلال 90 دقيقة من موعدها المحدد.");
+                $screen = 'TRIP_DETAILS';
+                $entityType = 'trip';
+                $entityId = $tripId;
+                $action = 'open_trip';
                 break;
 
             // =========================================================
@@ -678,6 +693,30 @@ class NotificationFormatter
                 $message = $customMessage ?? 'تم إيقاف حسابك بناءً على مراجعة شكوى وردت بحقك، يرجى التواصل مع الدعم.';
                 $screen = 'DRIVER_PROFILE';
                 $entityType = 'complaint';
+                $action = 'open';
+                break;
+
+            case self::TYPE_DRIVER_ACTIVATED:
+                $title = $customTitle ?? 'تم إعادة تفعيل حسابك ✅';
+                $message = $customMessage ?? 'تمت إعادة تفعيل حسابك من قبل إدارة النظام، يمكنك الآن استئناف نشاطك بشكل طبيعي.';
+                $screen = 'DRIVER_PROFILE';
+                $entityType = 'driver';
+                $action = 'open';
+                break;
+
+            case self::TYPE_PARENT_SUSPENDED:
+                $title = $customTitle ?? 'تم إيقاف حسابك مؤقتاً ⛔';
+                $message = $customMessage ?? 'تم إيقاف حسابك من قبل إدارة النظام، يرجى التواصل مع الدعم لمزيد من التفاصيل.';
+                $screen = 'PARENT_PROFILE';
+                $entityType = 'parent';
+                $action = 'open';
+                break;
+
+            case self::TYPE_PARENT_ACTIVATED:
+                $title = $customTitle ?? 'تم إعادة تفعيل حسابك ✅';
+                $message = $customMessage ?? 'تمت إعادة تفعيل حسابك من قبل إدارة النظام، يمكنك الآن استخدام التطبيق بشكل طبيعي.';
+                $screen = 'PARENT_PROFILE';
+                $entityType = 'parent';
                 $action = 'open';
                 break;
 

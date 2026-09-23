@@ -11,6 +11,7 @@ use App\Models\Parent\ParentModel;
 use App\Models\Shared\Complaint;
 use App\Models\Shared\DriverReview;
 use App\Models\Shared\SubscriptionRequest;
+use App\Models\Shared\ActiveSubscription;
 use App\Models\Shared\Trip;
 
 /**
@@ -93,12 +94,32 @@ class ComplaintsAndDriverReviewsTest extends TestCase
         $this->parent = ParentModel::findOrFail($this->parentUser->id);
     }
 
+    /**
+     * ينشئ اشتراكاً "نشطاً"/"مكتملاً" فعلياً بين ولي الأمر والسائق — مطلوب
+     * كبوابة إلزامية قبل السماح بإضافة تقييم/تعليق (راجع DriverReviewsTest).
+     */
+    protected function makeActiveSubscription(User $parentUser, Driver $driver, string $status = 'active'): ActiveSubscription
+    {
+        $request = SubscriptionRequest::create([
+            'parent_id' => $parentUser->id,
+            'driver_id' => $driver->id,
+            'status'    => SubscriptionRequest::STATUS_ACCEPTED,
+        ]);
+
+        return ActiveSubscription::create([
+            'subscription_request_id' => $request->id,
+            'status'                  => $status,
+        ]);
+    }
+
     // =========================================================
     // Driver Reviews
     // =========================================================
 
     public function test_parent_can_submit_driver_review(): void
     {
+        $this->makeActiveSubscription($this->parentUser, $this->driver, 'active');
+
         $response = $this->actingAs($this->parentUser)->postJson('/api/parent/driver-reviews', [
             'driver_id' => $this->driver->id,
             'rating'    => 5,

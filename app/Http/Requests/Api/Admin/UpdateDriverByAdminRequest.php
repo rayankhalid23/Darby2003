@@ -11,6 +11,30 @@ class UpdateDriverByAdminRequest extends FormRequest
         return true;
     }
 
+    public function validationData(): array
+    {
+        $data = parent::validationData();
+
+        if ($this->hasFile('avatar_url') && empty($data['avatar'])) {
+            $data['avatar'] = $this->file('avatar_url');
+        }
+        if ($this->hasFile('photo') && empty($data['avatar'])) {
+            $data['avatar'] = $this->file('photo');
+        }
+
+        return $data;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->hasFile('avatar_url') && !$this->hasFile('avatar')) {
+            $this->files->set('avatar', $this->file('avatar_url'));
+        }
+        if ($this->hasFile('photo') && !$this->hasFile('avatar')) {
+            $this->files->set('avatar', $this->file('photo'));
+        }
+    }
+
     public function rules(): array
     {
         $driverId = $this->route('id') ?? $this->route('driver');
@@ -25,6 +49,8 @@ class UpdateDriverByAdminRequest extends FormRequest
             'status'         => ['nullable', 'string', 'in:Pending,Approved,Rejected,Suspended,Active,Inactive,active,approved,rejected,pending'],
             'is_active'      => ['nullable', 'boolean'],
             'reason'         => ['nullable', 'string', 'max:500'],
+            'avatar'         => ['nullable', 'file', 'mimes:jpeg,png,jpg,webp,heic,heif', 'max:10240'],
+            'avatar_url'     => ['nullable', 'string', 'max:500'],
 
             // ── بيانات المركبة (اختيارية) ──
             'vehicle_id'      => ['nullable', 'integer', 'exists:vehicles,id'],

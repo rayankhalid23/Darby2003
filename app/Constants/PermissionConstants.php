@@ -22,6 +22,12 @@ class PermissionConstants
     public const DRIVERS_SUSPEND          = 'drivers.suspend';
 
     // ==========================================
+    // 👨‍👩‍👧 أولياء الأمور (Parents)
+    // ==========================================
+    public const PARENTS_VIEW             = 'parents.view';
+    public const PARENTS_SUSPEND          = 'parents.suspend';
+
+    // ==========================================
     // 🎧 الشكاوى والتقييمات والجودة (Complaints & Quality)
     // ==========================================
     public const COMPLAINTS_VIEW          = 'complaints.view';
@@ -125,6 +131,22 @@ class PermissionConstants
                         'key'         => self::DRIVERS_SUSPEND,
                         'name'        => 'إيقاف / تجميد حسابات السائقين',
                         'description' => 'إيقاف السائقين المخالفين وتجميد نشاطهم في النظام',
+                    ],
+                ]
+            ],
+            [
+                'group_key'   => 'parents_accounts',
+                'group_name'  => 'أولياء الأمور',
+                'permissions' => [
+                    [
+                        'key'         => self::PARENTS_VIEW,
+                        'name'        => 'استعراض قائمة أولياء الأمور',
+                        'description' => 'الاطلاع على حسابات أولياء الأمور وبياناتهم وأبنائهم المسجلين',
+                    ],
+                    [
+                        'key'         => self::PARENTS_SUSPEND,
+                        'name'        => 'إيقاف / تفعيل حسابات أولياء الأمور',
+                        'description' => 'تجميد أو إعادة تفعيل حساب ولي الأمر في النظام',
                     ],
                 ]
             ],
@@ -307,6 +329,8 @@ class PermissionConstants
                 self::COMPLAINTS_RESOLVE,
                 self::DRIVER_REVIEWS_MANAGE,
                 self::DRIVERS_VIEW,
+                self::PARENTS_VIEW,
+                self::PARENTS_SUSPEND,
                 self::NOTIFICATIONS_BROADCAST,
                 self::CONTENT_MANAGE_TERMS,
             ],

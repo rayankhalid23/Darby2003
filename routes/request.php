@@ -30,6 +30,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/active-subscriptions/{id}/cancel', [ParentSubscriptionController::class, 'cancelActiveSubscription']);
         
         Route::get('/requests/{id}', [ParentSubscriptionController::class, 'showRequest']); 
+        Route::get('/drivers', [ParentSubscriptionController::class, 'getDrivers']); 
         
     });
 

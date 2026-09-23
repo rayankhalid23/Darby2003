@@ -16,11 +16,17 @@ class DriverAbsence extends Model
     public const STATUS_APPROVED = 'approved';
     public const STATUS_REJECTED = 'rejected';
 
+    // مصدر تسجيل الغياب: سجّله السائق بنفسه مسبقاً، أو اكتشفه النظام تلقائياً
+    // (لم تبدأ الرحلة خلال 90 دقيقة من موعدها المحدد).
+    public const SOURCE_MANUAL       = 'manual';
+    public const SOURCE_AUTO_NO_SHOW = 'auto_no_show';
+
     protected $fillable = [
         'driver_id',
         'absence_date',
         'reason',
         'status',
+        'source',
         'reviewed_by',
         'reviewed_at',
         'admin_notes',
@@ -34,6 +40,11 @@ class DriverAbsence extends Model
     public function driver()
     {
         return $this->belongsTo(Driver::class, 'driver_id');
+    }
+
+    public function reviewer(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'reviewed_by');
     }
 
     public function trips(): \Illuminate\Database\Eloquent\Relations\BelongsToMany

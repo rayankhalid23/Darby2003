@@ -5,6 +5,7 @@ namespace App\Http\Requests\Api\Parent;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use App\Models\Shared\SubscriptionRequest;
+use App\Services\Shared\SubscriptionRequestService;
 
 class StoreDriverReviewRequest extends FormRequest
 {
@@ -36,6 +37,22 @@ class StoreDriverReviewRequest extends FormRequest
                 })
                 ->whereNull('deleted_at');
         }
+
+        // بوابة إلزامية: لا يُسمح بإضافة تقييم/تعليق إلا إذا كان لدى ولي الأمر
+        // اشتراك "نشط" أو "مكتمل" فعليًا مع هذا السائق (وليس مجرد وجود أي علاقة
+        // اشتراك سابقة بغض النظر عن حالتها).
+        $driverIdRules[] = function ($attribute, $value, $fail) use ($userId, $driverId) {
+            if (!$userId || !$driverId) {
+                return;
+            }
+
+            $isEligible = app(SubscriptionRequestService::class)
+                ->parentHasActiveOrCompletedSubscriptionWithDriver($userId, $driverId);
+
+            if (!$isEligible) {
+                $fail('يجب أن يكون لديك اشتراك نشط أو مكتمل مع هذا السائق حتى تتمكن من إضافة تقييم أو تعليق عليه.');
+            }
+        };
 
         return [
             'driver_id' => $driverIdRules,

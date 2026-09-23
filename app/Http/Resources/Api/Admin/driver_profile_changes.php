@@ -36,6 +36,7 @@ class AdminPendingChangeResource extends JsonResource
                 'national_id'       => $this->driver->national_id,
                 'license_number'    => $this->driver->license_number,
                 'license_expiry'    => $this->driver->license_expiry,
+                'license_image_url' => $this->driver->license_image_url ? asset($this->driver->license_image_url) : null,
                 'vehicle'           => $this->driver->vehicles->where('is_verified', true)->first() ? [
                     'plate_number'        => $this->driver->vehicles->where('is_verified', true)->first()->plate_number,
                     'brand'               => $this->driver->vehicles->where('is_verified', true)->first()->brand,
@@ -56,6 +57,7 @@ class AdminPendingChangeResource extends JsonResource
                 'national_id'       => $newValues['national_id'] ?? null,
                 'license_number'    => $newValues['license_number'] ?? null,
                 'license_expiry'    => $newValues['license_expiry'] ?? null,
+                'license_image_url' => isset($newValues['license_image_url']) ? asset($newValues['license_image_url']) : (isset($newValues['doc_license_path']) ? asset($newValues['doc_license_path']) : null),
                 'vehicle'           => isset($newValues['plate_number']) || isset($newValues['brand']) ? [
                     'plate_number'      => $newValues['plate_number'] ?? null,
                     'brand'             => $newValues['brand'] ?? null,

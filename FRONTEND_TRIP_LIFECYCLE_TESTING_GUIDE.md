@@ -4,9 +4,9 @@
 
 ## ⚠️ ملاحظة حرجة قبل البدء: `trip_child_id` وليس `child_id`
 
-كل نقاط تحديث حالة الطفل داخل الرحلة (صعود/نزول/غياب/QR) تتوقع **معرّف الاشتراك النشط** (`active_subscriptions.id`)، وليس معرّف الطفل نفسه (`children.id`) — حتى لو كان اسم الـ route parameter مكتوب `{childId}`.
+كل نقاط تحديث حالة الطفل داخل الرحلة (صعود/نزول/غياب) تتوقع **معرّف الاشتراك النشط** (`active_subscriptions.id`)، وليس معرّف الطفل نفسه (`children.id`) — حتى لو كان اسم الـ route parameter مكتوب `{childId}`.
 
-هذا القيمة تُسمّى `trip_child_id` في استجابة [`GET /driver/trips/{tripId}`](app/Http/Controllers/Api/Trip/DriverTripController.php:266) — لازم الفرونت يخزّنها عند عرض قائمة الأطفال ويرسلها هي (مش `child_id`) في كل نداءات pickup/dropoff/absent/skip/verify-qr.
+هذا القيمة تُسمّى `trip_child_id` في استجابة [`GET /driver/trips/{tripId}`](app/Http/Controllers/Api/Trip/DriverTripController.php:266) — لازم الفرونت يخزّنها عند عرض قائمة الأطفال ويرسلها هي (مش `child_id`) في كل نداءات pickup/dropoff/absent/skip.
 
 ```php
 // DriverTripController::updateChildTripStatus
@@ -232,59 +232,13 @@ Auth: `driver`
 
 ---
 
-## 5) تأكيد الصعود عبر QR
+## 5) تأكيد الصعود/النزول اليدوي من السائق (زر "تم الصعود" / "تم النزول")
 
-**Endpoint:** `POST /api/v1/driver/trips/{tripId}/verify-qr/{childId}`
-⚠️ رغم اسم الـ param، القيمة المطلوبة هي `trip_child_id` (= `active_subscriptions.id`) وليس `children.id`.
-المصدر: [DriverTripController::verifyQr](app/Http/Controllers/Api/Trip/DriverTripController.php:1038) → يُفوَّض داخلياً لـ `updateChildTripStatus`
+⚠️ **لم يعد هناك مسح QR.** التأكيد الوحيد المتاح للسائق هو الزر اليدوي، ويُقيَّد دائماً بموقع GPS الفعلي (لا يوجد أي مسار يتجاوز هذا الفحص).
 
-### Input
-| الحقل | إجباري | ملاحظات |
-|---|---|---|
-| `stage` | اختياري | `pickup` (افتراضي) أو `dropoff` |
-| `qr_code_token` | ✅ | لازم يطابق `children.qr_code_token` لنفس الطفل |
-
-```json
-{ "stage": "pickup", "qr_code_token": "ABC123XYZ" }
-```
-
-### Output — نجاح صعود (200)
-```json
-{
-  "status": "success",
-  "message": "تم تأكيد الصعود وإرسال الإشعار لولي الأمر.",
-  "next_child": { "trip_child_id": 102, "name": "مروة طه" }
-}
-```
-`next_child` قد يكون `null` إذا كان هذا آخر طفل بالمسار.
-
-### Output — نجاح نزول (200)
-```json
-{ "status": "success", "message": "تم تأكيد النزول وإرسال الإشعار لولي الأمر." }
-```
-
-### Output — فشل QR غير مطابق (400)
-```json
-{ "status": "error", "error_code": "QR_MISMATCH", "message": "كود الـ QR غير متطابق مع هذا الطفل." }
-```
-
-### Output — فشل تعارض/تكرار (409)
-```json
-{ "status": "error", "error_code": "ALREADY_PROCESSED", "message": "تم تسجيل صعود هذا الطفل مسبقاً." }
-```
-أو عند محاولة تسجيل نزول قبل صعود:
-```json
-{ "status": "error", "error_code": "NOT_BOARDED_YET", "message": "لا يمكن تأكيد النزول قبل تأكيد صعود الطفل أولاً." }
-```
-
-**ملاحظة:** QR **يتجاوز فحص الـ GPS/Geofence بالكامل** — لا يشترط أن يكون السائق فعلياً قرب موقع الطفل، على عكس التأكيد اليدوي بالزر (بند التالي).
-
----
-
-## 6) تأكيد الصعود/النزول اليدوي من السائق (بدون QR)
-
-**Endpoint:** `POST /api/v1/driver/trips/{tripId}/pickup` أو `/dropoff`
-المصدر: نفس [updateChildTripStatus](app/Http/Controllers/Api/Trip/DriverTripController.php:709)
+**Endpoint:** `POST /api/v1/driver/trips/{tripId}/pickup` (صعود) أو `POST /api/v1/driver/trips/{tripId}/dropoff` (نزول)
+⚠️ رغم اسم الـ param بالراوت القديم، القيمة المطلوبة في `trip_child_id` هي `active_subscriptions.id` وليس `children.id`.
+المصدر: [DriverTripController::updateChildTripStatus](app/Http/Controllers/Api/Trip/DriverTripController.php:941)
 
 ### Input
 | الحقل | إجباري | ملاحظات |
@@ -297,24 +251,48 @@ Auth: `driver`
 { "trip_child_id": 101, "latitude": 32.8871, "longitude": 13.1912 }
 ```
 
+### Output — نجاح صعود (200)
+```json
+{
+  "status": "success",
+  "message": "تم تأكيد الصعود وإرسال الإشعار لولي الأمر.",
+  "next_stop": { "trip_child_id": 102, "name": "مروة طه" }
+}
+```
+`next_stop` قد يكون `null` إذا كان هذا آخر طفل بالمسار.
+
+### Output — نجاح نزول (200)
+```json
+{ "status": "success", "message": "تم تأكيد النزول وإرسال الإشعار لولي الأمر." }
+```
+
 ### Output — فشل خارج النطاق الجغرافي (422)
 ```json
 {
   "status": "error",
   "error_code": "OUT_OF_RANGE",
-  "message": "أنت بعيد عن موقع المحطة (250 م)، الحد المسموح 100 م. يرجى الاقتراب أو استخدام مسح QR."
+  "message": "أنت بعيد عن موقع المحطة (250 م)، الحد المسموح 100 م. يرجى الاقتراب من الموقع."
 }
 ```
 نصف قطر السماح: **100م للمنزل**، **200م للمدرسة**.
 
 ### Output — فشل عدم إرسال موقع (422)
 ```json
-{ "status": "error", "error_code": "LOCATION_REQUIRED", "message": "يجب إرسال الموقع الجغرافي الحالي للتأكيد اليدوي، أو استخدام مسح QR." }
+{ "status": "error", "error_code": "LOCATION_REQUIRED", "message": "يجب إرسال الموقع الجغرافي الحالي (latitude, longitude) للتأكيد." }
 ```
 
-باقي حالات النجاح/التعارض مطابقة تماماً لبند QR أعلاه (`ALREADY_PROCESSED`, `NOT_BOARDED_YET`).
+### Output — فشل تعارض/تكرار (409)
+```json
+{ "status": "error", "error_code": "ALREADY_PROCESSED", "message": "تم تسجيل صعود هذا الطفل مسبقاً." }
+```
+أو عند محاولة تسجيل نزول قبل صعود:
+```json
+{ "status": "error", "error_code": "NOT_BOARDED_YET", "message": "لا يمكن تأكيد النزول قبل تأكيد صعود الطفل أولاً." }
+```
 
 ---
+
+> ⚠️ **البنود 7–9 التالية غير محدّثة**: الكنترولرات والسيرفس المذكورة فيها (`TripManualConfirmationController`, `TripManualConfirmationService`, والـ Requests/Resource المرتبطة بها) **حُذفت من الكود حالياً**. لا تعتمد عليها في الفرونت قبل التأكد من السيرفر — هذه ميزة منفصلة تماماً عن تأكيد الصعود/النزول اللحظي في البند 5 أعلاه.
 
 ## 7) طلب تأكيد يدوي من ولي الأمر (السائق ينسى توثيق رحلة سابقة)
 
@@ -443,7 +421,7 @@ Auth: `driver`
 
 ## 9) تأكيد يدوي مباشر من ولي الأمر (بدون طلب مسبق من السائق)
 
-مسار مختلف تماماً عن بند 8 — يُستخدم كبديل فوري للـ QR عند تعطل جهاز/كاميرا السائق أثناء الرحلة الجارية (وليس رحلة قديمة).
+مسار مختلف تماماً عن بند 8 — يُستخدم كبديل فوري عندما لا يستطيع السائق تأكيد الصعود بنفسه (تعطل جهازه مثلاً) أثناء الرحلة الجارية (وليس رحلة قديمة).
 
 **Endpoint:** `POST /api/parent/children/{childId}/confirm-pickup/{tripId}`
 المصدر: [ParentChildController::confirmManualPickup](app/Http/Controllers/Api/Trip/ParentChildController.php:247) → [TripStopService::confirmManualPickup](app/Services/Trip/TripStopService.php:232)
@@ -471,7 +449,7 @@ Auth: `driver`
 ```
 (لو كان السائق سجّل `skipped` مسبقاً لهذا الطفل بهذه الرحلة)
 
-⚠️ **تنبيه معماري يستحق الانتباه عند اختبار هذا المسار تحديداً:** هذه الدالة تكتب فقط في `trip_events` (action_type=`picked_up`) ولا تُحدّث `trip_stops.status` إلى `boarded` كما يفعل مسار pickup العادي/QR. يعني بعدها لو السائق فتح شاشة الرحلة، حالة الطفل في `trip_stops` (مصدر الحقيقة الأساسي في [`show`](app/Http/Controllers/Api/Trip/DriverTripController.php:255) و[`live`](app/Http/Controllers/Api/Trip/DriverTripController.php:388)) قد تبقى `pending` رغم إن ولي الأمر أكّد. إذا كنت تختبر هذا التدفق وتتوقع تحديث فوري لحالة السائق، هذه نقطة يجب فحصها/تصحيحها في السيرفر أولاً — أخبرني إذا أردت أن أصلحها بنفس منطق pickup العادي (تحديث `trip_stops` + قفل صف/معاملة).
+⚠️ **تنبيه معماري يستحق الانتباه عند اختبار هذا المسار تحديداً:** هذه الدالة تكتب فقط في `trip_events` (action_type=`picked_up`) ولا تُحدّث `trip_stops.status` إلى `boarded` كما يفعل مسار pickup العادي (بند 5). يعني بعدها لو السائق فتح شاشة الرحلة، حالة الطفل في `trip_stops` (مصدر الحقيقة الأساسي في [`show`](app/Http/Controllers/Api/Trip/DriverTripController.php:255) و[`live`](app/Http/Controllers/Api/Trip/DriverTripController.php:388)) قد تبقى `pending` رغم إن ولي الأمر أكّد. إذا كنت تختبر هذا التدفق وتتوقع تحديث فوري لحالة السائق، هذه نقطة يجب فحصها/تصحيحها في السيرفر أولاً — أخبرني إذا أردت أن أصلحها بنفس منطق pickup العادي (تحديث `trip_stops` + قفل صف/معاملة).
 
 ---
 
@@ -613,7 +591,7 @@ Auth: `driver`
   "message": "لا يمكن إنهاء الرحلة: يوجد أطفال لم تُحسم حالتهم بعد (سند طه، مروة طه). يجب تأكيد نزولهم أو تسجيل غيابهم أولاً."
 }
 ```
-يُرمى إذا كان أي `trip_stops.status` لا يزال `pending` أو `boarded` (أي غير نهائي). لازم الفرونت يمنع زر "إنهاء الرحلة" أو يعرض هذه الرسالة بوضوح، ويوجّه السائق لإكمال حالة كل طفل أولاً (pickup/dropoff/absent/skip/QR).
+يُرمى إذا كان أي `trip_stops.status` لا يزال `pending` أو `boarded` (أي غير نهائي). لازم الفرونت يمنع زر "إنهاء الرحلة" أو يعرض هذه الرسالة بوضوح، ويوجّه السائق لإكمال حالة كل طفل أولاً (pickup/dropoff/absent/skip).
 
 ### Output — الرحلة مغلقة بالفعل (200، ليست خطأ)
 ```json

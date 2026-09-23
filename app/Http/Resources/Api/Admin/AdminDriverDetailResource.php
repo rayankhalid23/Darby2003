@@ -17,8 +17,12 @@ class AdminDriverDetailResource extends JsonResource
             'status'         => $this->status,
             'gender'         => $this->gender,
             'national_id'    => $this->national_id,
-            'license_number' => $this->license_number,
-            'license_expiry' => $this->license_expiry ? (\Carbon\Carbon::parse($this->license_expiry)->format('Y-m-d')) : null,
+            'license_number'         => $this->license_number,
+            'license_expiry'         => $this->license_expiry ? (\Carbon\Carbon::parse($this->license_expiry)->format('Y-m-d')) : null,
+            'license_image_url'      => \App\Http\Controllers\Api\Shared\MediaController::urlFor($this->license_image_url),
+            'license_image_data_url' => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($this->license_image_url),
+            'avatar_url'     => \App\Http\Controllers\Api\Shared\MediaController::urlFor($this->user?->avatar_url),
+            'avatar_data_url'=> \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($this->user?->avatar_url),
             
             // بيانات الموقع الجغرافي اللحظي المتاحة في قاعدة بياناتك
             'location' => [
@@ -53,44 +57,79 @@ class AdminDriverDetailResource extends JsonResource
                 'phone_number'      => $this->user->phone_number ?? null,
                 'alternative_phone' => $this->user->alternative_phone ?? null,
                 'avatar_url'        => \App\Http\Controllers\Api\Shared\MediaController::urlFor($this->user->avatar_url ?? null),
+                'avatar_data_url'   => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($this->user->avatar_url ?? null),
                 'is_active'         => (bool) ($this->user->is_active ?? false),
             ],
 
             // مصفوفة المركبات المسجلة للسائق
             'vehicles' => $this->vehicles ? $this->vehicles->map(function ($vehicle) {
                 return [
-                    'id'                => $vehicle->id,
-                    'brand'             => $vehicle->brand,
-                    'model'             => $vehicle->model,
-                    'year'              => $vehicle->year,
-                    'plate_number'      => $vehicle->plate_number,
-                    'color'             => $vehicle->color,
-                    'type'              => $vehicle->type,
-                    'capacity_manual'   => $vehicle->capacity_manual,
-                    'has_ac'            => (bool) $vehicle->has_ac,
-                    'vehicle_image_url' => \App\Http\Controllers\Api\Shared\MediaController::urlFor($vehicle->vehicle_image_url),
-                    'status'            => $vehicle->status,
-                    'is_verified'       => (bool) $vehicle->is_verified,
+                    'id'                     => $vehicle->id,
+                    'brand'                  => $vehicle->brand,
+                    'model'                  => $vehicle->model,
+                    'year'                   => $vehicle->year,
+                    'plate_number'           => $vehicle->plate_number,
+                    'color'                  => $vehicle->color,
+                    'type'                   => $vehicle->type,
+                    'capacity_manual'        => $vehicle->capacity_manual,
+                    'has_ac'                 => (bool) $vehicle->has_ac,
+                    'vehicle_image_url'      => \App\Http\Controllers\Api\Shared\MediaController::urlFor($vehicle->vehicle_image_url),
+                    'vehicle_image_data_url' => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($vehicle->vehicle_image_url),
+                    'status'                 => $vehicle->status,
+                    'is_verified'            => (bool) $vehicle->is_verified,
                 ];
             }) : [],
 
             // 🚀 مصفوفة الوثائق والمستندات الرسمية المرفوعة - مع ترويسات CORS وحماية كاملة للفرونت
-            'documents' => $this->documents ? $this->documents->map(function ($doc) {
-                return [
-                    'id'                               => $doc->id,
-                    'document_type'                    => $doc->doc_type ?? $doc->document_type,
-                    'document_url'                     => \App\Http\Controllers\Api\Shared\MediaController::urlFor($doc->file_url ?? $doc->document_url),
-                    'expiry_date'                      => $doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null,
-                    'is_verified'                      => (bool) $doc->is_verified,
-                    'state'                            => $doc->state ?? 'pending',
-                    'state_label'                      => $doc->state_label ?? 'معلقة',
-                    'insurance_expiry_date'            => $doc->insurance_expiry_date ?? ($doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null),
-                    'stamp_expiry_date'                => $doc->stamp_expiry_date,
-                    'technical_inspection_expiry_date' => $doc->technical_inspection_expiry_date,
-                    'status'                           => $doc->state ?? ($doc->status ?? 'pending'),
-                    'feedback'                         => $doc->feedback,
-                ];
-            }) : [],
+            'documents' => (function () {
+                $docs = collect();
+
+                if (!empty($this->license_image_url)) {
+                    $rawLicenseUrl = $this->license_image_url;
+                    $docs->push([
+                        'id'                               => null,
+                        'document_type'                    => 'LICENSE',
+                        'type'                             => 'license',
+                        'document_url'                     => \App\Http\Controllers\Api\Shared\MediaController::urlFor($rawLicenseUrl),
+                        'document_data_url'                => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($rawLicenseUrl),
+                        'file_url'                         => \App\Http\Controllers\Api\Shared\MediaController::urlFor($rawLicenseUrl),
+                        'expiry_date'                      => $this->license_expiry ? (\Carbon\Carbon::parse($this->license_expiry)->format('Y-m-d')) : null,
+                        'is_verified'                      => $this->status === 'Approved',
+                        'state'                            => $this->status === 'Approved' ? 'active' : ($this->status === 'Rejected' ? 'rejected' : 'pending'),
+                        'state_label'                      => $this->status === 'Approved' ? 'معتمدة' : ($this->status === 'Rejected' ? 'مرفوضة' : 'معلقة'),
+                        'insurance_expiry_date'            => null,
+                        'stamp_expiry_date'                => null,
+                        'technical_inspection_expiry_date' => null,
+                        'status'                           => $this->status === 'Approved' ? 'approved' : ($this->status === 'Rejected' ? 'rejected' : 'pending'),
+                        'feedback'                         => $this->rejection_reason ?? null,
+                    ]);
+                }
+
+                if ($this->documents) {
+                    foreach ($this->documents as $doc) {
+                        $rawDocUrl = $doc->file_url ?? $doc->document_url;
+                        $docs->push([
+                            'id'                               => $doc->id,
+                            'document_type'                    => $doc->doc_type ?? $doc->document_type,
+                            'type'                             => strtolower($doc->doc_type ?? $doc->document_type ?? ''),
+                            'document_url'                     => \App\Http\Controllers\Api\Shared\MediaController::urlFor($rawDocUrl),
+                            'document_data_url'                => \App\Http\Controllers\Api\Shared\MediaController::dataUrlFor($rawDocUrl),
+                            'file_url'                         => \App\Http\Controllers\Api\Shared\MediaController::urlFor($rawDocUrl),
+                            'expiry_date'                      => $doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null,
+                            'is_verified'                      => (bool) $doc->is_verified,
+                            'state'                            => $doc->state ?? 'pending',
+                            'state_label'                      => $doc->state_label ?? 'معلقة',
+                            'insurance_expiry_date'            => $doc->insurance_expiry_date ?? ($doc->expiry_date ? \Carbon\Carbon::parse($doc->expiry_date)->format('Y-m-d') : null),
+                            'stamp_expiry_date'                => $doc->stamp_expiry_date,
+                            'technical_inspection_expiry_date' => $doc->technical_inspection_expiry_date,
+                            'status'                           => $doc->state ?? ($doc->status ?? 'pending'),
+                            'feedback'                         => $doc->feedback,
+                        ]);
+                    }
+                }
+
+                return $docs;
+            })(),
 
             // سجل العمليات التاريخي والمراجعات السابقة (Audit Trail)
             'approval_history' => $this->approvals ? $this->approvals->map(function ($approval) {

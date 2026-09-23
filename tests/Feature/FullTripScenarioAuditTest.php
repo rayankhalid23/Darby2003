@@ -58,8 +58,6 @@ class FullTripScenarioAuditTest extends TripAuditFixture
 
         $pick = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/pickup", [
             'trip_child_id'       => $s['sub']->id,
-            'verification_method' => 'qr',
-            'qr_code_token'       => $s['child']->fresh()->qr_code_token,
             'latitude'            => self::HOME_LAT, 'longitude' => self::HOME_LNG,
         ]);
         $this->out('A9 PICKUP(' . $pick->status() . '): ' . json_encode($pick->json(), JSON_UNESCAPED_UNICODE));
@@ -82,7 +80,6 @@ class FullTripScenarioAuditTest extends TripAuditFixture
 
         $drop = $this->asDriver()->postJson("/api/driver/trips/{$tripId}/dropoff", [
             'trip_child_id'       => $s['sub']->id,
-            'verification_method' => 'manual',
             'latitude'            => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG,
         ]);
         $this->out('A14 DROPOFF(' . $drop->status() . '): ' . json_encode($drop->json('next_stop'), JSON_UNESCAPED_UNICODE));

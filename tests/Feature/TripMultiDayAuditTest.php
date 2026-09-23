@@ -21,7 +21,6 @@ class TripMultiDayAuditTest extends TripAuditFixture
         // اشتراك 5 أيام (اليوم + 4)، ذهاب وعودة => 5 × 2 = 10 رحلات مدفوعة
         $s = $this->makeSubscription('Mohannad', 'x', 'multi_day', 4, 500.00);
         $childId = $s['child']->id;
-        $qr = $s['child']->fresh()->qr_code_token;
 
         $finance = $this->holdEscrow($s['req']);
         $this->out('C0 multi_day escrow held: total=' . $finance->total_amount
@@ -40,8 +39,8 @@ class TripMultiDayAuditTest extends TripAuditFixture
         // ---------- DAY 1 ----------
         $t1 = $this->generateTodayTrip();
         $this->asDriver()->postJson("/api/driver/trips/{$t1}/start", ['latitude' => 32.875, 'longitude' => 13.175])->assertStatus(200);
-        $this->asDriver()->postJson("/api/driver/trips/{$t1}/pickup", ['trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr])->assertStatus(200);
-        $this->asDriver()->postJson("/api/driver/trips/{$t1}/dropoff", ['trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr])->assertStatus(200);
+        $this->asDriver()->postJson("/api/driver/trips/{$t1}/pickup", ['trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG])->assertStatus(200);
+        $this->asDriver()->postJson("/api/driver/trips/{$t1}/dropoff", ['trip_child_id' => $s['sub']->id, 'latitude' => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG])->assertStatus(200);
         $c1 = $this->asDriver()->postJson("/api/driver/trips/{$t1}/complete");
         $c1->assertStatus(200);
 
@@ -160,13 +159,12 @@ class TripMultiDayAuditTest extends TripAuditFixture
     {
         $s = $this->makeSubscription('Bilal', 'x', 'single_day', 0, 100.00);
         $finance = $this->holdEscrow($s['req']);
-        $qr = $s['child']->fresh()->qr_code_token;
         $driverBefore = (int) $this->driver->fresh()->balance;
 
         $t = $this->generateTodayTrip();
         $this->asDriver()->postJson("/api/driver/trips/{$t}/start", ['latitude' => 32.875, 'longitude' => 13.175]);
-        $this->asDriver()->postJson("/api/driver/trips/{$t}/pickup", ['trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr]);
-        $this->asDriver()->postJson("/api/driver/trips/{$t}/dropoff", ['trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr]);
+        $this->asDriver()->postJson("/api/driver/trips/{$t}/pickup", ['trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG]);
+        $this->asDriver()->postJson("/api/driver/trips/{$t}/dropoff", ['trip_child_id' => $s['sub']->id, 'latitude' => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG]);
         $this->asDriver()->postJson("/api/driver/trips/{$t}/complete")->assertStatus(200);
 
         $paid = (int) $this->driver->fresh()->balance - $driverBefore;
@@ -224,12 +222,11 @@ class TripMultiDayAuditTest extends TripAuditFixture
         $financeTomorrow = $this->holdEscrow($req2);
 
         $driverBefore = (int) $this->driver->fresh()->balance;
-        $qr = $s['child']->fresh()->qr_code_token;
 
         $t = $this->generateTodayTrip();
         $this->asDriver()->postJson("/api/driver/trips/{$t}/start", ['latitude' => 32.875, 'longitude' => 13.175]);
-        $this->asDriver()->postJson("/api/driver/trips/{$t}/pickup", ['trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr]);
-        $this->asDriver()->postJson("/api/driver/trips/{$t}/dropoff", ['trip_child_id' => $s['sub']->id, 'verification_method' => 'qr', 'qr_code_token' => $qr]);
+        $this->asDriver()->postJson("/api/driver/trips/{$t}/pickup", ['trip_child_id' => $s['sub']->id, 'latitude' => self::HOME_LAT, 'longitude' => self::HOME_LNG]);
+        $this->asDriver()->postJson("/api/driver/trips/{$t}/dropoff", ['trip_child_id' => $s['sub']->id, 'latitude' => self::SCHOOL_LAT, 'longitude' => self::SCHOOL_LNG]);
         $this->asDriver()->postJson("/api/driver/trips/{$t}/complete")->assertStatus(200);
 
         $financeToday->refresh();

@@ -164,7 +164,7 @@ class DashboardController extends Controller
                 'driver.user',
                 'driver.vehicles',
                 'driver.activeSubscriptions' => function ($q) {
-                    $q->where('status', 'active')->with('child');
+                    $q->where('active_subscriptions.status', 'active')->with('child');
                 },
                 // آخر تحديث موقع من جدول trip_tracking
                 'tracking' => function ($q) {

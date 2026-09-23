@@ -17,7 +17,7 @@ class AdminDriverListResource extends JsonResource
             'id'           => $this->id,
             'full_name'    => $this->user?->full_name ?? 'سائق غير معرف / حساب معلق',
             'phone_number' => $this->user?->phone_number ?? 'لا يوجد هاتف',
-            'avatar_url'   => $this->user?->avatar_url ? url($this->user->avatar_url) : null,
+            'avatar_url'   => \App\Http\Controllers\Api\Shared\MediaController::urlFor($this->user?->avatar_url),
             'status'       => $this->status, 
             
             'created_at'   => $this->user?->created_at 

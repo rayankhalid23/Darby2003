@@ -65,21 +65,22 @@
 
 ---
 
-### 3. مسح وتأكيد رمز QR صعود الطفل (Verify QR Code)
-- **Endpoint**: `POST /api/v1/driver/trips/{tripId}/verify-qr/{childId}`
+### 3. تأكيد صعود/نزول الطفل يدوياً (زر "تم الصعود" / "تم النزول")
+- **Endpoint**: `POST /api/v1/driver/trips/{tripId}/pickup` (صعود) أو `POST /api/v1/driver/trips/{tripId}/dropoff` (نزول)
 - **Request Body**:
   ```json
   {
-    "qr_code": "CHILD_QR_SECRET_HASH_STRING_12345",
+    "trip_child_id": 101,
     "latitude": 32.8872,
     "longitude": 13.1913
   }
   ```
+  `latitude`/`longitude` إلزاميان — يُرفض الطلب إن كان موقع السائق الفعلي بعيداً عن محطة الطفل (≤100م للمنزل، ≤200م للمدرسة).
 - **Response Success (200 OK)**:
   ```json
   {
     "status": "success",
-    "message": "تم التحقق وصعود الطفل بسلام"
+    "message": "تم تأكيد الصعود وإرسال الإشعار لولي الأمر."
   }
   ```
 

@@ -327,22 +327,18 @@ class ComprehensiveTripLifecycleScenarioTest extends TestCase
     }
 
     // =========================================================================
-    // 3. اختبار تأكيد صعود الطفل بالـ QR Code وبالـ Geofence اليدوي
+    // 3. اختبار تأكيد صعود الطفل يدوياً (زر) وبالـ Geofence
     // =========================================================================
 
-    public function test_04_driver_confirms_pickup_with_qr_code(): void
+    public function test_04_driver_confirms_pickup_manually(): void
     {
         $childData = $this->createChildWithActiveSubscription('أيمن التاورغي');
         $trip = app(\App\Services\Trip\DailyTripGenerationService::class)->generateForRoute($childData['route']);
         $trip->update(['status' => 'in_progress', 'actual_start_time' => now()]);
 
-        $qrToken = $childData['child']->fresh()->qr_code_token;
-
         $response = $this->actingAs($this->driverUser, 'sanctum')
             ->postJson("/api/driver/trips/{$trip->id}/pickup", [
                 'trip_child_id'       => $childData['sub']->id,
-                'verification_method' => 'qr',
-                'qr_code_token'       => $qrToken,
                 'latitude'            => 32.88000000,
                 'longitude'           => 13.18000000,
             ]);
@@ -375,7 +371,6 @@ class ComprehensiveTripLifecycleScenarioTest extends TestCase
         $response = $this->actingAs($this->driverUser, 'sanctum')
             ->postJson("/api/driver/trips/{$trip->id}/pickup", [
                 'trip_child_id'       => $childData['sub']->id,
-                'verification_method' => 'manual',
                 'latitude'            => 32.95000000, // بعيد جداً
                 'longitude'           => 13.25000000,
             ]);
@@ -399,14 +394,12 @@ class ComprehensiveTripLifecycleScenarioTest extends TestCase
         TripStop::where('trip_id', $trip->id)->where('child_id', $childData['child']->id)
             ->update(['status' => TripStop::STATUS_BOARDED]);
 
-        $qrToken = $childData['child']->fresh()->qr_code_token;
-
-        // ثانياً تأكيد النزول
+        // ثانياً تأكيد النزول عند موقع المدرسة
         $response = $this->actingAs($this->driverUser, 'sanctum')
             ->postJson("/api/driver/trips/{$trip->id}/dropoff", [
                 'trip_child_id'       => $childData['sub']->id,
-                'verification_method' => 'qr',
-                'qr_code_token'       => $qrToken,
+                'latitude'            => 32.89000000,
+                'longitude'           => 13.19000000,
             ]);
 
         $response->assertStatus(200);

@@ -48,8 +48,9 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // إدارة الحساب الشخصي لولي الأمر
     Route::get('/profile', [ParentAuthController::class, 'getProfile']);
-    Route::post('/profile/update', [ParentAuthController::class, 'updateProfile']); 
+    Route::post('/profile/update', [ParentAuthController::class, 'updateProfile']);
     Route::put('/profile', [ParentAuthController::class, 'updateProfile']);
+    Route::post('/profile/change-password', [ParentAuthController::class, 'changePassword']);
     Route::get('/profile/email-status', [ParentAuthController::class, 'checkEmailChangeStatus']);
     Route::get('/profile/email-change/status', [ParentAuthController::class, 'checkEmailChangeStatus']);
     Route::post('/profile/email-change/cancel', [ParentAuthController::class, 'cancelEmailChange']);
@@ -157,6 +158,10 @@ Route::middleware('auth:sanctum')->group(function () {
     // التحقق من وجود اشتراك لولي الأمر مع سائق معين بغض النظر عن الحالة ?driver_id=
     Route::get('/subscriptions/check-exists', [ParentSubscriptionController::class, 'checkSubscriptionExists']);
 
+    // جلب قائمة السائقين الذين تعامل معهم ولي الأمر بجميع الحالات (أو بالفلاتر)
+    Route::get('/subscriptions/drivers', [ParentSubscriptionController::class, 'getDrivers']);
+    Route::get('/drivers', [ParentSubscriptionController::class, 'getDrivers']);
+
     // شاشات العرض والتتبع للرحلات (الرحلة الكيان الأساسي)
     Route::get('/trips/active', [ParentTripController::class, 'getActiveTrips']);
     Route::get('/trips/active/tracking', [ParentTripController::class, 'getBulkActiveTracking']);
@@ -189,16 +194,6 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'index']);
         Route::post('/', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'store']);
         Route::delete('/{id}', [App\Http\Controllers\Api\Parent\LocationChangeController::class, 'destroy']);
-    });
-
-    // -------------------------------------------------------------
-    // 🕓 الرد على طلبات التأكيد اليدوي لرحلات سابقة لم يوثّقها التطبيق
-    // -------------------------------------------------------------
-    // ⚠️ كانت هذه المجموعة استُبدلت بالخطأ بمجموعة "الدعم الفني" أدناه بدل أن
-    // تُضاف بجانبها، فأصبح كل طلب تأكيد يدوي من ولي الأمر يرجع 404.
-    Route::prefix('trip-manual-confirmations')->group(function () {
-        Route::get('/', [App\Http\Controllers\Api\Parent\TripManualConfirmationController::class, 'index']);
-        Route::post('/{id}/respond', [App\Http\Controllers\Api\Parent\TripManualConfirmationController::class, 'respond']);
     });
 
     // -------------------------------------------------------------
