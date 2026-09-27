@@ -22,7 +22,7 @@ class ParentModel extends User
     {
         static::addGlobalScope('parent_role', function (Builder $builder) {
             $builder->where(function ($query) {
-                $query->where('role_id', 3)
+                $query->whereIn('role_id', [3, 7])
                       ->orWhereHas('role', fn ($q) => $q->where('name', 'parent'));
             });
         });

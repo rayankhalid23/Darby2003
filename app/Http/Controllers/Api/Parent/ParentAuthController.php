@@ -109,6 +109,7 @@ $user = $this->registrationService->registerParent($data);
             
             return response()->json([
                 'status'  => true,
+                'success' => true,
                 'message' => 'تم جلب البيانات بنجاح.',
                 'data'    => new ParentResource($user)
             ], 200);
@@ -127,8 +128,12 @@ $user = $this->registrationService->registerParent($data);
 
             if ($request->hasFile('avatar')) {
                 $file = $request->file('avatar');
-                $filename = 'parent_avatar_' . time() . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('uploads/parents/avatars'), $filename);
+                $uploadDir = public_path('uploads/parents/avatars');
+                if (!file_exists($uploadDir)) {
+                    @mkdir($uploadDir, 0755, true);
+                }
+                $filename = 'parent_avatar_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+                $file->move($uploadDir, $filename);
                 $data['avatar_url'] = 'uploads/parents/avatars/' . $filename;
             }
 
@@ -148,6 +153,7 @@ $user = $this->registrationService->registerParent($data);
             Log::info("Parent: Profile updated successfully for user ID: " . $user->id);
             
             return response()->json([
+                'status'  => true,
                 'success' => true,
                 'message' => $message,
                 'data'    => [

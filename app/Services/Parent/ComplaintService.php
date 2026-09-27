@@ -149,12 +149,11 @@ class ComplaintService
 
         try {
             $admins = User::whereIn('role_id', [1, 2])->get();
-            // withPush: false — إشعارات الأدمن عبر DB + polling فقط، بلا Firebase Push.
             $this->notificationService->sendToUsers($admins, 'new_complaint_submitted', [
                 'title'       => 'شكوى جديدة 📩',
                 'message'     => 'تم تقديم شكوى جديدة ضد أحد السائقين وتحتاج إلى مراجعة.',
                 'entity_id'   => (string) $complaint->id,
-            ], withPush: false);
+            ], withPush: true);
         } catch (\Throwable $e) {
             \Illuminate\Support\Facades\Log::warning("فشل إرسال إشعار الأدمن عن الشكوى الجديدة #{$complaint->id}: " . $e->getMessage());
         }

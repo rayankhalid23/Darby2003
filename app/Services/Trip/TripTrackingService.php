@@ -8,7 +8,10 @@ use App\Models\Shared\TripTracking;
 use App\Models\Shared\ActiveSubscription;
 use App\Models\Driver\Driver;
 use App\Models\User;
+use App\Models\Shared\TripStop;
+use App\Models\Driver\DriverSeatSlot;
 use App\Services\Notification\NotificationService;
+use App\Services\Notification\NotificationFormatter;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -201,9 +204,172 @@ class TripTrackingService
 
     protected function checkProximityAndArrival(Trip $trip, float $driverLat, float $driverLng): array
     {
-        // (تم الاحتفاظ بنفس المنطق الذكي الخاص بك سابقاً)
-        // ...
-        return ['status' => 'tracking'];
+        $alerts = [];
+        $isGoTrip = DriverSeatSlot::isGoSlot($trip->shift_slot ?? '')
+            || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
+
+        // جلب جميع محطات الرحلة مرتبة
+        $stops = TripStop::where('trip_id', $trip->id)
+            ->with(['child.parent.user', 'school'])
+            ->get();
+
+        $driverUser = $trip->driver?->user;
+
+        foreach ($stops as $stop) {
+            if (!$stop->lat || !$stop->lng) {
+                continue;
+            }
+
+            $distKm = $this->calculateHaversineDistance($driverLat, $driverLng, (float) $stop->lat, (float) $stop->lng);
+            $distMeters = $distKm * 1000;
+
+            if ($stop->stop_type === TripStop::TYPE_HOME) {
+                $child = $stop->child;
+                $childName = $child?->full_name ?? $child?->name ?? 'الطفل';
+                $parentUser = $child?->parent?->user;
+
+                // 1️⃣ إشعار الاقتراب (أقل من 200 متر) لولي الأمر
+                if ($distMeters <= 200) {
+                    $shouldAlertProximity = $isGoTrip
+                        ? ($stop->status === TripStop::STATUS_PENDING)
+                        : in_array($stop->status, [TripStop::STATUS_PENDING, TripStop::STATUS_BOARDED]);
+
+                    if ($shouldAlertProximity) {
+                        $proxCacheKey = "proximity_alert_sent_{$trip->id}_{$stop->child_id}";
+                        if (!Cache::has($proxCacheKey)) {
+                            Cache::put($proxCacheKey, true, now()->addHours(6));
+
+                            if ($parentUser) {
+                                $this->notificationService->sendToUser($parentUser, NotificationFormatter::TYPE_DRIVER_APPROACHING, [
+                                    'title'      => 'الحافلة تقترب 🚏',
+                                    'message'    => "السائق على بُعد أقل من 200 متر من منزلكم (الطفل: {$childName})، يرجى التجهز.",
+                                    'child_name' => $childName,
+                                    'trip_id'    => (string) $trip->id,
+                                    'child_id'   => $stop->child_id,
+                                    'entity_id'  => $trip->id . '_prox_' . $stop->child_id,
+                                ]);
+                            }
+
+                            $alerts[] = [
+                                'type'            => 'approaching_home',
+                                'child_id'        => $stop->child_id,
+                                'child_name'      => $childName,
+                                'distance_meters' => round($distMeters, 1),
+                            ];
+                        }
+                    }
+                }
+
+                // 2️⃣ إشعار الوصول لموقع الطفل (50-60 متر) لولي الأمر + للسائق
+                if ($distMeters <= 60) {
+                    $shouldAlertArrival = $isGoTrip
+                        ? ($stop->status === TripStop::STATUS_PENDING)
+                        : in_array($stop->status, [TripStop::STATUS_PENDING, TripStop::STATUS_BOARDED]);
+
+                    if ($shouldAlertArrival) {
+                        // إشعار لولي الأمر
+                        $parentArrKey = "arrival_parent_home_sent_{$trip->id}_{$stop->child_id}";
+                        if (!Cache::has($parentArrKey)) {
+                            Cache::put($parentArrKey, true, now()->addHours(6));
+
+                            if ($parentUser) {
+                                $arrMsg = $isGoTrip
+                                    ? "وصل السائق الآن إلى موقع منزلكم لاصطحاب الطفل ({$childName})."
+                                    : "وصل السائق الآن إلى موقع منزلكم لإيصال ونزول الطفل ({$childName}).";
+
+                                $this->notificationService->sendToUser($parentUser, NotificationFormatter::TYPE_DRIVER_ARRIVED, [
+                                    'title'      => 'وصل السائق للمنزل 📍',
+                                    'message'    => $arrMsg,
+                                    'child_name' => $childName,
+                                    'trip_id'    => (string) $trip->id,
+                                    'child_id'   => $stop->child_id,
+                                    'entity_id'  => $trip->id . '_arr_' . $stop->child_id,
+                                ]);
+                            }
+                        }
+
+                        // إشعار للسائق
+                        $driverArrKey = "arrival_driver_home_sent_{$trip->id}_{$stop->child_id}";
+                        if (!Cache::has($driverArrKey)) {
+                            Cache::put($driverArrKey, true, now()->addHours(6));
+
+                            if ($driverUser) {
+                                $driverMsg = $isGoTrip
+                                    ? "لقد وصلت إلى موقع منزل الطفل ({$childName})، يرجى انتظار الطالب (الحد الأقصى للانتظار 10 دقائق)."
+                                    : "لقد وصلت إلى موقع منزل الطفل ({$childName})، يرجى تأكيد تسليم ونزول الطالب.";
+
+                                $this->notificationService->sendToUser($driverUser, NotificationFormatter::TYPE_DRIVER_ARRIVED_HOME, [
+                                    'title'      => 'وصلت إلى موقع الطالب 🏠',
+                                    'message'    => $driverMsg,
+                                    'child_name' => $childName,
+                                    'trip_id'    => (string) $trip->id,
+                                    'child_id'   => $stop->child_id,
+                                    'entity_id'  => $trip->id . '_driver_home_' . $stop->child_id,
+                                ]);
+                            }
+
+                            // تفعيل عداد الانتظار في الكاش (10 دقائق)
+                            Cache::put("trip_waiting_{$trip->id}_{$stop->child_id}", [
+                                'start_time'  => now()->toIso8601String(),
+                                'max_minutes' => 10,
+                            ], now()->addHours(2));
+
+                            $alerts[] = [
+                                'type'                => 'arrived_home',
+                                'child_id'            => $stop->child_id,
+                                'child_name'          => $childName,
+                                'distance_meters'     => round($distMeters, 1),
+                                'max_waiting_minutes' => 10,
+                            ];
+                        }
+                    }
+                }
+            } elseif ($stop->stop_type === TripStop::TYPE_SCHOOL) {
+                $schoolName = $stop->school?->name ?? $stop->label ?? 'المدرسة';
+
+                // 3️⃣ إشعار وصول السائق إلى المدرسة (مسافة 80 متر أو أقل)
+                if ($distMeters <= 80) {
+                    $driverSchoolArrKey = "arrival_driver_school_sent_{$trip->id}_{$stop->school_id}";
+                    if (!Cache::has($driverSchoolArrKey)) {
+                        Cache::put($driverSchoolArrKey, true, now()->addHours(6));
+
+                        if ($driverUser) {
+                            $schoolMsg = $isGoTrip
+                                ? "لقد وصلت إلى ({$schoolName})، يرجى تأكيد نزول الطلاب في المدرسة."
+                                : "لقد وصلت إلى ({$schoolName})، يرجى انتظار صعود الطلاب (الحد الأقصى للانتظار 15 دقيقة).";
+
+                            $this->notificationService->sendToUser($driverUser, NotificationFormatter::TYPE_DRIVER_ARRIVED_SCHOOL, [
+                                'title'       => 'وصلت إلى المدرسة 🏫',
+                                'message'     => $schoolMsg,
+                                'school_name' => $schoolName,
+                                'trip_id'     => (string) $trip->id,
+                                'school_id'   => $stop->school_id,
+                                'entity_id'   => $trip->id . '_driver_school_' . $stop->school_id,
+                            ]);
+                        }
+
+                        // تفعيل عداد انتظار المدرسة في الكاش (15 دقيقة)
+                        Cache::put("trip_school_waiting_{$trip->id}_{$stop->school_id}", [
+                            'start_time'  => now()->toIso8601String(),
+                            'max_minutes' => 15,
+                        ], now()->addHours(2));
+
+                        $alerts[] = [
+                            'type'                => 'arrived_school',
+                            'school_id'           => $stop->school_id,
+                            'school_name'         => $schoolName,
+                            'distance_meters'     => round($distMeters, 1),
+                            'max_waiting_minutes' => 15,
+                        ];
+                    }
+                }
+            }
+        }
+
+        return [
+            'status' => 'tracking',
+            'alerts' => $alerts,
+        ];
     }
 
     protected function calculateHaversineDistance(float $lat1, float $lng1, float $lat2, float $lng2): float

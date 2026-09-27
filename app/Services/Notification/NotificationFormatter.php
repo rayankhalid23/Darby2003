@@ -18,6 +18,9 @@ class NotificationFormatter
     public const TYPE_TRIP_CANCELLED            = 'trip_cancelled';
     public const TYPE_TRIP_READY                = 'trip_ready';
     public const TYPE_TRIP_UPCOMING             = 'trip_upcoming';
+    public const TYPE_DRIVER_APPROACHING        = 'driver_approaching';
+    public const TYPE_DRIVER_ARRIVED_SCHOOL     = 'driver_arrived_school';
+    public const TYPE_DRIVER_ARRIVED_HOME       = 'driver_arrived_home';
     public const TYPE_TRIP_SUSPENDED            = 'trip_suspended';
     public const TYPE_CHILD_SKIPPED             = 'child_skipped';
     public const TYPE_CHILD_SKIP                = 'child_skip';
@@ -147,10 +150,38 @@ class NotificationFormatter
 
             case self::TYPE_DRIVER_ARRIVED:
                 $title = $customTitle ?? 'وصول السائق 📍';
-                $message = $customMessage ?? 'وصل السائق إلى نقطة الانطلاق لتسلم الطلاب.';
+                $message = $customMessage ?? (!empty($childName) && $childName !== 'الطالب' ? "وصل السائق إلى موقع منزلكم ({$childName})." : 'وصل السائق إلى نقطة الانطلاق لتسلم الطلاب.');
                 $screen = 'TRIP_TRACKING';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
+                $action = 'open_trip';
+                break;
+
+            case self::TYPE_DRIVER_APPROACHING:
+                $title = $customTitle ?? 'الحافلة تقترب 🚏';
+                $message = $customMessage ?? "السائق على بُعد أقل من 200 متر من موقعكم ({$childName})، يرجى التجهز.";
+                $screen = 'TRIP_TRACKING';
+                $entityType = 'trip';
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_prox_' . $data['child_id']) : $tripId);
+                $action = 'open_trip';
+                break;
+
+            case self::TYPE_DRIVER_ARRIVED_SCHOOL:
+                $schoolName = $data['school_name'] ?? 'المدرسة';
+                $title = $customTitle ?? 'وصلت إلى المدرسة 🏫';
+                $message = $customMessage ?? "لقد وصلت إلى ({$schoolName})، يرجى متابعة شؤون الطلاب.";
+                $screen = 'TRIP_LIVE';
+                $entityType = 'trip';
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['school_id']) ? ($tripId . '_school_' . $data['school_id']) : $tripId);
+                $action = 'open_trip';
+                break;
+
+            case self::TYPE_DRIVER_ARRIVED_HOME:
+                $title = $customTitle ?? 'وصلت إلى موقع منزل الطالب 🏠';
+                $message = $customMessage ?? "لقد وصلت إلى موقع منزل الطالب ({$childName})، يرجى انتظار الطالب.";
+                $screen = 'TRIP_LIVE';
+                $entityType = 'trip';
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_home_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 
@@ -159,7 +190,7 @@ class NotificationFormatter
                 $message = $customMessage ?? "تم صعود الطالب ({$childName}) إلى الحافلة بنجاح.";
                 $screen = 'TRIP_LIVE';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 
@@ -168,7 +199,7 @@ class NotificationFormatter
                 $message = $customMessage ?? "تم نزول الطالب ({$childName}) ووصوله بسلام إلى وجهته.";
                 $screen = 'TRIP_LIVE';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 
@@ -178,7 +209,7 @@ class NotificationFormatter
                 $message = $customMessage ?? "تم تسجيل غياب الطالب ({$childName}) عن الرحلة الحالية.";
                 $screen = 'ATTENDANCE_LOG';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 
@@ -188,7 +219,7 @@ class NotificationFormatter
                 $message = $customMessage ?? "انتهى وقت الانتظار دون استجابة، تحركت الحافلة وتجاوزت محطة ({$childName}).";
                 $screen = 'TRIP_DETAILS';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 
@@ -197,7 +228,7 @@ class NotificationFormatter
                 $message = $customMessage ?? "تعذر على السائق تسليم ({$childName}) في محطة النزول، يرجى التواصل الفوري مع السائق أو الإدارة.";
                 $screen = 'TRIP_DETAILS';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 
@@ -206,7 +237,7 @@ class NotificationFormatter
                 $message = $customMessage ?? "تم تسليم ({$childName}) مباشرة لولي الأمر خارج الإجراء المعتاد.";
                 $screen = 'TRIP_DETAILS';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 
@@ -215,7 +246,7 @@ class NotificationFormatter
                 $message = $customMessage ?? "قام ولي الأمر بتأكيد استلام الطالب ({$childName}) يدوياً.";
                 $screen = 'TRIP_LIVE';
                 $entityType = 'trip';
-                $entityId = $tripId;
+                $entityId = !empty($data['entity_id']) ? (string) $data['entity_id'] : (!empty($data['child_id']) ? ($tripId . '_' . $data['child_id']) : $tripId);
                 $action = 'open_trip';
                 break;
 

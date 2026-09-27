@@ -51,8 +51,8 @@ class ProfileController extends Controller
             $isEmailChanged = !empty($result['is_email_changed']);
 
             $message = $isEmailChanged 
-                ? 'Profile updated successfully. Please verify your new email.' 
-                : 'Profile updated successfully.';
+                ? 'تم تحديث البيانات، يرجى تأكيد البريد الإلكتروني الجديد.' 
+                : ($result['message'] ?? 'تم تحديث الملف الشخصي بنجاح.');
 
             $emailVerificationData = $isEmailChanged ? [
                 'status'    => 'pending',
@@ -60,6 +60,7 @@ class ProfileController extends Controller
             ] : null;
 
             return response()->json([
+                'status'  => true,
                 'success' => true,
                 'message' => $message,
                 'data'    => [
@@ -223,6 +224,7 @@ class ProfileController extends Controller
             }
 
             return response()->json([
+                'status'  => true,
                 'success' => true,
                 'message' => 'تم جلب البيانات بنجاح.',
                 'data'    => new DriverProfileResource($driver)
@@ -307,7 +309,16 @@ class ProfileController extends Controller
 
             return response()->json([
                 'status'  => true,
-                'message' => $result['message']
+                'success' => true,
+                'message' => $result['message'],
+                'data'    => [
+                    'change_id'         => $result['change_id'],
+                    'status'            => 'pending',
+                    'state'             => 'pending',
+                    'state_label'       => 'معلقة',
+                    'document_status'   => 'pending',
+                    'requires_approval' => true,
+                ]
             ], 200);
 
         } catch (Exception $e) {
@@ -334,6 +345,17 @@ class ProfileController extends Controller
             }
             if ($request->filled('vehicle_type') && !$request->filled('type')) {
                 $request->merge(['type' => $request->input('vehicle_type')]);
+            }
+            if ($request->has('has_ac')) {
+                $hasAcInput = $request->input('has_ac');
+                if (is_string($hasAcInput)) {
+                    $hasAcLower = strtolower(trim($hasAcInput));
+                    if (in_array($hasAcLower, ['1', 'true', 'yes', 'on'], true)) {
+                        $request->merge(['has_ac' => true]);
+                    } elseif (in_array($hasAcLower, ['0', 'false', 'no', 'off', ''], true)) {
+                        $request->merge(['has_ac' => false]);
+                    }
+                }
             }
 
             $validatedData = $request->validate([
@@ -363,6 +385,7 @@ class ProfileController extends Controller
 
             return response()->json([
                 'status'  => true,
+                'success' => true,
                 'message' => 'تم تحديث تفاصيل المركبة بنجاح، وهي قيد المراجعة والتدقيق الآن من قبل الإدارة.',
                 'data'    => [
                     'id'                => $vehicle->id,
@@ -375,8 +398,11 @@ class ProfileController extends Controller
                     'capacity_manual'   => $vehicle->capacity_manual,
                     'vehicle_image_url' => $vehicleImageUrl,
                     'has_ac'            => (bool) $vehicle->has_ac,
-                    'status'            => $vehicle->status,
-                    'is_verified'       => (bool) $vehicle->is_verified,
+                    'status'            => 'pending',
+                    'state'             => 'pending',
+                    'state_label'       => 'معلقة',
+                    'is_verified'       => false,
+                    'requires_approval' => true,
                 ]
             ], 200);
 
@@ -447,6 +473,16 @@ public function showLegalData(Request $request)
     });
 
     if (!empty($user->driver->license_image_url)) {
+        $hasPendingDocChange = \Illuminate\Support\Facades\DB::table('driver_profile_changes')
+            ->where('driver_id', $user->driver->id)
+            ->where('status', 'Pending')
+            ->where(function ($q) {
+                $q->where('new_values', 'like', '%license%')
+                  ->orWhere('new_values', 'like', '%doc_%');
+            })
+            ->exists();
+
+        $licenseIsActive = ($user->driver->status === 'Approved') && !$hasPendingDocChange;
         $licenseUrl = MediaController::urlFor($user->driver->license_image_url);
         $uploadedFiles->prepend([
             'id'                               => null,
@@ -454,14 +490,14 @@ public function showLegalData(Request $request)
             'doc_type'                         => 'LICENSE',
             'file_url'                         => $licenseUrl,
             'expiry_date'                      => $user->driver->license_expiry ? \Carbon\Carbon::parse($user->driver->license_expiry)->format('Y-m-d') : null,
-            'is_verified'                      => $user->driver->status === 'Approved',
-            'state'                            => $user->driver->status === 'Approved' ? 'active' : 'pending',
-            'state_label'                      => $user->driver->status === 'Approved' ? 'معتمدة' : 'معلقة',
+            'is_verified'                      => $licenseIsActive,
+            'state'                            => $licenseIsActive ? 'active' : 'pending',
+            'state_label'                      => $licenseIsActive ? 'معتمدة' : 'معلقة',
             'license_expiry_date'              => $user->driver->license_expiry ? \Carbon\Carbon::parse($user->driver->license_expiry)->format('Y-m-d') : null,
             'insurance_expiry_date'            => null,
             'stamp_expiry_date'                => null,
             'technical_inspection_expiry_date' => null,
-            'document_status'                  => $user->driver->status === 'Approved' ? 'approved' : 'pending',
+            'document_status'                  => $licenseIsActive ? 'approved' : 'pending',
             'feedback'                         => null,
             'uploaded_at'                      => $user->driver->created_at ? $user->driver->created_at->toDateTimeString() : null,
         ]);

@@ -183,7 +183,7 @@ class SupportTicketService
                 'title'       => 'تذكرة دعم فني جديدة 🎫',
                 'message'     => 'تم فتح تذكرة دعم فني جديدة وتحتاج إلى مراجعة.',
                 'entity_id'   => (string) $ticket->id,
-            ], withPush: false);
+            ], withPush: true);
         } catch (\Throwable $e) {
             Log::warning("فشل إرسال إشعار الأدمن عن التذكرة الجديدة #{$ticket->id}: " . $e->getMessage());
         }
@@ -282,7 +282,7 @@ class SupportTicketService
                 'title'       => 'رد جديد على تذكرة دعم فني 💬',
                 'message'     => "أضاف {$sender->full_name} رداً على التذكرة #{$ticket->id}.",
                 'entity_id'   => (string) $ticket->id,
-            ], withPush: false);
+            ], withPush: true);
         } catch (\Throwable $e) {
             Log::warning("فشل إرسال إشعار الرد الجديد للتذكرة #{$ticket->id}: " . $e->getMessage());
         }

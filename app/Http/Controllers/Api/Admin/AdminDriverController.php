@@ -249,10 +249,11 @@ class AdminDriverController extends Controller
      * 4. عرض كافة طلبات تعديل البيانات والمركبات المعلقة للآدمن
      * GET: /api/admin/drivers/pending-changes
      */
-    public function pendingChanges(): JsonResponse
+    public function pendingChanges(Request $request): JsonResponse
     {
         try {
-            $changes = $this->adminDriverService->getPendingChangesList();
+            $perPage = (int) $request->input('per_page', 50);
+            $changes = $this->adminDriverService->getPendingChangesList($perPage);
 
             return response()->json([
                 'status'  => true,

@@ -20,8 +20,8 @@ class NotificationService
     /**
      * إرسال إشعار لمستخدم واحد.
      *
-     * @param  bool  $withPush  false لكتابة صف database فقط بدون توزيع push job (تُستخدم
-     *                          لإشعارات لوحة تحكم الأدمن التي تعتمد على DB + polling فقط).
+     * @param  bool  $withPush  false لكتابة صف database فقط بدون إطلاق SendFcmNotificationJob.
+     *                          القيمة الافتراضية true تُطلق الـ Push لجميع أجهزة المستخدم النشطة عبر Firebase.
      * @return string|null معرّف الإشعار (UUID)، أو null إذا تم تجاهله لتكراره (idempotency)
      */
     public function sendToUser(User $user, string $type, array $data = [], bool $withPush = true): ?string

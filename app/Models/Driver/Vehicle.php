@@ -30,4 +30,9 @@ class Vehicle extends Model
     {
         return $this->hasMany(VehicleDocument::class, 'vehicle_id');
     }
+
+    public function getIsVerifiedAttribute(): int
+    {
+        return $this->status === 'Active' ? 1 : 0;
+    }
 }

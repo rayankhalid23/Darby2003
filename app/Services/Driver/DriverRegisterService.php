@@ -147,12 +147,14 @@ class DriverRegisterService
 
         // المعاملة محصورة في تحديث الجداول فقط لتستغرق بضع ميلي ثوانٍ
         DB::transaction(function () use ($driver, $data, $user) {
-            // 0. تحديث الصورة الشخصية لحساب المستخدم إن رُفعت
+            // 0. تحديث الصورة الشخصية وحالة النشاط للمستخدم (غير نشط حتى موافقة الأدمن)
+            $userUpdates = ['is_active' => false];
             if (!empty($data['avatar_path'])) {
-                $user->update(['avatar_url' => $data['avatar_path']]);
+                $userUpdates['avatar_url'] = $data['avatar_path'];
             }
+            $user->update($userUpdates);
 
-            // 1. تحديث بيانات السائق ورخصته
+            // 1. تحديث بيانات السائق ورخصته كمعلقة
             $driver->update([
                 'national_id'       => $data['national_id'],
                 'license_number'    => $data['license_number'],
@@ -161,7 +163,7 @@ class DriverRegisterService
                 'status'            => 'Pending',
             ]);
 
-            // 2. إنشاء المركبة
+            // 2. إنشاء المركبة بحالة معلقة لحين موافقة الإدارة لأول مرة
             $vehicle = Vehicle::create([
                 'driver_id'         => $driver->id,
                 'plate_number'      => $data['plate_number'],
@@ -173,10 +175,10 @@ class DriverRegisterService
                 'capacity_manual'   => $data['capacity_manual'],
                 'vehicle_image_url' => $data['vehicle_image_path'],
                 'has_ac'            => $data['has_ac'] ?? true,
-                'status'            => 'Active',
+                'status'            => 'Pending',
             ]);
 
-            // 3. إدخال وثائق المركبة (في جدول vehicle_documents المطبع الجديد)
+            // 3. إدخال وثائق المركبة (في جدول vehicle_documents بحالة معلقة)
             $vehicleDocs = [
                 'LOGBOOK' => [
                     'file_url'    => $data['doc_logbook_path'] ?? null,
@@ -209,6 +211,32 @@ class DriverRegisterService
                 }
             }
 
+            // 3-ب. إدخال وثائق السائق في جدول driver_documents بحالة معلقة (pending)
+            if (\Illuminate\Support\Facades\Schema::hasTable('driver_documents')) {
+                $docTypeCol = \Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'doc_type') ? 'doc_type' : 'document_type';
+                $driverDocInputs = [
+                    'doc_license_path'              => ($docTypeCol === 'document_type') ? 'vehicle_license' : 'LICENSE',
+                    'doc_logbook_path'               => ($docTypeCol === 'document_type') ? 'vehicle_license' : 'VEHICLE_LOGBOOK',
+                    'doc_insurance_path'             => ($docTypeCol === 'document_type') ? 'insurance' : 'INSURANCE',
+                    'doc_technical_inspection_path'  => ($docTypeCol === 'document_type') ? 'technical_inspection' : 'TECHNICAL_INSPECTION',
+                ];
+                foreach ($driverDocInputs as $inputKey => $docTypeName) {
+                    if (!empty($data[$inputKey])) {
+                        $docPayload = [
+                            'file_url' => $data[$inputKey],
+                            'status'   => 'pending',
+                        ];
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'uploaded_at')) {
+                            $docPayload['uploaded_at'] = now();
+                        }
+                        DriverDocument::updateOrCreate(
+                            ['driver_id' => $driver->id, $docTypeCol => $docTypeName],
+                            $docPayload
+                        );
+                    }
+                }
+            }
+
             // 4. إنشاء سجل طلب الاعتماد في جدول driver_approvals الموحد
             \App\Models\Driver\DriverApproval::create([
                 'driver_id'    => $driver->id,
@@ -225,13 +253,12 @@ class DriverRegisterService
         // إرسال إشعار الإدارة خارج المعاملة لحماية قاعدة البيانات من أي بطء في الإشعارات
         try {
             $admins = \App\Models\User::whereIn('role_id', [1, 2])->get();
-            // withPush: false — إشعارات الأدمن عبر DB + polling فقط، بلا Firebase Push.
             $this->notificationService->sendToUsers($admins, 'new_driver_registered', [
                 'title'       => 'تسجيل سائق جديد 🚐',
                 'message'     => "قام السائق ({$user->full_name}) بإكمال بياناته وبانتظار المراجعة.",
                 'driver_name' => $user->full_name,
                 'entity_id'   => (string) $driver->id,
-            ], withPush: false);
+            ], withPush: true);
         } catch (\Throwable $e) {
             Log::warning("فشل إرسال إشعار الأدمن عن تسجيل السائق الجديد #{$driver->id}: " . $e->getMessage());
         }

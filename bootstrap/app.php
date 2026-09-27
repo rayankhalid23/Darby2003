@@ -26,6 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 ->prefix('api/parent')
                 ->group(base_path('routes/Parent.php'));
 
+            Route::middleware('api')
+                ->prefix('api/v1/parent')
+                ->group(base_path('routes/Parent.php'));
+
             // 2. تسجيل مسارات السائقين (Drivers Module)
             Route::middleware('api')
                 ->prefix('api/v1/driver')
@@ -78,6 +82,15 @@ return Application::configure(basePath: dirname(__DIR__))
                         'error_code' => 'UNAUTHENTICATED',
                         'message'    => 'غير مصرح بالوصول، يرجى تسجيل الدخول أولاً.'
                     ], 401);
+                }
+
+                // عدم امتلاك الصلاحية (Unauthorized / Forbidden)
+                if ($e instanceof \Illuminate\Auth\Access\AuthorizationException || $e instanceof \Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException) {
+                    return response()->json([
+                        'status'     => false,
+                        'error_code' => 'FORBIDDEN',
+                        'message'    => 'غير مصرح لك بالقيام بهذا الإجراء.'
+                    ], 403);
                 }
 
                 // [الحالة 1]: ضغط وحمل زائد على السيرفر (تخطي الـ Rate Limit)

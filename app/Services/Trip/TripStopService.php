@@ -91,7 +91,6 @@ class TripStopService
 
             \App\Models\Shared\TripStop::where('trip_id', $trip->id)
                 ->where('child_id', $childId)
-                ->where('stop_type', 'home')
                 ->update([
                     'status' => \App\Models\Shared\TripStop::STATUS_SKIPPED_UNRESPONSIVE,
                     'reason' => $reason,

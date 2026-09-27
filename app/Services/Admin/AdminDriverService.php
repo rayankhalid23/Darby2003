@@ -121,6 +121,11 @@ class AdminDriverService
             });
         }
 
+        // 5. تحميل سجل الموافقات التاريخية مع بيانات المشرف
+        if (method_exists($driver, 'approvals')) {
+            $driver->load(['approvals.admin']);
+        }
+
         return $driver;
     }
 
@@ -149,16 +154,51 @@ class AdminDriverService
                     'is_active' => true
                 ]);
 
-                // تفعيل وتأكيد المركبة التابعة للسائق تلقائياً
+                // تفعيل وتأكيد كافة المركبات التابعة للسائق تلقائياً
                 Vehicle::where('driver_id', $driver->id)->update([
                     'status' => 'Active',
                 ]);
 
-                // اعتماد جميع وثائق المركبة المرفوعة
+                // اعتماد وتفعيل جميع وثائق المركبة المرفوعة
                 \App\Models\Driver\VehicleDocument::whereIn('vehicle_id', $vehicleIds)->update([
                     'is_verified' => true,
                     'state'       => \App\Models\Driver\VehicleDocument::STATE_ACTIVE,
                 ]);
+
+                // اعتماد وتفعيل جميع وثائق السائق في جدول driver_documents
+                if (\Illuminate\Support\Facades\Schema::hasTable('driver_documents')) {
+                    DriverDocument::where('driver_id', $driver->id)->update([
+                        'status' => 'approved',
+                    ]);
+                }
+
+                // اعتماد وتفعيل مسارات السائق إن وُجدت
+                if (\Illuminate\Support\Facades\Schema::hasTable('routes')) {
+                    \App\Models\Shared\Route::where('driver_id', $driver->id)
+                        ->where('status', 'Inactive')
+                        ->update(['status' => 'Active']);
+                }
+
+                // تحديث أي طلبات تعديل معلقة للسائق إلى معتمدة
+                if (\Illuminate\Support\Facades\Schema::hasTable('driver_profile_changes')) {
+                    DB::table('driver_profile_changes')
+                        ->where('driver_id', $driver->id)
+                        ->where('status', 'Pending')
+                        ->update([
+                            'status'    => 'Approved',
+                            'action_by' => $adminId,
+                            'action_at' => now(),
+                        ]);
+                }
+
+                // تحديث أي طلبات اعتماد سابقة معلقة للسائق
+                DriverApproval::where('driver_id', $driver->id)
+                    ->where('status', 'Pending')
+                    ->update([
+                        'status'      => 'Approved',
+                        'admin_id'    => $adminId,
+                        'reviewed_at' => now(),
+                    ]);
             } elseif ($status === 'Rejected') {
                 Vehicle::where('driver_id', $driver->id)->update([
                     'status' => 'Maintenance',
@@ -168,6 +208,12 @@ class AdminDriverService
                     'is_verified' => false,
                     'state'       => \App\Models\Driver\VehicleDocument::STATE_REJECTED,
                 ]);
+
+                if (\Illuminate\Support\Facades\Schema::hasTable('driver_documents')) {
+                    DriverDocument::where('driver_id', $driver->id)->update([
+                        'status' => 'rejected',
+                    ]);
+                }
             }
 
             DriverApproval::create([
@@ -494,7 +540,7 @@ class AdminDriverService
      * @param int $perPage
      * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
      */
-    public function getPendingChangesList(int $perPage = 15): LengthAwarePaginator
+    public function getPendingChangesList(int $perPage = 50): LengthAwarePaginator
     {
         return DB::table('driver_profile_changes')
             ->join('drivers', 'driver_profile_changes.driver_id', '=', 'drivers.id')
@@ -510,7 +556,7 @@ class AdminDriverService
                 'users.phone_number as driver_phone'
             )
             ->where('driver_profile_changes.status', 'Pending')
-            ->orderBy('driver_profile_changes.created_at', 'asc')
+            ->orderBy('driver_profile_changes.created_at', 'desc')
             ->paginate($perPage);
     }
 
@@ -610,11 +656,19 @@ class AdminDriverService
 
                 if (isset($newValues['vehicle_image_path'])) {
                     $vehicleDataToUpdate['vehicle_image_url'] = $newValues['vehicle_image_path'];
+                } elseif (isset($newValues['vehicle_image_url'])) {
+                    $vehicleDataToUpdate['vehicle_image_url'] = $newValues['vehicle_image_url'];
+                } elseif (isset($newValues['vehicle_photo'])) {
+                    $vehicleDataToUpdate['vehicle_image_url'] = $newValues['vehicle_photo'];
+                } elseif (isset($newValues['vehicle_image'])) {
+                    $vehicleDataToUpdate['vehicle_image_url'] = $newValues['vehicle_image'];
                 }
 
                 if (!empty($vehicleDataToUpdate)) {
                     $vehicleDataToUpdate['status'] = 'Active';
-                    $vehicleDataToUpdate['is_verified'] = true;
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('vehicles', 'is_verified')) {
+                        $vehicleDataToUpdate['is_verified'] = true;
+                    }
 
                     $vehicleId = $newValues['vehicle_id'] ?? $driver->vehicles()->first()?->id;
 
@@ -633,18 +687,36 @@ class AdminDriverService
                     'doc_technical_inspection_path'  => 'TECHNICAL_INSPECTION',
                 ];
 
+                if (!empty($newValues['license_image_url']) && empty($newValues['doc_license_path'])) {
+                    $newValues['doc_license_path'] = $newValues['license_image_url'];
+                }
+
                 $hasDriverDocs = \Illuminate\Support\Facades\Schema::hasTable('driver_documents');
 
                 if ($hasDriverDocs) {
+                    $docTypeCol = \Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'doc_type') ? 'doc_type' : 'document_type';
+                    $v2DocTypeMap = [
+                        'LICENSE'                  => 'vehicle_license',
+                        'VEHICLE_LOGBOOK'          => 'vehicle_license',
+                        'INSURANCE'                => 'insurance',
+                        'TECHNICAL_INSPECTION'     => 'technical_inspection',
+                        'STAMP'                    => 'technical_inspection',
+                        'BOOKLET_PERSONAL_PAGE'    => 'national_id',
+                    ];
+
                     foreach ($docMap as $pathKey => $docType) {
                         if (!empty($newValues[$pathKey])) {
+                            $actualDocType = ($docTypeCol === 'document_type') ? ($v2DocTypeMap[$docType] ?? 'vehicle_license') : $docType;
+                            $docUpdatePayload = [
+                                'file_url' => $newValues[$pathKey],
+                                'status'   => 'approved',
+                            ];
+                            if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'uploaded_at')) {
+                                $docUpdatePayload['uploaded_at'] = now();
+                            }
                             DriverDocument::updateOrCreate(
-                                ['driver_id' => $driver->id, 'doc_type' => $docType],
-                                [
-                                    'file_url'    => $newValues[$pathKey],
-                                    'status'      => 'Verified',
-                                    'uploaded_at' => now(),
-                                ]
+                                ['driver_id' => $driver->id, $docTypeCol => $actualDocType],
+                                $docUpdatePayload
                             );
                         }
                     }
@@ -658,29 +730,55 @@ class AdminDriverService
 
                     foreach ($expiryMap as $inputKey => $config) {
                         if (!empty($newValues[$inputKey])) {
+                            $actualDocType = ($docTypeCol === 'document_type') ? ($v2DocTypeMap[$config['doc']] ?? 'vehicle_license') : $config['doc'];
+                            $docUpdate = ['status' => 'approved'];
+                            if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', $config['col'])) {
+                                $docUpdate[$config['col']] = $newValues[$inputKey];
+                            }
+                            if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'expires_at')) {
+                                $docUpdate['expires_at'] = $newValues[$inputKey];
+                            }
                             DriverDocument::where('driver_id', $driver->id)
-                                ->where('doc_type', $config['doc'])
-                                ->update([
-                                    $config['col'] => $newValues[$inputKey],
-                                    'status'       => 'Verified'
-                                ]);
+                                ->where($docTypeCol, $actualDocType)
+                                ->update($docUpdate);
                         }
                     }
 
-                    // و) تحويل كافة وثائق السائق المعلقة (Pending) إلى معتمدة (Verified/Active)
+                    // مزامنة تاريخ انتهاء رخصة القيادة إن وُجد
+                    if (!empty($newValues['license_expiry'])) {
+                        $licDocUpdate = ['status' => 'approved'];
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'license_expiry_date')) {
+                            $licDocUpdate['license_expiry_date'] = $newValues['license_expiry'];
+                        }
+                        if (\Illuminate\Support\Facades\Schema::hasColumn('driver_documents', 'expires_at')) {
+                            $licDocUpdate['expires_at'] = $newValues['license_expiry'];
+                        }
+                        $actualLicDocType = ($docTypeCol === 'document_type') ? 'vehicle_license' : 'LICENSE';
+                        DriverDocument::where('driver_id', $driver->id)->where($docTypeCol, $actualLicDocType)->update($licDocUpdate);
+                    }
+
+                    // و) تحويل كافة وثائق السائق المعلقة إلى معتمدة نشطة (approved)
                     DriverDocument::where('driver_id', $driver->id)
-                        ->where('status', 'Pending')
-                        ->update(['status' => 'Verified']);
+                        ->whereIn('status', ['pending', 'Pending'])
+                        ->update(['status' => 'approved']);
                 }
 
-                $vehicle = $driver->vehicles()->first();
-                if ($vehicle) {
-                    \App\Models\Driver\VehicleDocument::where('vehicle_id', $vehicle->id)
-                        ->where('state', \App\Models\Driver\VehicleDocument::STATE_PENDING)
-                        ->update([
-                            'state'       => \App\Models\Driver\VehicleDocument::STATE_ACTIVE,
-                            'is_verified' => true,
-                        ]);
+                $vehicleIds = Vehicle::where('driver_id', $driver->id)->pluck('id');
+                if ($vehicleIds->isNotEmpty()) {
+                    $vehUpdatePayload = ['status' => 'Active'];
+                    if (\Illuminate\Support\Facades\Schema::hasColumn('vehicles', 'is_verified')) {
+                        $vehUpdatePayload['is_verified'] = 1;
+                    }
+                    Vehicle::whereIn('id', $vehicleIds)->where('status', 'Pending')->update($vehUpdatePayload);
+
+                    if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_documents')) {
+                        \App\Models\Driver\VehicleDocument::whereIn('vehicle_id', $vehicleIds)
+                            ->where('state', \App\Models\Driver\VehicleDocument::STATE_PENDING)
+                            ->update([
+                                'state'       => \App\Models\Driver\VehicleDocument::STATE_ACTIVE,
+                                'is_verified' => true,
+                            ]);
+                    }
                 }
 
                 // ز) تحديث حالة سجل الطلب إلى مقبوض وموثق
@@ -707,12 +805,19 @@ class AdminDriverService
 
                 $vehicle = $driver->vehicles()->first();
                 if ($vehicle) {
-                    \App\Models\Driver\VehicleDocument::where('vehicle_id', $vehicle->id)
-                        ->where('state', \App\Models\Driver\VehicleDocument::STATE_PENDING)
-                        ->update([
-                            'state'       => \App\Models\Driver\VehicleDocument::STATE_REJECTED,
-                            'is_verified' => false,
-                        ]);
+                    if (\Illuminate\Support\Facades\Schema::hasTable('vehicle_documents')) {
+                        \App\Models\Driver\VehicleDocument::where('vehicle_id', $vehicle->id)
+                            ->where('state', \App\Models\Driver\VehicleDocument::STATE_PENDING)
+                            ->update([
+                                'state'       => \App\Models\Driver\VehicleDocument::STATE_REJECTED,
+                                'is_verified' => false,
+                            ]);
+                    }
+                    $hasVerifiedCol = \Illuminate\Support\Facades\Schema::hasColumn('vehicles', 'is_verified');
+                    $isVerified = $hasVerifiedCol ? (bool) ($vehicle->is_verified ?? false) : true;
+                    if ($isVerified && $vehicle->status === 'Pending') {
+                        $vehicle->update(['status' => 'Active']);
+                    }
                 }
 
                 // أ) حالة الرفض: تحديث حالة سجل الطلب مع السبب

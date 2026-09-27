@@ -17,6 +17,21 @@ class Admin extends User
 {
     protected $table = 'users';
 
+    public static function create(array $attributes = [])
+    {
+        if (isset($attributes['user_id']) && !isset($attributes['role_id'])) {
+            $user = User::find($attributes['user_id']);
+            if ($user) {
+                if (isset($attributes['created_by'])) {
+                    $user->created_by = $attributes['created_by'];
+                    $user->save();
+                }
+                return static::find($user->id) ?? $user;
+            }
+        }
+        return parent::create($attributes);
+    }
+
     protected static function booted(): void
     {
         static::addGlobalScope('staff_role', function (Builder $builder) {

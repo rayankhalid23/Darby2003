@@ -982,6 +982,9 @@ class DriverTripController extends Controller
 
             // 🔒 التحقق من ملكية الاشتراك للسائق الحالي لمنع التلاعب باشتراكات سائقين آخرين (IDOR)
             $sub = ActiveSubscription::where('id', $subId)->forDriver($driverId)->first();
+            if (!$sub) {
+                $sub = ActiveSubscription::where('child_id', $subId)->forDriver($driverId)->first();
+            }
 
             if (!$sub) {
                 return response()->json([
@@ -1121,11 +1124,18 @@ class DriverTripController extends Controller
                     Log::warning("FCM Notification error on pickup: " . $e->getMessage());
                 }
 
+                $childName = $sub->child->full_name ?? $sub->child->name ?? 'طفلك';
                 $nextStop = $this->resolveNextStop($trip, $homeStop?->sequence_order);
 
                 return response()->json([
                     'status'    => 'success',
-                    'message'   => 'تم تأكيد الصعود وإرسال الإشعار لولي الأمر.',
+                    'message'   => "تم تأكيد صعود {$childName} وإرسال الإشعار لولي الأمر.",
+                    'child'     => [
+                        'child_id'      => (int) $childId,
+                        'trip_child_id' => (int) $sub->id,
+                        'name'          => $childName,
+                        'status'        => \App\Models\Shared\TripStop::STATUS_BOARDED,
+                    ],
                     'next_stop' => $nextStop,
                 ], 200);
 
@@ -1203,11 +1213,18 @@ class DriverTripController extends Controller
                     Log::warning("FCM Notification error on dropoff: " . $e->getMessage());
                 }
 
+                $childName = $sub->child->full_name ?? $sub->child->name ?? 'طفلك';
                 $nextStop = $this->resolveNextStop($trip, $homeStop?->sequence_order);
 
                 return response()->json([
                     'status'    => 'success',
-                    'message'   => 'تم تأكيد النزول وإرسال الإشعار لولي الأمر.',
+                    'message'   => "تم تأكيد نزول {$childName} وإرسال الإشعار لولي الأمر.",
+                    'child'     => [
+                        'child_id'      => (int) $childId,
+                        'trip_child_id' => (int) $sub->id,
+                        'name'          => $childName,
+                        'status'        => $dropoffStatus,
+                    ],
                     'next_stop' => $nextStop,
                 ], 200);
 
@@ -1310,11 +1327,18 @@ class DriverTripController extends Controller
                     Log::warning("FCM Notification error on {$action}: " . $e->getMessage());
                 }
 
+                $childName = $sub->child->full_name ?? $sub->child->name ?? 'طفلك';
                 $nextStop = $this->resolveNextStop($trip, $homeStop?->sequence_order);
 
                 return response()->json([
                     'status'    => 'success',
-                    'message'   => 'تم تسجيل الحالة بنجاح.',
+                    'message'   => "تم تسجيل حالة {$childName} بنجاح.",
+                    'child'     => [
+                        'child_id'      => (int) $childId,
+                        'trip_child_id' => (int) $sub->id,
+                        'name'          => $childName,
+                        'status'        => $stopStatusMap[$action] ?? 'updated',
+                    ],
                     'next_stop' => $nextStop,
                 ], 200);
             }
@@ -1327,29 +1351,105 @@ class DriverTripController extends Controller
     }
 
     /**
-     * تحديد المحطة التالية للسائق في الرحلة (قد تكون منزلاً لطفل آخر أو مدرسة لإنزال الطلاب)
+     * تحديد المحطة التالية للسائق في الرحلة بدقة وواقعية:
+     * - في رحلة الذهاب: يعطي الأولوية دائماً لمنازل الأطفال المتبقين (pending)، ولا ينتقل للمدارس
+     *   إلا بعد صعود أو غياب جميع الأطفال، ولا يُعيد أبداً طفلاً صعد بالفعل (boarded).
+     * - في رحلة الإياب: ينهي اصطحاب المدارس أولاً ثم ينتقل لمنازل الإنزال.
      */
     private function resolveNextStop(Trip $trip, ?int $currentSequenceOrder = null): ?array
     {
-        $stopsQuery = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
-            ->where('sequence_order', '>', 0)
-            ->orderBy('sequence_order', 'asc');
+        $isGoTrip = \App\Models\Driver\DriverSeatSlot::isGoSlot($trip->shift_slot ?? '')
+            || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
 
         $nextStop = null;
-        if ($currentSequenceOrder !== null) {
-            $nextStop = (clone $stopsQuery)
-                ->where('sequence_order', '>', $currentSequenceOrder)
-                ->whereIn('status', [
-                    \App\Models\Shared\TripStop::STATUS_PENDING,
-                    \App\Models\Shared\TripStop::STATUS_BOARDED
-                ])
-                ->first();
-        }
 
-        if (!$nextStop) {
-            $nextStop = (clone $stopsQuery)
+        if ($isGoTrip) {
+            // 🚌 مرحلة 1 (الذهاب): هل يوجد أي طفل لا يزال ينتظر في المنزل (pending)؟
+            $pendingHomeStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                ->where('sequence_order', '>', 0)
                 ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
-                ->first();
+                ->orderBy('sequence_order', 'asc')
+                ->get();
+
+            if ($pendingHomeStops->isNotEmpty()) {
+                // محطة تالية بترتيب أكبر من المحطة الحالية
+                if ($currentSequenceOrder !== null) {
+                    $nextStop = $pendingHomeStops->firstWhere('sequence_order', '>', $currentSequenceOrder);
+                }
+                // إذا لم نجد محطة بعدها (مثلاً صعد طفل ذو ترتيب متأخر أولاً)، نأخذ أول طفل ما زال ينتظر
+                if (!$nextStop) {
+                    $nextStop = $pendingHomeStops->first();
+                }
+            } else {
+                // 🏫 مرحلة 2 (الذهاب): اكتمل صعود جميع الأطفال من المنازل! ننتقل لإنزال المدارس.
+                // نجلب المدارس التي يتبع لها الأطفال الموجودون حالياً بالمركبة (boarded)
+                $boardedChildIds = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                    ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                    ->where('status', \App\Models\Shared\TripStop::STATUS_BOARDED)
+                    ->pluck('child_id')
+                    ->filter()
+                    ->unique();
+
+                $targetSchoolIds = \App\Models\Parent\Child::whereIn('id', $boardedChildIds)
+                    ->pluck('school_id')
+                    ->filter()
+                    ->unique();
+
+                $schoolStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                    ->where('stop_type', \App\Models\Shared\TripStop::TYPE_SCHOOL)
+                    ->where('sequence_order', '>', 0)
+                    ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
+                    ->when($targetSchoolIds->isNotEmpty(), fn($q) => $q->whereIn('school_id', $targetSchoolIds))
+                    ->orderBy('sequence_order', 'asc')
+                    ->get();
+
+                if ($schoolStops->isNotEmpty()) {
+                    if ($currentSequenceOrder !== null) {
+                        $nextStop = $schoolStops->firstWhere('sequence_order', '>', $currentSequenceOrder);
+                    }
+                    if (!$nextStop) {
+                        $nextStop = $schoolStops->first();
+                    }
+                }
+            }
+        } else {
+            // 🎒 مرحلة 1 (الإياب): اصطحاب الطلاب من المدارس
+            $pendingSchoolStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('stop_type', \App\Models\Shared\TripStop::TYPE_SCHOOL)
+                ->where('sequence_order', '>', 0)
+                ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
+                ->orderBy('sequence_order', 'asc')
+                ->get();
+
+            if ($pendingSchoolStops->isNotEmpty()) {
+                if ($currentSequenceOrder !== null) {
+                    $nextStop = $pendingSchoolStops->firstWhere('sequence_order', '>', $currentSequenceOrder);
+                }
+                if (!$nextStop) {
+                    $nextStop = $pendingSchoolStops->first();
+                }
+            } else {
+                // 🏡 مرحلة 2 (الإياب): إنزال الطلاب في منازلهم
+                $homeStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                    ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                    ->where('sequence_order', '>', 0)
+                    ->whereIn('status', [
+                        \App\Models\Shared\TripStop::STATUS_PENDING,
+                        \App\Models\Shared\TripStop::STATUS_BOARDED
+                    ])
+                    ->orderBy('sequence_order', 'asc')
+                    ->get();
+
+                if ($homeStops->isNotEmpty()) {
+                    if ($currentSequenceOrder !== null) {
+                        $nextStop = $homeStops->firstWhere('sequence_order', '>', $currentSequenceOrder);
+                    }
+                    if (!$nextStop) {
+                        $nextStop = $homeStops->first();
+                    }
+                }
+            }
         }
 
         if ($nextStop) {

@@ -11,7 +11,15 @@ class ProfileUpdateRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return auth()->check() && (int) (auth()->user()->role_id ?? 0) === 4;
+        if (!auth()->check()) {
+            return false;
+        }
+
+        $user = auth()->user();
+
+        return $user->driver !== null 
+            || in_array((int) ($user->role_id ?? 0), [8, 4], true)
+            || $user->role?->name === 'driver';
     }
 
     public function validationData(): array

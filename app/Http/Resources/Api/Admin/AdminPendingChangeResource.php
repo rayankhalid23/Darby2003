@@ -27,15 +27,73 @@ class AdminPendingChangeResource extends JsonResource
             return $formatted;
         };
 
+        // 🚗 فحص وتحديد حقول المركبة التي تم تعديلها فعلياً فقط (عرض القديم والجديد للحقول المعدلة فقط)
+        $vehicleKeys = ['plate_number', 'brand', 'model', 'year', 'color', 'type', 'capacity_manual', 'has_ac'];
+        $modifiedVehicleOld = [];
+        $modifiedVehicleNew = [];
+
+        foreach ($vehicleKeys as $key) {
+            if (array_key_exists($key, $newValues)) {
+                if ($key === 'has_ac') {
+                    $modifiedVehicleOld[$key] = isset($oldValues[$key]) ? (bool)$oldValues[$key] : null;
+                    $modifiedVehicleNew[$key] = isset($newValues[$key]) ? (bool)$newValues[$key] : null;
+                } else {
+                    $modifiedVehicleOld[$key] = $oldValues[$key] ?? null;
+                    $modifiedVehicleNew[$key] = $newValues[$key] ?? null;
+                }
+            }
+        }
+
+        $hasVehicleImageModified = array_key_exists('vehicle_image_path', $newValues)
+            || array_key_exists('vehicle_image_url', $newValues)
+            || array_key_exists('vehicle_image', $newValues)
+            || array_key_exists('vehicle_photo', $newValues);
+
+        if ($hasVehicleImageModified) {
+            $oldImg = $oldValues['vehicle_image_url'] ?? ($oldValues['vehicle_image_path'] ?? null);
+            $newImg = $newValues['vehicle_image_path'] ?? ($newValues['vehicle_image_url'] ?? ($newValues['vehicle_image'] ?? ($newValues['vehicle_photo'] ?? null)));
+
+            $modifiedVehicleOld['vehicle_image_url'] = MediaController::urlFor($oldImg);
+            $modifiedVehicleNew['vehicle_image_url'] = MediaController::urlFor($newImg);
+        }
+
+        // تصفية المصفوفات المباشرة old_values و new_values بحيث تعرض حصراً الحقول المعدلة
         $formattedOld = $formatMediaMap($oldValues);
         $formattedNew = $formatMediaMap($newValues);
+
+        // إزالة أي حقول للمركبة لم تكن ضمن التعديل المطلوب من old_values
+        foreach ($vehicleKeys as $vKey) {
+            if (!array_key_exists($vKey, $newValues)) {
+                unset($formattedOld[$vKey]);
+            }
+        }
+        if (!$hasVehicleImageModified) {
+            unset($formattedOld['vehicle_image_url'], $formattedOld['vehicle_image_path']);
+        } else {
+            if (!empty($modifiedVehicleOld['vehicle_image_url'])) {
+                $formattedOld['vehicle_image_url'] = $modifiedVehicleOld['vehicle_image_url'];
+            }
+            if (!empty($modifiedVehicleNew['vehicle_image_url'])) {
+                $formattedNew['vehicle_image_url'] = $modifiedVehicleNew['vehicle_image_url'];
+            }
+        }
+
+        // إزالة المعرف الداخلي vehicle_id من عرض التغييرات حتى لا يظهر كحقل معدل
+        unset($formattedOld['vehicle_id'], $formattedNew['vehicle_id']);
+
+        $driverModel = isset($this->driver) && is_object($this->driver) ? $this->driver : null;
+        $driverName  = $this->driver_name ?? ($driverModel?->user?->full_name);
+        $driverPhone = $this->driver_phone ?? ($driverModel?->user?->phone_number);
+        $vehicleId   = $newValues['vehicle_id'] ?? ($driverModel?->vehicles?->first()?->id ?? null);
 
         return [
             'request_id'        => $this->id ?? $this->request_id,
             'change_id'         => $this->id ?? $this->request_id,
+            'id'                => $this->id ?? $this->request_id,
             'driver_id'         => $this->driver_id,
-            'driver_name'       => $this->driver_name ?? ($this->driver?->user?->full_name),
-            'driver_phone'      => $this->driver_phone ?? ($this->driver?->user?->phone_number),
+            'vehicle_id'        => $vehicleId,
+            'driver_name'       => $driverName,
+            'driver_phone'      => $driverPhone,
             'status'            => $this->status,
             'rejection_reason'  => $this->rejection_reason ?? null,
             'submitted_at'      => $this->created_at ? date('Y-m-d H:i:s', strtotime((string)$this->created_at)) : null,
@@ -44,11 +102,13 @@ class AdminPendingChangeResource extends JsonResource
             // 1. الكائنات المباشرة للمقارنة (Direct Key-Value Diff)
             'old_values'        => $formattedOld,
             'new_values'        => $formattedNew,
+            'old_data'          => $formattedOld,
+            'new_data'          => $formattedNew,
 
             // 2. التنسيق الهيكلي المصنف (Structured View for Admin Dashboard)
             'driver_info' => [
-                'full_name'    => $this->driver_name ?? ($this->driver?->user?->full_name),
-                'phone_number' => $this->driver_phone ?? ($this->driver?->user?->phone_number),
+                'full_name'    => $driverName,
+                'phone_number' => $driverPhone,
             ],
 
             'current_system_data' => [
@@ -72,17 +132,7 @@ class AdminPendingChangeResource extends JsonResource
                     'stamp_expiry'                  => $oldValues['stamp_expiry'] ?? null,
                     'technical_inspection_expiry'   => $oldValues['technical_inspection_expiry'] ?? null,
                 ],
-                'vehicle' => (isset($oldValues['plate_number']) || isset($oldValues['brand']) || isset($oldValues['vehicle_image_url'])) ? [
-                    'plate_number'      => $oldValues['plate_number'] ?? null,
-                    'brand'             => $oldValues['brand'] ?? null,
-                    'model'             => $oldValues['model'] ?? null,
-                    'year'              => $oldValues['year'] ?? null,
-                    'color'             => $oldValues['color'] ?? null,
-                    'type'              => $oldValues['type'] ?? null,
-                    'capacity_manual'   => $oldValues['capacity_manual'] ?? null,
-                    'has_ac'            => isset($oldValues['has_ac']) ? (bool)$oldValues['has_ac'] : null,
-                    'vehicle_image_url' => MediaController::urlFor($oldValues['vehicle_image_url'] ?? null),
-                ] : null
+                'vehicle'           => !empty($modifiedVehicleOld) ? $modifiedVehicleOld : null,
             ],
 
             'requested_new_data' => [
@@ -106,19 +156,8 @@ class AdminPendingChangeResource extends JsonResource
                     'stamp_expiry'                  => $newValues['stamp_expiry'] ?? null,
                     'technical_inspection_expiry'   => $newValues['technical_inspection_expiry'] ?? null,
                 ],
-                'vehicle' => (isset($newValues['plate_number']) || isset($newValues['brand']) || isset($newValues['vehicle_image_path']) || isset($newValues['vehicle_image_url'])) ? [
-                    'vehicle_id'        => $newValues['vehicle_id'] ?? null,
-                    'plate_number'      => $newValues['plate_number'] ?? null,
-                    'brand'             => $newValues['brand'] ?? null,
-                    'model'             => $newValues['model'] ?? null,
-                    'year'              => $newValues['year'] ?? null,
-                    'color'             => $newValues['color'] ?? null,
-                    'type'              => $newValues['type'] ?? null,
-                    'capacity_manual'   => $newValues['capacity_manual'] ?? null,
-                    'has_ac'            => isset($newValues['has_ac']) ? (bool)$newValues['has_ac'] : null,
-                    'vehicle_image_url' => MediaController::urlFor($newValues['vehicle_image_path'] ?? ($newValues['vehicle_image_url'] ?? null)),
-                ] : null
+                'vehicle'           => !empty($modifiedVehicleNew) ? $modifiedVehicleNew : null,
             ]
         ];
     }
-}
+}

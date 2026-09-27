@@ -2134,7 +2134,8 @@ class SubscriptionRequestService
 
     /**
      * 👥 جلب قائمة السائقين الذين تعامل معهم ولي الأمر
-     * يشمل الحالات: (اشتراك قيد الانتظار / اشتراك نشط / اشتراك مكتمل / اشتراك ملغي من ولي الأمر / اشتراك ملغي من السائق)
+     * يشمل الحالات: (اشتراك نشط / اشتراك مكتمل / اشتراك ملغي من ولي الأمر / اشتراك ملغي من السائق)
+     * يتم استبعاد الطلبات المعلقة (pending) لأنها لم تصبح اشتراكاً فعلياً تم التعامل معه بعد.
      */
     public function getParentContractedDrivers(int $userId, ?string $filter = null): array
     {
@@ -2185,7 +2186,8 @@ class SubscriptionRequestService
                             $canonicalStatus = 'active';
                         }
                     } elseif ($status === 'pending') {
-                        $canonicalStatus = 'pending';
+                        // استبعاد الاشتراكات المعلقة
+                        continue;
                     } else {
                         $canonicalStatus = $status;
                     }
@@ -2203,7 +2205,8 @@ class SubscriptionRequestService
             } else {
                 $reqStatus = strtolower((string) ($request->status ?? 'pending'));
                 if (in_array($reqStatus, ['pending', 'acquired'])) {
-                    $canonicalStatus = 'pending';
+                    // استبعاد الطلبات المعلقة التي لم تُقبل بعد
+                    continue;
                 } elseif ($reqStatus === 'cancelled') {
                     $canonicalStatus = 'cancelled_by_parent';
                 } elseif ($reqStatus === 'rejected') {
@@ -2235,10 +2238,9 @@ class SubscriptionRequestService
 
         $statusPriority = [
             'active'              => 1,
-            'pending'             => 2,
-            'completed'           => 3,
-            'cancelled_by_parent' => 4,
-            'cancelled_by_driver' => 5,
+            'completed'           => 2,
+            'cancelled_by_parent' => 3,
+            'cancelled_by_driver' => 4,
         ];
 
         $filter = !empty($filter) ? strtolower(trim($filter)) : null;
@@ -2249,6 +2251,11 @@ class SubscriptionRequestService
             $driver = $item['driver'];
             $user = $item['user'];
             $subs = $item['subscriptions'];
+
+            // استبعاد السائق إذا لم تكن له أي اشتراكات فعلية (مثل حالة وجود طلبات معلقة فقط)
+            if (empty($subs)) {
+                continue;
+            }
 
             $uniqueStatuses = array_values(array_unique(array_column($subs, 'status')));
 

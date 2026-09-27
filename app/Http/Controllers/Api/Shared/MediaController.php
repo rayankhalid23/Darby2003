@@ -77,7 +77,7 @@ class MediaController extends Controller
     }
 
     /**
-     * هل يجب تضمين ملف الوسائط كـ Data URI (Base64) لتجاوز صفحة حماية LocalTunnel أو عند طلبه صراحة؟
+     * هل تم طلب تضمين ملف الوسائط كـ Data URI (Base64) صراحة عبر ?embed_media=1 أو ?data_url=1؟
      */
     public static function shouldEmbedAsDataUrl(): bool
     {
@@ -86,32 +86,24 @@ class MediaController extends Controller
             return true;
         }
 
-        // 2. فحص الطلب الحالي إن وُجد
+        // 2. فحص الطلب الحالي إن وُجد (فقط إذا طُلب صراحة عبر بارامتر أو ترويسة)
         $request = request();
         if (!$request) {
             return false;
         }
 
-        // طلب التضمين عبر ترويسة أو بارامتر
-        if ($request->boolean('embed_media') || $request->boolean('data_url') || $request->header('X-Embed-Media') === 'true') {
-            return true;
-        }
-
-        // كشف استخدام LocalTunnel تلقائياً: خدمة loca.lt تفرض صفحة وسيطة تكسر وسم <img>
-        $host = $request->getHost();
-        if (str_contains($host, 'loca.lt')) {
-            return true;
-        }
-
-        return false;
+        return $request->boolean('embed_media') 
+            || $request->boolean('data_url') 
+            || $request->header('X-Embed-Media') === 'true';
     }
 
     /**
-     * تحويل الملف المخزن محلياً إلى Data URI (Base64) ليعرض في وسم <img> مباشرة دون أي طلب شبكي إضافي.
+     * تحويل الملف المخزن محلياً إلى Data URI (Base64) فقط عند طلبه صراحة.
+     * في الحالات العادية يرجع null لضمان خفة حجم الـ JSON وقصر مسارات الصور.
      */
     public static function dataUrlFor(?string $storedPath): ?string
     {
-        if (empty($storedPath)) {
+        if (empty($storedPath) || !self::shouldEmbedAsDataUrl()) {
             return null;
         }
 
@@ -153,21 +145,13 @@ class MediaController extends Controller
     }
 
     /**
-     * تحويل قيمة مسار مخزَّن في قاعدة البيانات إلى رابط يمر عبر لارافيل ويحصل على ترويسات CORS.
-     * في حال كان الاتصال عبر LocalTunnel أو طُلب التضمين صراحة، يتم إرجاع Data URI تلقائياً لتجاوز حجب الصور.
+     * تحويل مسار الملف إلى رابط HTTP نظيف وقصير دائماً (يمر عبر api/media مع ترويسات CORS).
+     * يضمن عدم تضخيم الرابط ويحافظ على حجم استجابة الـ API صغيرة وسريعة.
      */
     public static function urlFor(?string $storedPath): ?string
     {
         if (empty($storedPath)) {
             return null;
-        }
-
-        // إذا طُلب تضمين الصور كـ Data URI أو تم اكتشاف LocalTunnel
-        if (self::shouldEmbedAsDataUrl()) {
-            $dataUrl = self::dataUrlFor($storedPath);
-            if ($dataUrl !== null) {
-                return $dataUrl;
-            }
         }
 
         // إذا كان الرابط كاملاً، استخراج المسار النسبي إن كان يشير إلى storage على نفس الدومين

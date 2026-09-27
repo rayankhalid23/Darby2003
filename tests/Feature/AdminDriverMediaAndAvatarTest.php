@@ -120,45 +120,47 @@ class AdminDriverMediaAndAvatarTest extends TestCase
         $docUrl = $response->json('data.documents.0.document_url');
         $this->assertStringContainsString('api/media/drivers/documents', $docUrl);
 
-        // التأكد من توفر حقول data_url الصريحة
-        $this->assertStringStartsWith('data:image/', $response->json('data.avatar_data_url'));
-        $this->assertStringStartsWith('data:image/', $response->json('data.vehicles.0.vehicle_image_data_url'));
-        $this->assertStringStartsWith('data:image/', $response->json('data.documents.0.document_data_url'));
+        // التأكد من أن حقول data_url الافتراضية null للحفاظ على خفة الـ JSON وقصر المسارات
+        $this->assertNull($response->json('data.avatar_data_url'));
+        $this->assertNull($response->json('data.vehicles.0.vehicle_image_data_url'));
+        $this->assertNull($response->json('data.documents.0.document_data_url'));
     }
 
     /**
-     * اختبار 2: التحويل التلقائي إلى Data URI عند الطلب عبر LocalTunnel (loca.lt) لتجاوز صفحة الحظر
+     * اختبار 2: التأكد من أن الروابط دائماً روابط HTTP نظيفة وقصيرة وليست مسارات Base64 عملاقة
      */
-    public function test_media_urls_automatically_convert_to_data_uri_when_using_localtunnel(): void
+    public function test_media_urls_remain_clean_short_urls_on_any_host(): void
     {
         $response = $this->actingAs($this->adminUser)
             ->getJson("https://horrible-octopus-0.loca.lt/api/admin/drivers/{$this->driver->id}");
 
         $response->assertStatus(200);
 
-        // في نطاق LocalTunnel، يجب أن ترجع الروابط بصيغة Data URI لمنع حجب المتصفح
         $avatarUrl = $response->json('data.avatar_url');
-        $this->assertStringStartsWith('data:image/', $avatarUrl);
+        $this->assertStringContainsString('api/media/drivers/avatars', $avatarUrl);
+        $this->assertFalse(str_starts_with($avatarUrl, 'data:image/'));
 
         $vehicleUrl = $response->json('data.vehicles.0.vehicle_image_url');
-        $this->assertStringStartsWith('data:image/', $vehicleUrl);
-
-        $docUrl = $response->json('data.documents.0.document_url');
-        $this->assertStringStartsWith('data:image/', $docUrl);
+        $this->assertStringContainsString('api/media/drivers/vehicles', $vehicleUrl);
+        $this->assertFalse(str_starts_with($vehicleUrl, 'data:image/'));
     }
 
     /**
-     * اختبار 3: التحويل إلى Data URI عند إرسال بارامتر embed_media=1 صراحة
+     * اختبار 3: توفير Data URI في حقول *_data_url فقط عند إرسال بارامتر embed_media=1 صراحة
      */
-    public function test_media_urls_convert_to_data_uri_when_embed_media_param_is_passed(): void
+    public function test_data_url_fields_provided_only_when_embed_media_param_is_passed(): void
     {
         $response = $this->actingAs($this->adminUser)
             ->getJson("/api/admin/drivers/{$this->driver->id}?embed_media=1");
 
         $response->assertStatus(200);
 
-        $vehicleUrl = $response->json('data.vehicles.0.vehicle_image_url');
-        $this->assertStringStartsWith('data:image/', $vehicleUrl);
+        // رابط الصورة الأساسي يظل مساراً نظيفاً وقصيراً
+        $this->assertStringContainsString('api/media/drivers/avatars', $response->json('data.avatar_url'));
+
+        // بينما حقول data_url تحتوي على Base64 لمن يحتاجها
+        $this->assertStringStartsWith('data:image/', $response->json('data.avatar_data_url'));
+        $this->assertStringStartsWith('data:image/', $response->json('data.vehicles.0.vehicle_image_data_url'));
     }
 
     /**
