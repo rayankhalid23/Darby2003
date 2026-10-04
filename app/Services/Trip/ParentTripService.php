@@ -227,11 +227,12 @@ class ParentTripService
 
                 // بيانات منزل وسكن الطفل
                 $childAddress = $childObj->address;
-                $homeLat = $childAddress?->lat ?? $sub->pickup_lat;
-                $homeLng = $childAddress?->lng ?? $sub->pickup_lng;
+                $homeLat = $stop?->lat ?? $childAddress?->lat ?? $sub->pickup_lat;
+                $homeLng = $stop?->lng ?? $childAddress?->lng ?? $sub->pickup_lng;
+                $homeTitle = $stop?->label ?? $childAddress?->label ?? $sub->pickup_label ?? null;
                 $homeAddressData = [
-                    'title'  => $childAddress?->label ?? $sub->pickup_label ?? null,
-                    'street' => $childAddress?->label ?? $sub->pickup_label ?? null,
+                    'title'  => $homeTitle,
+                    'street' => $homeTitle,
                     'lat'    => $homeLat !== null ? (float)$homeLat : null,
                     'lng'    => $homeLng !== null ? (float)$homeLng : null,
                 ];
@@ -381,8 +382,15 @@ class ParentTripService
                 ->with(['child.address', 'child.school', 'school'])
                 ->get();
 
+            $tripStopsByChild = DB::table('trip_stops')
+                ->where('trip_id', $trip->id)
+                ->whereIn('child_id', $childIds)
+                ->where('stop_type', 'home')
+                ->get()
+                ->keyBy('child_id');
+
             foreach ($subscriptions as $sub) {
-                $childrenArray[] = $this->buildChildLocations($sub);
+                $childrenArray[] = $this->buildChildLocations($sub, $tripStopsByChild->get($sub->child_id));
             }
         }
 
@@ -408,13 +416,14 @@ class ParentTripService
     /**
      * يبني بيانات المنزل والمدرسة الحقيقية لطفل واحد من اشتراكه الفعّال
      */
-    private function buildChildLocations(ActiveSubscription $sub): array
+    private function buildChildLocations(ActiveSubscription $sub, ?object $stop = null): array
     {
         $childObj = $sub->child;
 
         $childAddress = $childObj?->address;
-        $homeLat = $childAddress?->lat ?? $sub->pickup_lat;
-        $homeLng = $childAddress?->lng ?? $sub->pickup_lng;
+        $homeLat = $stop?->lat ?? $childAddress?->lat ?? $sub->pickup_lat;
+        $homeLng = $stop?->lng ?? $childAddress?->lng ?? $sub->pickup_lng;
+        $homeTitle = $stop?->label ?? $childAddress?->label ?? $sub->pickup_label ?? null;
 
         $childSchool = $childObj?->school ?? $sub->school;
         $schoolLat = $childSchool?->lat ?? $sub->dropoff_lat;
@@ -424,8 +433,8 @@ class ParentTripService
             'child_id'   => $sub->child_id,
             'child_name' => $childObj?->full_name ?? $childObj?->name ?? null,
             'home' => [
-                'title'   => $childAddress?->label ?? $sub->pickup_label ?? null,
-                'address' => $childAddress?->label ?? $sub->pickup_label ?? null,
+                'title'   => $homeTitle,
+                'address' => $homeTitle,
                 'lat'     => $homeLat !== null ? (float)$homeLat : null,
                 'lng'     => $homeLng !== null ? (float)$homeLng : null,
             ],
@@ -737,13 +746,16 @@ class ParentTripService
                 $rawPhoto = $childObj->photo_url ?? null;
                 $photoUrl = $rawPhoto ? (str_starts_with($rawPhoto, 'http') ? $rawPhoto : Storage::url($rawPhoto)) : asset('assets/images/default-child.png');
 
+                $stop = $childStops->firstWhere('stop_type', 'home') ?? $childStops->first();
+
                 // موقع المنزل
                 $childAddress = $childObj->address;
-                $homeLat = $childAddress?->lat ?? $activeSub?->pickup_lat;
-                $homeLng = $childAddress?->lng ?? $activeSub?->pickup_lng;
+                $homeLat = $stop?->lat ?? $childAddress?->lat ?? $activeSub?->pickup_lat;
+                $homeLng = $stop?->lng ?? $childAddress?->lng ?? $activeSub?->pickup_lng;
+                $homeTitle = $stop?->label ?? $childAddress?->label ?? $activeSub?->pickup_label ?? null;
                 $homeLocation = [
-                    'title'   => $childAddress?->label ?? $activeSub?->pickup_label ?? null,
-                    'address' => $childAddress?->label ?? $activeSub?->pickup_label ?? null,
+                    'title'   => $homeTitle,
+                    'address' => $homeTitle,
                     'lat'     => $homeLat !== null ? (float)$homeLat : null,
                     'lng'     => $homeLng !== null ? (float)$homeLng : null,
                 ];
@@ -772,7 +784,6 @@ class ParentTripService
                     ? Carbon::parse($dropoffEvent->scanned_at)->format('h:i A') 
                     : ($activeSub?->dropoff_time ? Carbon::parse($activeSub->dropoff_time)->format('h:i A') : null);
 
-                $stop = $childStops->firstWhere('stop_type', 'home') ?? $childStops->first();
                 $rawStatus = $stop?->status ?? ($dropoffEvent ? 'dropped_off' : ($pickupEvent ? 'picked_up' : 'completed'));
 
                 $childStatus = match ($rawStatus) {
@@ -903,11 +914,12 @@ class ParentTripService
 
             // بيانات منزل وسكن الطفل
             $childAddress = $c->address;
-            $homeLat = $childAddress?->lat ?? $sub->pickup_lat;
-            $homeLng = $childAddress?->lng ?? $sub->pickup_lng;
+            $homeLat = $stop?->lat ?? $childAddress?->lat ?? $sub->pickup_lat;
+            $homeLng = $stop?->lng ?? $childAddress?->lng ?? $sub->pickup_lng;
+            $homeTitle = $stop?->label ?? $childAddress?->label ?? $sub->pickup_label ?? 'المنزل الرئيسي';
             $homeLocation = [
-                'title'   => $childAddress?->label ?? $sub->pickup_label ?? 'المنزل الرئيسي',
-                'address' => $childAddress?->label ?? $sub->pickup_label ?? null,
+                'title'   => $homeTitle,
+                'address' => $homeTitle,
                 'lat'     => $homeLat !== null ? (float)$homeLat : 32.875210,
                 'lng'     => $homeLng !== null ? (float)$homeLng : 13.165420,
             ];

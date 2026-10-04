@@ -1,0 +1,3464 @@
+{
+    "trip_type": "Morning Go (5 Children)",
+    "driver_id": 908,
+    "route_id": 11,
+    "total_points": 325,
+    "tick_interval_sec": 2,
+    "default_speed": 40,
+    "waypoints": [
+        {
+            "name": "نقطة انطلاق السائق (500م قبل أول منزل)",
+            "lat": 32.871,
+            "lng": 13.1935,
+            "type": "start"
+        },
+        {
+            "name": "منزل 1 (صعود عمر ولينا)",
+            "lat": 32.8755,
+            "lng": 13.1935,
+            "type": "home_stop",
+            "stop_id": 1,
+            "child_names": [
+                "عمر خالد",
+                "لينا خالد"
+            ],
+            "sub_ids": [
+                29,
+                30
+            ]
+        },
+        {
+            "name": "منزل 2 (صعود يوسف)",
+            "lat": 32.878,
+            "lng": 13.1965,
+            "type": "home_stop",
+            "stop_id": 2,
+            "child_names": [
+                "يوسف الترهوني"
+            ],
+            "sub_ids": [
+                258
+            ]
+        },
+        {
+            "name": "منزل 3 (صعود أحمد)",
+            "lat": 32.8815,
+            "lng": 13.193,
+            "type": "home_stop",
+            "stop_id": 3,
+            "child_names": [
+                "أحمد الترهوني"
+            ],
+            "sub_ids": [
+                259
+            ]
+        },
+        {
+            "name": "منزل 4 (صعود طارق)",
+            "lat": 32.885,
+            "lng": 13.1985,
+            "type": "home_stop",
+            "stop_id": 4,
+            "child_names": [
+                "طارق الفيتوري"
+            ],
+            "sub_ids": [
+                260
+            ]
+        },
+        {
+            "name": "مدرسة النصر النموذجية (نزول لينا)",
+            "lat": 32.88712,
+            "lng": 13.19154,
+            "type": "school_stop",
+            "stop_id": 5,
+            "school_name": "مدرسة النصر النموذجية",
+            "child_names": [
+                "لينا خالد"
+            ],
+            "sub_ids": [
+                30
+            ]
+        },
+        {
+            "name": "مدرسة النوفليين الأهلية (نزول طارق)",
+            "lat": 32.88934,
+            "lng": 13.20512,
+            "type": "school_stop",
+            "stop_id": 6,
+            "school_name": "مدرسة النوفليين الأهلية",
+            "child_names": [
+                "طارق الفيتوري"
+            ],
+            "sub_ids": [
+                260
+            ]
+        },
+        {
+            "name": "مدرسة زاوية الدهماني (نزول أحمد)",
+            "lat": 32.87821,
+            "lng": 13.18435,
+            "type": "school_stop",
+            "stop_id": 7,
+            "school_name": "مدرسة زاوية الدهماني",
+            "child_names": [
+                "أحمد الترهوني"
+            ],
+            "sub_ids": [
+                259
+            ]
+        },
+        {
+            "name": "مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)",
+            "lat": 32.87456,
+            "lng": 13.19023,
+            "type": "school_stop",
+            "stop_id": 8,
+            "school_name": "مدرسة بن عاشور الابتدائية",
+            "child_names": [
+                "عمر خالد",
+                "يوسف الترهوني"
+            ],
+            "sub_ids": [
+                29,
+                258
+            ]
+        }
+    ],
+    "points": [
+        {
+            "step": 1,
+            "latitude": 32.871,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 2,
+            "latitude": 32.871196,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 3,
+            "latitude": 32.871391,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 4,
+            "latitude": 32.871587,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 5,
+            "latitude": 32.871783,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 6,
+            "latitude": 32.871978,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 7,
+            "latitude": 32.872174,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 8,
+            "latitude": 32.87237,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 9,
+            "latitude": 32.872565,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 10,
+            "latitude": 32.872761,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 11,
+            "latitude": 32.872957,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 12,
+            "latitude": 32.873152,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 13,
+            "latitude": 32.873348,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 14,
+            "latitude": 32.873543,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 15,
+            "latitude": 32.873739,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 16,
+            "latitude": 32.873935,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 17,
+            "latitude": 32.87413,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 18,
+            "latitude": 32.874326,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 19,
+            "latitude": 32.874522,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 20,
+            "latitude": 32.874717,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 21,
+            "latitude": 32.874913,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 22,
+            "latitude": 32.875109,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 23,
+            "latitude": 32.875304,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 0,
+            "is_stop": false,
+            "current_leg": "من [نقطة انطلاق السائق (500م قبل أول منزل)] إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 24,
+            "latitude": 32.8755,
+            "longitude": 13.1935,
+            "speed": 0,
+            "heading": 0,
+            "is_stop": true,
+            "current_leg": "وصول إلى [منزل 1 (صعود عمر ولينا)]",
+            "stop_info": {
+                "stop_name": "منزل 1 (صعود عمر ولينا)",
+                "stop_type": "home_stop",
+                "child_names": [
+                    "عمر خالد",
+                    "لينا خالد"
+                ],
+                "sub_ids": [
+                    29,
+                    30
+                ],
+                "action": "pickup"
+            }
+        },
+        {
+            "step": 25,
+            "latitude": 32.8755,
+            "longitude": 13.1935,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 26,
+            "latitude": 32.875639,
+            "longitude": 13.193667,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 27,
+            "latitude": 32.875778,
+            "longitude": 13.193833,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 28,
+            "latitude": 32.875917,
+            "longitude": 13.194,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 29,
+            "latitude": 32.876056,
+            "longitude": 13.194167,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 30,
+            "latitude": 32.876194,
+            "longitude": 13.194333,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 31,
+            "latitude": 32.876333,
+            "longitude": 13.1945,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 32,
+            "latitude": 32.876472,
+            "longitude": 13.194667,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 33,
+            "latitude": 32.876611,
+            "longitude": 13.194833,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 34,
+            "latitude": 32.87675,
+            "longitude": 13.195,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 35,
+            "latitude": 32.876889,
+            "longitude": 13.195167,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 36,
+            "latitude": 32.877028,
+            "longitude": 13.195333,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 37,
+            "latitude": 32.877167,
+            "longitude": 13.1955,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 38,
+            "latitude": 32.877306,
+            "longitude": 13.195667,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 39,
+            "latitude": 32.877444,
+            "longitude": 13.195833,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 40,
+            "latitude": 32.877583,
+            "longitude": 13.196,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 41,
+            "latitude": 32.877722,
+            "longitude": 13.196167,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 42,
+            "latitude": 32.877861,
+            "longitude": 13.196333,
+            "speed": 40,
+            "heading": 45,
+            "is_stop": false,
+            "current_leg": "من [منزل 1 (صعود عمر ولينا)] إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 43,
+            "latitude": 32.878,
+            "longitude": 13.1965,
+            "speed": 0,
+            "heading": 45,
+            "is_stop": true,
+            "current_leg": "وصول إلى [منزل 2 (صعود يوسف)]",
+            "stop_info": {
+                "stop_name": "منزل 2 (صعود يوسف)",
+                "stop_type": "home_stop",
+                "child_names": [
+                    "يوسف الترهوني"
+                ],
+                "sub_ids": [
+                    258
+                ],
+                "action": "pickup"
+            }
+        },
+        {
+            "step": 44,
+            "latitude": 32.878,
+            "longitude": 13.1965,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 45,
+            "latitude": 32.878152,
+            "longitude": 13.196348,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 46,
+            "latitude": 32.878304,
+            "longitude": 13.196196,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 47,
+            "latitude": 32.878457,
+            "longitude": 13.196043,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 48,
+            "latitude": 32.878609,
+            "longitude": 13.195891,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 49,
+            "latitude": 32.878761,
+            "longitude": 13.195739,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 50,
+            "latitude": 32.878913,
+            "longitude": 13.195587,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 51,
+            "latitude": 32.879065,
+            "longitude": 13.195435,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 52,
+            "latitude": 32.879217,
+            "longitude": 13.195283,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 53,
+            "latitude": 32.87937,
+            "longitude": 13.19513,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 54,
+            "latitude": 32.879522,
+            "longitude": 13.194978,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 55,
+            "latitude": 32.879674,
+            "longitude": 13.194826,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 56,
+            "latitude": 32.879826,
+            "longitude": 13.194674,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 57,
+            "latitude": 32.879978,
+            "longitude": 13.194522,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 58,
+            "latitude": 32.88013,
+            "longitude": 13.19437,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 59,
+            "latitude": 32.880283,
+            "longitude": 13.194217,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 60,
+            "latitude": 32.880435,
+            "longitude": 13.194065,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 61,
+            "latitude": 32.880587,
+            "longitude": 13.193913,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 62,
+            "latitude": 32.880739,
+            "longitude": 13.193761,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 63,
+            "latitude": 32.880891,
+            "longitude": 13.193609,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 64,
+            "latitude": 32.881043,
+            "longitude": 13.193457,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 65,
+            "latitude": 32.881196,
+            "longitude": 13.193304,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 66,
+            "latitude": 32.881348,
+            "longitude": 13.193152,
+            "speed": 40,
+            "heading": 319,
+            "is_stop": false,
+            "current_leg": "من [منزل 2 (صعود يوسف)] إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 67,
+            "latitude": 32.8815,
+            "longitude": 13.193,
+            "speed": 0,
+            "heading": 319,
+            "is_stop": true,
+            "current_leg": "وصول إلى [منزل 3 (صعود أحمد)]",
+            "stop_info": {
+                "stop_name": "منزل 3 (صعود أحمد)",
+                "stop_type": "home_stop",
+                "child_names": [
+                    "أحمد الترهوني"
+                ],
+                "sub_ids": [
+                    259
+                ],
+                "action": "pickup"
+            }
+        },
+        {
+            "step": 68,
+            "latitude": 32.8815,
+            "longitude": 13.193,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 69,
+            "latitude": 32.881621,
+            "longitude": 13.19319,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 70,
+            "latitude": 32.881741,
+            "longitude": 13.193379,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 71,
+            "latitude": 32.881862,
+            "longitude": 13.193569,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 72,
+            "latitude": 32.881983,
+            "longitude": 13.193759,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 73,
+            "latitude": 32.882103,
+            "longitude": 13.193948,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 74,
+            "latitude": 32.882224,
+            "longitude": 13.194138,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 75,
+            "latitude": 32.882345,
+            "longitude": 13.194328,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 76,
+            "latitude": 32.882466,
+            "longitude": 13.194517,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 77,
+            "latitude": 32.882586,
+            "longitude": 13.194707,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 78,
+            "latitude": 32.882707,
+            "longitude": 13.194897,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 79,
+            "latitude": 32.882828,
+            "longitude": 13.195086,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 80,
+            "latitude": 32.882948,
+            "longitude": 13.195276,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 81,
+            "latitude": 32.883069,
+            "longitude": 13.195466,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 82,
+            "latitude": 32.88319,
+            "longitude": 13.195655,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 83,
+            "latitude": 32.88331,
+            "longitude": 13.195845,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 84,
+            "latitude": 32.883431,
+            "longitude": 13.196034,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 85,
+            "latitude": 32.883552,
+            "longitude": 13.196224,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 86,
+            "latitude": 32.883672,
+            "longitude": 13.196414,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 87,
+            "latitude": 32.883793,
+            "longitude": 13.196603,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 88,
+            "latitude": 32.883914,
+            "longitude": 13.196793,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 89,
+            "latitude": 32.884034,
+            "longitude": 13.196983,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 90,
+            "latitude": 32.884155,
+            "longitude": 13.197172,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 91,
+            "latitude": 32.884276,
+            "longitude": 13.197362,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 92,
+            "latitude": 32.884397,
+            "longitude": 13.197552,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 93,
+            "latitude": 32.884517,
+            "longitude": 13.197741,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 94,
+            "latitude": 32.884638,
+            "longitude": 13.197931,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 95,
+            "latitude": 32.884759,
+            "longitude": 13.198121,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 96,
+            "latitude": 32.884879,
+            "longitude": 13.19831,
+            "speed": 40,
+            "heading": 52,
+            "is_stop": false,
+            "current_leg": "من [منزل 3 (صعود أحمد)] إلى [منزل 4 (صعود طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 97,
+            "latitude": 32.885,
+            "longitude": 13.1985,
+            "speed": 0,
+            "heading": 52,
+            "is_stop": true,
+            "current_leg": "وصول إلى [منزل 4 (صعود طارق)]",
+            "stop_info": {
+                "stop_name": "منزل 4 (صعود طارق)",
+                "stop_type": "home_stop",
+                "child_names": [
+                    "طارق الفيتوري"
+                ],
+                "sub_ids": [
+                    260
+                ],
+                "action": "pickup"
+            }
+        },
+        {
+            "step": 98,
+            "latitude": 32.885,
+            "longitude": 13.1985,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 99,
+            "latitude": 32.885068,
+            "longitude": 13.198275,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 100,
+            "latitude": 32.885137,
+            "longitude": 13.198051,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 101,
+            "latitude": 32.885205,
+            "longitude": 13.197826,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 102,
+            "latitude": 32.885274,
+            "longitude": 13.197602,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 103,
+            "latitude": 32.885342,
+            "longitude": 13.197377,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 104,
+            "latitude": 32.88541,
+            "longitude": 13.197153,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 105,
+            "latitude": 32.885479,
+            "longitude": 13.196928,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 106,
+            "latitude": 32.885547,
+            "longitude": 13.196704,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 107,
+            "latitude": 32.885615,
+            "longitude": 13.196479,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 108,
+            "latitude": 32.885684,
+            "longitude": 13.196255,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 109,
+            "latitude": 32.885752,
+            "longitude": 13.19603,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 110,
+            "latitude": 32.885821,
+            "longitude": 13.195806,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 111,
+            "latitude": 32.885889,
+            "longitude": 13.195581,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 112,
+            "latitude": 32.885957,
+            "longitude": 13.195357,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 113,
+            "latitude": 32.886026,
+            "longitude": 13.195132,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 114,
+            "latitude": 32.886094,
+            "longitude": 13.194908,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 115,
+            "latitude": 32.886163,
+            "longitude": 13.194683,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 116,
+            "latitude": 32.886231,
+            "longitude": 13.194459,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 117,
+            "latitude": 32.886299,
+            "longitude": 13.194234,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 118,
+            "latitude": 32.886368,
+            "longitude": 13.19401,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 119,
+            "latitude": 32.886436,
+            "longitude": 13.193785,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 120,
+            "latitude": 32.886505,
+            "longitude": 13.193561,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 121,
+            "latitude": 32.886573,
+            "longitude": 13.193336,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 122,
+            "latitude": 32.886641,
+            "longitude": 13.193112,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 123,
+            "latitude": 32.88671,
+            "longitude": 13.192887,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 124,
+            "latitude": 32.886778,
+            "longitude": 13.192663,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 125,
+            "latitude": 32.886846,
+            "longitude": 13.192438,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 126,
+            "latitude": 32.886915,
+            "longitude": 13.192214,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 127,
+            "latitude": 32.886983,
+            "longitude": 13.191989,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 128,
+            "latitude": 32.887052,
+            "longitude": 13.191765,
+            "speed": 40,
+            "heading": 289,
+            "is_stop": false,
+            "current_leg": "من [منزل 4 (صعود طارق)] إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": null
+        },
+        {
+            "step": 129,
+            "latitude": 32.88712,
+            "longitude": 13.19154,
+            "speed": 0,
+            "heading": 289,
+            "is_stop": true,
+            "current_leg": "وصول إلى [مدرسة النصر النموذجية (نزول لينا)]",
+            "stop_info": {
+                "stop_name": "مدرسة النصر النموذجية (نزول لينا)",
+                "stop_type": "school_stop",
+                "child_names": [
+                    "لينا خالد"
+                ],
+                "sub_ids": [
+                    30
+                ],
+                "action": "dropoff"
+            }
+        },
+        {
+            "step": 130,
+            "latitude": 32.88712,
+            "longitude": 13.19154,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 131,
+            "latitude": 32.887158,
+            "longitude": 13.191774,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 132,
+            "latitude": 32.887197,
+            "longitude": 13.192008,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 133,
+            "latitude": 32.887235,
+            "longitude": 13.192242,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 134,
+            "latitude": 32.887273,
+            "longitude": 13.192477,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 135,
+            "latitude": 32.887311,
+            "longitude": 13.192711,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 136,
+            "latitude": 32.88735,
+            "longitude": 13.192945,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 137,
+            "latitude": 32.887388,
+            "longitude": 13.193179,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 138,
+            "latitude": 32.887426,
+            "longitude": 13.193413,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 139,
+            "latitude": 32.887464,
+            "longitude": 13.193647,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 140,
+            "latitude": 32.887503,
+            "longitude": 13.193881,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 141,
+            "latitude": 32.887541,
+            "longitude": 13.194116,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 142,
+            "latitude": 32.887579,
+            "longitude": 13.19435,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 143,
+            "latitude": 32.887618,
+            "longitude": 13.194584,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 144,
+            "latitude": 32.887656,
+            "longitude": 13.194818,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 145,
+            "latitude": 32.887694,
+            "longitude": 13.195052,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 146,
+            "latitude": 32.887732,
+            "longitude": 13.195286,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 147,
+            "latitude": 32.887771,
+            "longitude": 13.19552,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 148,
+            "latitude": 32.887809,
+            "longitude": 13.195754,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 149,
+            "latitude": 32.887847,
+            "longitude": 13.195989,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 150,
+            "latitude": 32.887886,
+            "longitude": 13.196223,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 151,
+            "latitude": 32.887924,
+            "longitude": 13.196457,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 152,
+            "latitude": 32.887962,
+            "longitude": 13.196691,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 153,
+            "latitude": 32.888,
+            "longitude": 13.196925,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 154,
+            "latitude": 32.888039,
+            "longitude": 13.197159,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 155,
+            "latitude": 32.888077,
+            "longitude": 13.197393,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 156,
+            "latitude": 32.888115,
+            "longitude": 13.197628,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 157,
+            "latitude": 32.888153,
+            "longitude": 13.197862,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 158,
+            "latitude": 32.888192,
+            "longitude": 13.198096,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 159,
+            "latitude": 32.88823,
+            "longitude": 13.19833,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 160,
+            "latitude": 32.888268,
+            "longitude": 13.198564,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 161,
+            "latitude": 32.888307,
+            "longitude": 13.198798,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 162,
+            "latitude": 32.888345,
+            "longitude": 13.199032,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 163,
+            "latitude": 32.888383,
+            "longitude": 13.199267,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 164,
+            "latitude": 32.888421,
+            "longitude": 13.199501,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 165,
+            "latitude": 32.88846,
+            "longitude": 13.199735,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 166,
+            "latitude": 32.888498,
+            "longitude": 13.199969,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 167,
+            "latitude": 32.888536,
+            "longitude": 13.200203,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 168,
+            "latitude": 32.888574,
+            "longitude": 13.200437,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 169,
+            "latitude": 32.888613,
+            "longitude": 13.200671,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 170,
+            "latitude": 32.888651,
+            "longitude": 13.200906,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 171,
+            "latitude": 32.888689,
+            "longitude": 13.20114,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 172,
+            "latitude": 32.888728,
+            "longitude": 13.201374,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 173,
+            "latitude": 32.888766,
+            "longitude": 13.201608,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 174,
+            "latitude": 32.888804,
+            "longitude": 13.201842,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 175,
+            "latitude": 32.888842,
+            "longitude": 13.202076,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 176,
+            "latitude": 32.888881,
+            "longitude": 13.20231,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 177,
+            "latitude": 32.888919,
+            "longitude": 13.202544,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 178,
+            "latitude": 32.888957,
+            "longitude": 13.202779,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 179,
+            "latitude": 32.888996,
+            "longitude": 13.203013,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 180,
+            "latitude": 32.889034,
+            "longitude": 13.203247,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 181,
+            "latitude": 32.889072,
+            "longitude": 13.203481,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 182,
+            "latitude": 32.88911,
+            "longitude": 13.203715,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 183,
+            "latitude": 32.889149,
+            "longitude": 13.203949,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 184,
+            "latitude": 32.889187,
+            "longitude": 13.204183,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 185,
+            "latitude": 32.889225,
+            "longitude": 13.204418,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 186,
+            "latitude": 32.889263,
+            "longitude": 13.204652,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 187,
+            "latitude": 32.889302,
+            "longitude": 13.204886,
+            "speed": 40,
+            "heading": 78,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النصر النموذجية (نزول لينا)] إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": null
+        },
+        {
+            "step": 188,
+            "latitude": 32.88934,
+            "longitude": 13.20512,
+            "speed": 0,
+            "heading": 78,
+            "is_stop": true,
+            "current_leg": "وصول إلى [مدرسة النوفليين الأهلية (نزول طارق)]",
+            "stop_info": {
+                "stop_name": "مدرسة النوفليين الأهلية (نزول طارق)",
+                "stop_type": "school_stop",
+                "child_names": [
+                    "طارق الفيتوري"
+                ],
+                "sub_ids": [
+                    260
+                ],
+                "action": "dropoff"
+            }
+        },
+        {
+            "step": 189,
+            "latitude": 32.88934,
+            "longitude": 13.20512,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 190,
+            "latitude": 32.889233,
+            "longitude": 13.20492,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 191,
+            "latitude": 32.889126,
+            "longitude": 13.204721,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 192,
+            "latitude": 32.889019,
+            "longitude": 13.204521,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 193,
+            "latitude": 32.888912,
+            "longitude": 13.204321,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 194,
+            "latitude": 32.888805,
+            "longitude": 13.204121,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 195,
+            "latitude": 32.888698,
+            "longitude": 13.203922,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 196,
+            "latitude": 32.888591,
+            "longitude": 13.203722,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 197,
+            "latitude": 32.888484,
+            "longitude": 13.203522,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 198,
+            "latitude": 32.888377,
+            "longitude": 13.203323,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 199,
+            "latitude": 32.88827,
+            "longitude": 13.203123,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 200,
+            "latitude": 32.888163,
+            "longitude": 13.202923,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 201,
+            "latitude": 32.888056,
+            "longitude": 13.202723,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 202,
+            "latitude": 32.887949,
+            "longitude": 13.202524,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 203,
+            "latitude": 32.887842,
+            "longitude": 13.202324,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 204,
+            "latitude": 32.887735,
+            "longitude": 13.202124,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 205,
+            "latitude": 32.887628,
+            "longitude": 13.201925,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 206,
+            "latitude": 32.887521,
+            "longitude": 13.201725,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 207,
+            "latitude": 32.887414,
+            "longitude": 13.201525,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 208,
+            "latitude": 32.887307,
+            "longitude": 13.201325,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 209,
+            "latitude": 32.8872,
+            "longitude": 13.201126,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 210,
+            "latitude": 32.887093,
+            "longitude": 13.200926,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 211,
+            "latitude": 32.886986,
+            "longitude": 13.200726,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 212,
+            "latitude": 32.886879,
+            "longitude": 13.200527,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 213,
+            "latitude": 32.886772,
+            "longitude": 13.200327,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 214,
+            "latitude": 32.886665,
+            "longitude": 13.200127,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 215,
+            "latitude": 32.886557,
+            "longitude": 13.199928,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 216,
+            "latitude": 32.88645,
+            "longitude": 13.199728,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 217,
+            "latitude": 32.886343,
+            "longitude": 13.199528,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 218,
+            "latitude": 32.886236,
+            "longitude": 13.199328,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 219,
+            "latitude": 32.886129,
+            "longitude": 13.199129,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 220,
+            "latitude": 32.886022,
+            "longitude": 13.198929,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 221,
+            "latitude": 32.885915,
+            "longitude": 13.198729,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 222,
+            "latitude": 32.885808,
+            "longitude": 13.19853,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 223,
+            "latitude": 32.885701,
+            "longitude": 13.19833,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 224,
+            "latitude": 32.885594,
+            "longitude": 13.19813,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 225,
+            "latitude": 32.885487,
+            "longitude": 13.19793,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 226,
+            "latitude": 32.88538,
+            "longitude": 13.197731,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 227,
+            "latitude": 32.885273,
+            "longitude": 13.197531,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 228,
+            "latitude": 32.885166,
+            "longitude": 13.197331,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 229,
+            "latitude": 32.885059,
+            "longitude": 13.197132,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 230,
+            "latitude": 32.884952,
+            "longitude": 13.196932,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 231,
+            "latitude": 32.884845,
+            "longitude": 13.196732,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 232,
+            "latitude": 32.884738,
+            "longitude": 13.196532,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 233,
+            "latitude": 32.884631,
+            "longitude": 13.196333,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 234,
+            "latitude": 32.884524,
+            "longitude": 13.196133,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 235,
+            "latitude": 32.884417,
+            "longitude": 13.195933,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 236,
+            "latitude": 32.88431,
+            "longitude": 13.195734,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 237,
+            "latitude": 32.884203,
+            "longitude": 13.195534,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 238,
+            "latitude": 32.884096,
+            "longitude": 13.195334,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 239,
+            "latitude": 32.883989,
+            "longitude": 13.195134,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 240,
+            "latitude": 32.883882,
+            "longitude": 13.194935,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 241,
+            "latitude": 32.883775,
+            "longitude": 13.194735,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 242,
+            "latitude": 32.883668,
+            "longitude": 13.194535,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 243,
+            "latitude": 32.883561,
+            "longitude": 13.194336,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 244,
+            "latitude": 32.883454,
+            "longitude": 13.194136,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 245,
+            "latitude": 32.883347,
+            "longitude": 13.193936,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 246,
+            "latitude": 32.88324,
+            "longitude": 13.193736,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 247,
+            "latitude": 32.883133,
+            "longitude": 13.193537,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 248,
+            "latitude": 32.883026,
+            "longitude": 13.193337,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 249,
+            "latitude": 32.882919,
+            "longitude": 13.193137,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 250,
+            "latitude": 32.882812,
+            "longitude": 13.192938,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 251,
+            "latitude": 32.882705,
+            "longitude": 13.192738,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 252,
+            "latitude": 32.882598,
+            "longitude": 13.192538,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 253,
+            "latitude": 32.882491,
+            "longitude": 13.192338,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 254,
+            "latitude": 32.882384,
+            "longitude": 13.192139,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 255,
+            "latitude": 32.882277,
+            "longitude": 13.191939,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 256,
+            "latitude": 32.88217,
+            "longitude": 13.191739,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 257,
+            "latitude": 32.882063,
+            "longitude": 13.19154,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 258,
+            "latitude": 32.881956,
+            "longitude": 13.19134,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 259,
+            "latitude": 32.881849,
+            "longitude": 13.19114,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 260,
+            "latitude": 32.881742,
+            "longitude": 13.19094,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 261,
+            "latitude": 32.881635,
+            "longitude": 13.190741,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 262,
+            "latitude": 32.881528,
+            "longitude": 13.190541,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 263,
+            "latitude": 32.881421,
+            "longitude": 13.190341,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 264,
+            "latitude": 32.881314,
+            "longitude": 13.190142,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 265,
+            "latitude": 32.881207,
+            "longitude": 13.189942,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 266,
+            "latitude": 32.8811,
+            "longitude": 13.189742,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 267,
+            "latitude": 32.880993,
+            "longitude": 13.189543,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 268,
+            "latitude": 32.880885,
+            "longitude": 13.189343,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 269,
+            "latitude": 32.880778,
+            "longitude": 13.189143,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 270,
+            "latitude": 32.880671,
+            "longitude": 13.188943,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 271,
+            "latitude": 32.880564,
+            "longitude": 13.188744,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 272,
+            "latitude": 32.880457,
+            "longitude": 13.188544,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 273,
+            "latitude": 32.88035,
+            "longitude": 13.188344,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 274,
+            "latitude": 32.880243,
+            "longitude": 13.188145,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 275,
+            "latitude": 32.880136,
+            "longitude": 13.187945,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 276,
+            "latitude": 32.880029,
+            "longitude": 13.187745,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 277,
+            "latitude": 32.879922,
+            "longitude": 13.187545,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 278,
+            "latitude": 32.879815,
+            "longitude": 13.187346,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 279,
+            "latitude": 32.879708,
+            "longitude": 13.187146,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 280,
+            "latitude": 32.879601,
+            "longitude": 13.186946,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 281,
+            "latitude": 32.879494,
+            "longitude": 13.186747,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 282,
+            "latitude": 32.879387,
+            "longitude": 13.186547,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 283,
+            "latitude": 32.87928,
+            "longitude": 13.186347,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 284,
+            "latitude": 32.879173,
+            "longitude": 13.186147,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 285,
+            "latitude": 32.879066,
+            "longitude": 13.185948,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 286,
+            "latitude": 32.878959,
+            "longitude": 13.185748,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 287,
+            "latitude": 32.878852,
+            "longitude": 13.185548,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 288,
+            "latitude": 32.878745,
+            "longitude": 13.185349,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 289,
+            "latitude": 32.878638,
+            "longitude": 13.185149,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 290,
+            "latitude": 32.878531,
+            "longitude": 13.184949,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 291,
+            "latitude": 32.878424,
+            "longitude": 13.184749,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 292,
+            "latitude": 32.878317,
+            "longitude": 13.18455,
+            "speed": 40,
+            "heading": 237,
+            "is_stop": false,
+            "current_leg": "من [مدرسة النوفليين الأهلية (نزول طارق)] إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": null
+        },
+        {
+            "step": 293,
+            "latitude": 32.87821,
+            "longitude": 13.18435,
+            "speed": 0,
+            "heading": 237,
+            "is_stop": true,
+            "current_leg": "وصول إلى [مدرسة زاوية الدهماني (نزول أحمد)]",
+            "stop_info": {
+                "stop_name": "مدرسة زاوية الدهماني (نزول أحمد)",
+                "stop_type": "school_stop",
+                "child_names": [
+                    "أحمد الترهوني"
+                ],
+                "sub_ids": [
+                    259
+                ],
+                "action": "dropoff"
+            }
+        },
+        {
+            "step": 294,
+            "latitude": 32.87821,
+            "longitude": 13.18435,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 295,
+            "latitude": 32.878092,
+            "longitude": 13.18454,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 296,
+            "latitude": 32.877975,
+            "longitude": 13.184729,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 297,
+            "latitude": 32.877857,
+            "longitude": 13.184919,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 298,
+            "latitude": 32.877739,
+            "longitude": 13.185109,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 299,
+            "latitude": 32.877621,
+            "longitude": 13.185298,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 300,
+            "latitude": 32.877504,
+            "longitude": 13.185488,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 301,
+            "latitude": 32.877386,
+            "longitude": 13.185678,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 302,
+            "latitude": 32.877268,
+            "longitude": 13.185867,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 303,
+            "latitude": 32.87715,
+            "longitude": 13.186057,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 304,
+            "latitude": 32.877033,
+            "longitude": 13.186247,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 305,
+            "latitude": 32.876915,
+            "longitude": 13.186436,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 306,
+            "latitude": 32.876797,
+            "longitude": 13.186626,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 307,
+            "latitude": 32.876679,
+            "longitude": 13.186816,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 308,
+            "latitude": 32.876562,
+            "longitude": 13.187005,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 309,
+            "latitude": 32.876444,
+            "longitude": 13.187195,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 310,
+            "latitude": 32.876326,
+            "longitude": 13.187385,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 311,
+            "latitude": 32.876208,
+            "longitude": 13.187575,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 312,
+            "latitude": 32.876091,
+            "longitude": 13.187764,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 313,
+            "latitude": 32.875973,
+            "longitude": 13.187954,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 314,
+            "latitude": 32.875855,
+            "longitude": 13.188144,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 315,
+            "latitude": 32.875737,
+            "longitude": 13.188333,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 316,
+            "latitude": 32.87562,
+            "longitude": 13.188523,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 317,
+            "latitude": 32.875502,
+            "longitude": 13.188713,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 318,
+            "latitude": 32.875384,
+            "longitude": 13.188902,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 319,
+            "latitude": 32.875266,
+            "longitude": 13.189092,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 320,
+            "latitude": 32.875149,
+            "longitude": 13.189282,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 321,
+            "latitude": 32.875031,
+            "longitude": 13.189471,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 322,
+            "latitude": 32.874913,
+            "longitude": 13.189661,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 323,
+            "latitude": 32.874795,
+            "longitude": 13.189851,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 324,
+            "latitude": 32.874678,
+            "longitude": 13.19004,
+            "speed": 40,
+            "heading": 126,
+            "is_stop": false,
+            "current_leg": "من [مدرسة زاوية الدهماني (نزول أحمد)] إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": null
+        },
+        {
+            "step": 325,
+            "latitude": 32.87456,
+            "longitude": 13.19023,
+            "speed": 0,
+            "heading": 126,
+            "is_stop": true,
+            "current_leg": "وصول إلى [مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)]",
+            "stop_info": {
+                "stop_name": "مدرسة بن عاشور الابتدائية (نزول عمر ويوسف)",
+                "stop_type": "school_stop",
+                "child_names": [
+                    "عمر خالد",
+                    "يوسف الترهوني"
+                ],
+                "sub_ids": [
+                    29,
+                    258
+                ],
+                "action": "dropoff"
+            }
+        }
+    ]
+}

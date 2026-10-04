@@ -658,4 +658,71 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
             ]
         ]);
     }
+
+    public function test_original_driver_cannot_resume_trip_if_substitute_already_accepted(): void
+    {
+        $service = app(EmergencyBreakdownService::class);
+
+        // 1. الإبلاغ عن عطل
+        $reportResult = $service->reportBreakdown(
+            $this->trip,
+            32.88500000,
+            13.18500000,
+            'تعطل المحرك في الطريق'
+        );
+
+        $dispatchId = $reportResult['dispatch_id'];
+
+        // 2. سائق بديل يقبل المهمة
+        $service->acceptBreakdownDispatch($dispatchId, $this->substituteDriver1->id);
+
+        // 3. السائق الأصلي يحاول استئناف الرحلة -> يجب منعه بـ 409
+        $response = $this->actingAs($this->originalDriverUser, 'sanctum')
+            ->postJson("/api/v1/driver/trips/{$this->trip->id}/resume");
+
+        $response->assertStatus(409);
+        $response->assertJson([
+            'status'     => 'error',
+            'error_code' => 'SUBSTITUTE_ALREADY_ACCEPTED',
+        ]);
+
+        // التأكد من أن الرحلة ما زالت معلقة
+        $this->trip->refresh();
+        $this->assertEquals('suspended_breakdown', $this->trip->status);
+    }
+
+    public function test_original_driver_can_resume_trip_if_no_substitute_accepted_yet(): void
+    {
+        $service = app(EmergencyBreakdownService::class);
+
+        // 1. الإبلاغ عن عطل
+        $reportResult = $service->reportBreakdown(
+            $this->trip,
+            32.88500000,
+            13.18500000,
+            'عطل خفيف وتم إصلاحه سريعاً'
+        );
+
+        $dispatchId = $reportResult['dispatch_id'];
+
+        // 2. السائق الأصلي يستأنف الرحلة قبل أن يقبل أي بديل
+        $response = $this->actingAs($this->originalDriverUser, 'sanctum')
+            ->postJson("/api/v1/driver/trips/{$this->trip->id}/resume");
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'status' => 'success',
+            'data'   => [
+                'trip_id' => $this->trip->id,
+                'status'  => 'in_progress',
+            ]
+        ]);
+
+        // التحقق من عودة الرحلة للعمل وإلغاء طلب الطوارئ
+        $this->trip->refresh();
+        $this->assertEquals('in_progress', $this->trip->status);
+
+        $dispatch = TripBreakdownDispatch::find($dispatchId);
+        $this->assertEquals(TripBreakdownDispatch::STATUS_CANCELLED, $dispatch->status);
+    }
 }

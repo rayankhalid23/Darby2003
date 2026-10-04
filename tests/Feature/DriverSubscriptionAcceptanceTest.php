@@ -81,7 +81,6 @@ class DriverSubscriptionAcceptanceTest extends TestCase
             'color'           => 'ط£ط¨ظٹط¶',
             'plate_number'    => 'TEST-' . rand(1000, 9999),
             'capacity_manual' => 10,
-            'capacity_ai'     => 10,
             'status'          => 'Active',
             'deleted_at'      => null,
             'created_at'      => now(),
@@ -98,24 +97,22 @@ class DriverSubscriptionAcceptanceTest extends TestCase
             'is_active'    => 1,
         ]);
 
-        // ---- 5. ط³ط¬ظ„ ظˆظ„ظٹ ط§ظ„ط£ظ…ط± ظپظٹ ط¬ط¯ظˆظ„ parents ----
-        $this->parent = ParentModel::create([
-            'user_id'    => $this->parentUser->id,
-            'is_trusted' => 1,
-        ]);
+        // ---- 5. سجل ولي الأمر ----
+        $this->parent = ParentModel::find($this->parentUser->id);
+        $this->parentUser->deposit(50000); // 500 دينار بالمحفظة
 
-        // ---- 6.1 ظ…ط¯ط±ط³ط© ط§ظ„ط§ط®طھط¨ط§ط± ----
+        // ---- 6.1 مدرسة الاختبار ----
         $this->school = School::create([
-            'name'    => 'ظ…ط¯ط±ط³ط© ط§ظ„ط§ط®طھط¨ط§ط±',
-            'address' => 'ط´ط§ط±ط¹ ط§ظ„ط§ط®طھط¨ط§ط±',
+            'name'    => 'مدرسة الاختبار',
+            'address' => 'شارع الاختبار',
             'lat'     => 32.9000,
             'lng'     => 13.2000,
-            'status'  => 'active',
+            'status'  => 'Approved',
         ]);
 
         // ---- 6.2 عنوان ولي الأمر ----
         $addressId = DB::table('addresses')->insertGetId([
-            'parent_id'  => $this->parentUser->id,
+            'user_id'    => $this->parentUser->id,
             'label'      => 'منزل ولي الأمر',
             'lat'        => 32.88,
             'lng'        => 13.19,
@@ -135,28 +132,35 @@ class DriverSubscriptionAcceptanceTest extends TestCase
 
         // ---- 7. طلب الاشتراك المعلق ----
         $this->subscriptionRequest = SubscriptionRequest::create([
-            'parent_id'         => $this->parent->id,
-            'driver_id'         => $this->driver->id,
-            'total_price'       => 200.00,
-            'pickup_time'       => '07:00:00',
-            'dropoff_time'      => '14:00:00',
-            'max_waiting_time'  => 15,
-            'status'            => SubscriptionRequest::STATUS_PENDING,
-            'children_count'    => 1,
-        ]);
-
-        // ---- 8. ربط الطفل بالطلب في جدول request_children ----
-        // تفاصيل الاشتراك (النوع/الاتجاه/التوقيت/الفترة) صارت على مستوى الطفل
-        // بعد مهاجرة 2026_08_26_131258 ولم تعد أعمدة في جدول requests.
-        DB::table('request_children')->insert([
-            'request_id'                  => $this->subscriptionRequest->id,
-            'child_id'                    => $this->child->id,
+            'parent_id'                   => $this->parent->id,
+            'driver_id'                   => $this->driver->id,
+            'total_price'                 => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'pickup_time'                 => '07:00:00',
+            'dropoff_time'                => '14:00:00',
+            'max_waiting_time'            => 15,
+            'status'                      => SubscriptionRequest::STATUS_PENDING,
+            'children_count'              => 1,
             'subscription_type'           => 'multi_day',
             'trip_direction'              => 'both',
-            'timing'                      => 'MORNING',
             'start_date'                  => now()->addDay()->format('Y-m-d'),
             'end_date'                    => now()->addMonth()->format('Y-m-d'),
             'working_days_count'          => 22,
+            'home_label'                  => 'منزل ولي الأمر',
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+        ]);
+
+        // ---- 8. ربط الطفل بالطلب في جدول request_children ----
+        DB::table('request_children')->insert([
+            'request_id'                  => $this->subscriptionRequest->id,
+            'child_id'                    => $this->child->id,
+            'school_id'                   => $this->school->id,
+            'timing'                      => 'MORNING',
+            'school_label'                => 'مدرسة الاختبار',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
             'distance_km'                 => 4.0,
             'price_per_child'             => 200.00,
             'trip_price'                  => 200.00,
@@ -278,25 +282,32 @@ class DriverSubscriptionAcceptanceTest extends TestCase
 
         // إنشاء طلب جديد لنفس التوقيت
         $newReq = SubscriptionRequest::create([
-            'parent_id'         => $this->parent->id,
-            'driver_id'         => $this->driver->id,
-            'total_price'       => 200.00,
-            'status'            => SubscriptionRequest::STATUS_PENDING,
-            'children_count'    => 1,
-        ]);
-
-        // ⚠️ لا بد من صف request_children هنا: فحص التعارض الزمني يعتمد على فترة
-        // اشتراك الطفل (pivot.start_date/end_date). بدونه يفترض النظام "اليوم فقط"
-        // فلا يتقاطع مع حجز الاشتراك القائم (غد → الشهر القادم) ويمر القبول خطأً.
-        DB::table('request_children')->insert([
-            'request_id'                  => $newReq->id,
-            'child_id'                    => $this->child->id,
+            'parent_id'                   => $this->parent->id,
+            'driver_id'                   => $this->driver->id,
+            'total_price'                 => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'status'                      => SubscriptionRequest::STATUS_PENDING,
+            'children_count'              => 1,
             'subscription_type'           => 'multi_day',
             'trip_direction'              => 'both',
-            'timing'                      => 'MORNING',
             'start_date'                  => now()->addDays(1)->format('Y-m-d'),
             'end_date'                    => now()->addMonth()->format('Y-m-d'),
             'working_days_count'          => 22,
+            'home_label'                  => 'منزل ولي الأمر',
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+        ]);
+
+        DB::table('request_children')->insert([
+            'request_id'                  => $newReq->id,
+            'child_id'                    => $this->child->id,
+            'school_id'                   => $this->school->id,
+            'timing'                      => 'MORNING',
+            'school_label'                => 'مدرسة الاختبار',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'distance_km'                 => 4.0,
             'price_per_child'             => 200.00,
             'trip_price'                  => 200.00,
             'discount_amount'             => 0.00,

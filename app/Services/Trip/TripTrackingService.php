@@ -73,7 +73,7 @@ class TripTrackingService
         ], now()->addHours(6));
 
         // 3. مزامنة الموقع اللحظي مع Firestore (trips_tracking/{tripId}) ليقرأها تطبيق ولي الأمر مباشرة
-        $this->pushLocationToFirestore($tripId, $lat, $lng, $speed, $heading, $trip->status === 'in_progress');
+        $this->pushLocationToFirestore($tripId, $driverId, $lat, $lng, $speed, $heading, $trip->status === 'in_progress');
 
         return [
             'status' => 'success',
@@ -84,8 +84,11 @@ class TripTrackingService
     /**
      * كتابة/تحديث موقع الرحلة اللحظي في Firestore بنفس صيغة الـ Document المتفق عليها مع الفرونت
      * (Collection: trips_tracking, Document ID = trip_id) — لا يوقف تدفق تحديث الموقع إذا فشل.
+     *
+     * الحقول الموحدة (Standard Schema المتفق عليه مع الفرونت):
+     *   trip_id, driver_id, driver_lat, driver_lng, heading, speed, is_online, status, updated_at
      */
-    protected function pushLocationToFirestore(int $tripId, float $lat, float $lng, float $speed = 0, ?float $heading = null, bool $isOnline = true): void
+    protected function pushLocationToFirestore(int $tripId, int $driverId, float $lat, float $lng, float $speed = 0, ?float $heading = null, bool $isOnline = true): void
     {
         $serviceAccountPath = config('firebase.credentials.file', storage_path('app/firebase/firebase-service-account.json'));
 
@@ -102,16 +105,21 @@ class TripTrackingService
             $database = $factory->createFirestore()->database();
 
             $database->collection('trips_tracking')->document((string) $tripId)->set([
+                'trip_id'    => $tripId,
+                'driver_id'  => $driverId,
                 'driver_lat' => (float) $lat,
                 'driver_lng' => (float) $lng,
                 'speed'      => (float) $speed,
                 'heading'    => (float) ($heading ?? 0.0),
                 'status'     => 'active',
+                'is_online'  => (bool) $isOnline,
+                'updated_at' => now()->toIso8601String(),
             ], ['merge' => true]);
         } catch (Throwable $e) {
             Log::warning("فشل مزامنة موقع الرحلة رقم {$tripId} مع Firestore - " . $e->getMessage());
         }
     }
+
 
     /**
      * تعليم وثيقة الرحلة في Firestore كـ "غير متصلة" عند إنهائها (أو إلغائها).

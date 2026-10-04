@@ -280,7 +280,17 @@ class LocationChangeService
                     $tripRow = Trip::where('driver_id', $sub->driver_id)
                         ->where('route_id', $sub->route_id)
                         ->whereDate('trip_date', $parsedDate)
+                        ->whereHas('stops', fn ($q) => $q->where('child_id', $child->id))
+                        ->latest('id')
                         ->first();
+
+                    if (!$tripRow) {
+                        $tripRow = Trip::where('driver_id', $sub->driver_id)
+                            ->where('route_id', $sub->route_id)
+                            ->whereDate('trip_date', $parsedDate)
+                            ->latest('id')
+                            ->first();
+                    }
                 }
 
                 $isEditable  = true;
@@ -724,23 +734,55 @@ class LocationChangeService
                 continue;
             }
 
-            // نبحث عن الرحلة الفعلية لهذا الاشتراك على هذا التاريخ (route + driver + date).
+            $stopType = $this->resolveTargetStopType($target->direction, $request->point_type);
+
+            // نبحث أولاً عن الرحلة التي تحتوي فعلياً على محطة مطابقة لهذا الطفل
             $trip = Trip::where('driver_id', $sub->driver_id)
                 ->when($sub->route_id, fn ($q) => $q->where('route_id', $sub->route_id))
                 ->whereDate('trip_date', $changeDate)
+                ->whereHas('stops', fn ($q) => $q->where('child_id', $target->child_id)->where('stop_type', $stopType))
+                ->latest('id')
                 ->first();
+
+            if (!$trip) {
+                // محاولة البحث عن أي رحلة تحتوي على الطفل
+                $trip = Trip::where('driver_id', $sub->driver_id)
+                    ->when($sub->route_id, fn ($q) => $q->where('route_id', $sub->route_id))
+                    ->whereDate('trip_date', $changeDate)
+                    ->whereHas('stops', fn ($q) => $q->where('child_id', $target->child_id))
+                    ->latest('id')
+                    ->first();
+            }
+
+            if (!$trip) {
+                // إذا لم نجد محطة صريحة بالطفل، نبحث عن أحدث رحلة لهذا السائق والمسار في ذلك اليوم
+                $trip = Trip::where('driver_id', $sub->driver_id)
+                    ->when($sub->route_id, fn ($q) => $q->where('route_id', $sub->route_id))
+                    ->whereDate('trip_date', $changeDate)
+                    ->latest('id')
+                    ->first();
+            }
 
             if (!$trip) {
                 $target->update(['applied' => false, 'skip_reason' => 'لم تُولَّد رحلة لهذا الاتجاه في التاريخ المحدد.']);
                 continue;
             }
 
-            $stopType = $this->resolveTargetStopType($target->direction, $request->point_type);
-
             $tripStop = TripStop::where('trip_id', $trip->id)
                 ->where('child_id', $target->child_id)
                 ->where('stop_type', $stopType)
                 ->first();
+
+            // دعم المحطات المجمعة (إذا كان child_id فارغاً في المحطة السابقة وتطابق الإحداثيات)
+            if (!$tripStop && $target->previous_lat && $target->previous_lng) {
+                $tripStop = TripStop::where('trip_id', $trip->id)
+                    ->where('stop_type', $stopType)
+                    ->whereRaw(
+                        'ABS(lat - ?) < 0.001 AND ABS(lng - ?) < 0.001',
+                        [$target->previous_lat, $target->previous_lng]
+                    )
+                    ->first();
+            }
 
             if (!$tripStop) {
                 $target->update(['trip_id' => $trip->id, 'applied' => false, 'skip_reason' => 'لا توجد محطة مطابقة لهذا الطفل في الرحلة.']);

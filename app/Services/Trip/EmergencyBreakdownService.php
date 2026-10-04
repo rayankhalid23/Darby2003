@@ -753,4 +753,86 @@ class EmergencyBreakdownService
             return true;
         });
     }
+
+    /**
+     * استئناف رحلة معطلة مع معالجة طلبات الاستبدال الطارئة المرتبطة بها
+     *
+     * @throws Exception في حال كان هناك سائق بديل قد وافق بالفعل
+     */
+    public function resumeTrip(Trip $trip): array
+    {
+        return DB::transaction(function () use ($trip) {
+            // 1. التحقق من وجود طلب طوارئ مرتبط
+            $dispatch = TripBreakdownDispatch::where('trip_id', $trip->id)
+                ->whereIn('status', [
+                    TripBreakdownDispatch::STATUS_PENDING,
+                    TripBreakdownDispatch::STATUS_BROADCASTED,
+                    TripBreakdownDispatch::STATUS_ACCEPTED,
+                ])
+                ->latest('id')
+                ->lockForUpdate()
+                ->first();
+
+            // 2. إذا وافق سائق بديل بالفعل، يُمنع السائق الأصلي منعاً باتاً من الاستئناف
+            if ($dispatch && $dispatch->status === TripBreakdownDispatch::STATUS_ACCEPTED) {
+                $subDriverName = $dispatch->substituteDriver?->user?->full_name ?? 'السائق البديل';
+                throw new Exception(
+                    "لا يمكن استئناف الرحلة؛ لقد قبل {$subDriverName} مهمة الإنقاذ بالفعل وهو في طريقه لاستلام ونقل الأطفال.",
+                    409
+                );
+            }
+
+            // 3. إذا كان طلب الطوارئ قيد الانتظار أو البث، يتم إلغاؤه وإشعار المرشحين
+            if ($dispatch && in_array($dispatch->status, [TripBreakdownDispatch::STATUS_PENDING, TripBreakdownDispatch::STATUS_BROADCASTED])) {
+                $dispatch->update([
+                    'status' => TripBreakdownDispatch::STATUS_CANCELLED,
+                ]);
+
+                // إشعار السائقين المرشحين بإلغاء طلب الطوارئ لانتفاء الحاجة
+                $candidateIds = $dispatch->candidate_driver_ids ?? [];
+                if (!empty($candidateIds)) {
+                    $candidates = User::whereHas('driver', fn($q) => $q->whereIn('id', $candidateIds))->get();
+                    if ($candidates->isNotEmpty()) {
+                        $this->notificationService->sendToUsers($candidates, NotificationFormatter::TYPE_EMERGENCY_REQUEST_CANCELLED_OTHER, [
+                            'title'       => 'ℹ️ إلغاء مهمة الإنقاذ الطارئة',
+                            'message'     => 'تم إصلاح عطل الحافلة واستئناف الرحلة من قبل السائق الأصلي، شكراً لتعاونكم.',
+                            'dispatch_id' => (string) $dispatch->id,
+                            'entity_id'   => (string) $dispatch->id,
+                        ]);
+                    }
+                }
+            }
+
+            // 4. استئناف الرحلة الأصلية
+            $trip->update([
+                'status'            => 'in_progress',
+                'suspension_reason' => null,
+            ]);
+
+            // 5. إشعار أولياء الأمور بأن الرحلة استؤنفت بعد إصلاح العطل
+            $strandedStops = TripStop::where('trip_id', $trip->id)
+                ->whereNotNull('child_id')
+                ->whereIn('status', [TripStop::STATUS_PENDING, TripStop::STATUS_BOARDED])
+                ->with('child.parent.user')
+                ->get();
+
+            $parentUserIds = $strandedStops->pluck('child.parent_id')->filter()->unique();
+            $parents = User::whereIn('id', $parentUserIds)->get();
+
+            if ($parents->isNotEmpty()) {
+                $this->notificationService->sendToUsers($parents, NotificationFormatter::TYPE_TRIP_STARTED, [
+                    'title'     => '🚌 استئناف الرحلة المدرسية',
+                    'message'   => 'تم بحمد الله معالجة العطل واستئناف الرحلة المدرسية، الحافلة تواصل مسارها الآن لنقل الأبناء.',
+                    'trip_id'   => (string) $trip->id,
+                    'entity_id' => (string) $trip->id,
+                ]);
+            }
+
+            return [
+                'status'  => 'success',
+                'message' => 'تم استئناف الرحلة بنجاح وإشعار أولياء الأمور.',
+                'trip_id' => (int) $trip->id,
+            ];
+        });
+    }
 }

@@ -80,22 +80,11 @@ class SubscriptionRequestFullLifecycleTest extends TestCase
             'color'           => 'أبيض',
             'plate_number'    => 'LIFE-' . rand(1000, 9999),
             'capacity_manual' => 12,
-            'capacity_ai'     => 12,
             'status'          => 'Active',
             'deleted_at'      => null,
             'created_at'      => now(),
             'updated_at'      => now(),
         ]);
-
-        // Initialize seat slots
-        foreach (DriverSeatSlot::ALL_SLOTS as $slot) {
-            DriverSeatSlot::create([
-                'driver_id'      => $this->driver->id,
-                'slot'           => $slot,
-                'total_seats'    => 12,
-                'reserved_seats' => 0,
-            ]);
-        }
 
         // 2. Parent User & Model
         $this->parentUser = User::create([
@@ -107,10 +96,7 @@ class SubscriptionRequestFullLifecycleTest extends TestCase
             'is_active'     => 1,
         ]);
 
-        $this->parent = ParentModel::create([
-            'user_id'    => $this->parentUser->id,
-            'is_trusted' => 1,
-        ]);
+        $this->parent = ParentModel::find($this->parentUser->id);
 
         // قيمة الاشتراك تُفحص وتُحجز لكل الأنواع (وليس اليومي فقط)،
         // لذا يجب أن تكون محفظة ولي الأمر ممولة قبل إرسال الطلب.
@@ -122,7 +108,7 @@ class SubscriptionRequestFullLifecycleTest extends TestCase
             'address' => 'طريق الشط، طرابلس',
             'lat'     => 32.8950,
             'lng'     => 13.1950,
-            'status'  => 'active',
+            'status'  => 'Approved',
         ]);
 
         // 4. Address

@@ -327,7 +327,7 @@ class DriverTripController extends Controller
                 $homeTitle = $stop?->label ?? $childAddress?->label ?? $sub->pickup_label ?? 'المنزل الرئيسي';
                 $homeLocation = [
                     'title'     => $homeTitle,
-                    'address'   => $childAddress?->label ?? $sub->pickup_label ?? $homeTitle,
+                    'address'   => $homeTitle,
                     'latitude'  => (float) $homeLat,
                     'longitude' => (float) $homeLng,
                     'lat'       => (float) $homeLat,
@@ -528,7 +528,30 @@ class DriverTripController extends Controller
             $user = Auth::user();
             $driver = $user?->driver;
 
-            $trip = Trip::where('id', $tripId)->where('driver_id', $driver->id)->firstOrFail();
+            if (!$driver) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'DRIVER_NOT_FOUND',
+                    'message'    => 'بيانات السائق غير مقترنة بالحساب الحالي.',
+                ], 403);
+            }
+
+            $trip = Trip::find($tripId);
+            if (!$trip) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_NOT_FOUND',
+                    'message'    => "الرحلة رقم #{$tripId} غير موجودة في النظام.",
+                ], 404);
+            }
+
+            if ($trip->driver_id != $driver->id && $trip->emergency_driver_id != $driver->id) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_UNAUTHORIZED',
+                    'message'    => "الرحلة رقم #{$tripId} غير مسندة لك.",
+                ], 403);
+            }
             $subs = ActiveSubscription::forDriver($driver->id)
                 ->where('route_id', $trip->route_id)
                 ->where('status', '!=', 'cancelled')
@@ -568,14 +591,18 @@ class DriverTripController extends Controller
 
             $currentChildData = null;
             if ($currentSub) {
+                $pickupLat = $currentStop?->lat ?? $currentSub->pickup_lat ?? 32.880000;
+                $pickupLng = $currentStop?->lng ?? $currentSub->pickup_lng ?? 13.180000;
+                $pickupAddr = $currentStop?->label ?? $currentSub->pickup_label ?? 'حي الأندلس';
+
                 $currentChildData = [
                     'trip_child_id'   => (int) $currentSub->id,
                     'child_id'        => (int) $currentSub->child_id,
                     'name'            => $currentSub->child->full_name ?? $currentSub->child->name ?? 'طفل',
                     'school'          => optional($currentSub->school)->name ?? 'المدرسة',
-                    'pickup_address'  => $currentSub->pickup_label ?? 'حي الأندلس',
-                    'latitude'        => (float) ($currentSub->pickup_lat ?? 32.880000),
-                    'longitude'       => (float) ($currentSub->pickup_lng ?? 13.180000),
+                    'pickup_address'  => $pickupAddr,
+                    'latitude'        => (float) $pickupLat,
+                    'longitude'       => (float) $pickupLng,
                     'status'          => $currentStatusFields['status'] ?? 'pending',
                     'pickup_status'   => $currentStatusFields['pickup_status'] ?? 'pending',
                     'dropoff_status'  => $currentStatusFields['dropoff_status'] ?? 'pending',
@@ -911,23 +938,27 @@ class DriverTripController extends Controller
 
             if ($trip->status !== 'suspended_breakdown') {
                 return response()->json([
-                    'status'  => 'error',
-                    'message' => 'هذه الرحلة ليست متوقفة حالياً.',
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_NOT_SUSPENDED',
+                    'message'    => 'هذه الرحلة ليست متوقفة حالياً.',
                 ], 422);
             }
 
-            $trip->status = 'in_progress';
-            $trip->suspension_reason = null;
-            $trip->save();
+            $result = $this->emergencyBreakdownService->resumeTrip($trip);
 
             return response()->json([
                 'status'  => 'success',
-                'message' => 'تم استئناف الرحلة.',
+                'message' => $result['message'],
                 'data'    => ['trip_id' => (int) $trip->id, 'status' => 'in_progress'],
             ], 200);
 
         } catch (Throwable $e) {
-            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
+            $statusCode = in_array((int) $e->getCode(), [400, 403, 404, 409, 422], true) ? (int) $e->getCode() : 400;
+            return response()->json([
+                'status'     => 'error',
+                'error_code' => $statusCode === 409 ? 'SUBSTITUTE_ALREADY_ACCEPTED' : 'RESUME_FAILED',
+                'message'    => $e->getMessage(),
+            ], $statusCode);
         }
     }
 
@@ -942,17 +973,42 @@ class DriverTripController extends Controller
     {
         try {
             $user = Auth::user();
-            $driverId = $user->driver->id;
+            $driver = $user?->driver;
 
-            $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
+            if (!$driver) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'DRIVER_NOT_FOUND',
+                    'message'    => 'بيانات السائق غير مقترنة بالحساب الحالي.',
+                ], 403);
+            }
 
-            $subId = $tripChildId ?? $request->trip_child_id;
+            $driverId = $driver->id;
+
+            $trip = Trip::find($tripId);
+            if (!$trip) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_NOT_FOUND',
+                    'message'    => "الرحلة رقم #{$tripId} غير موجودة في النظام.",
+                ], 404);
+            }
+
+            if ($trip->driver_id != $driverId && $trip->emergency_driver_id != $driverId) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_UNAUTHORIZED',
+                    'message'    => "الرحلة رقم #{$tripId} غير مسندة لك (مسندة لسائق آخر رقم #{$trip->driver_id}). تأكد من تسجيل الدخول بحساب السائق الصحيح.",
+                ], 403);
+            }
+
+            $subId = $tripChildId ?? $request->trip_child_id ?? $request->child_id ?? $request->id;
 
             if (empty($subId)) {
                 return response()->json([
                     'status'     => 'error',
                     'error_code' => 'TRIP_CHILD_REQUIRED',
-                    'message'    => 'يجب تحديد الطفل (trip_child_id) لتنفيذ هذا الإجراء.',
+                    'message'    => 'يجب تحديد الطفل (trip_child_id أو child_id) لتنفيذ هذا الإجراء.',
                 ], 422);
             }
 
@@ -1345,6 +1401,12 @@ class DriverTripController extends Controller
 
             return response()->json(['status' => 'error', 'message' => 'الإجراء غير معرف.'], 422);
 
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'status'     => 'error',
+                'error_code' => 'RESOURCE_NOT_FOUND',
+                'message'    => 'البيانات المطلوبة غير موجودة في النظام.',
+            ], 404);
         } catch (Throwable $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 400);
         }

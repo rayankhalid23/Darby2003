@@ -61,7 +61,6 @@ class TripLocationFirestoreSyncTest extends TestCase
             'color'           => 'أبيض',
             'plate_number'    => 'GEO-' . rand(1000, 9999),
             'capacity_manual' => 10,
-            'capacity_ai'     => 10,
             'status'          => 'Active',
             'deleted_at'      => null,
             'created_at'      => now(),

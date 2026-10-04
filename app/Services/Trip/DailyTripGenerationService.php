@@ -218,14 +218,36 @@ class DailyTripGenerationService
             ? Child::whereIn('id', $keptChildIds)->pluck('school_id')->unique()->all()
             : [];
 
-        // المرحلة 1.5: جلب أي طلبات تغيير موقع معتمدة لتاريخ اليوم لتطبيقها على محطات الرحلة
-        $approvedLocationChanges = \App\Models\Shared\LocationChangeRequest::where('driver_id', $route->driver_id)
+        // المرحلة 1.5: جلب أي طلبات تغيير موقع معتمدة لتاريخ اليوم لتطبيقها على محطات الرحلة.
+        // نجمع التغييرات على مستوى (child_id × point_type) من الطلبات الرئيسية والمُجمَّعة معاً،
+        // لأن الطلبات المُجمَّعة تحفظ child_id = null في الجدول الرئيسي وتضع التفاصيل في
+        // location_change_request_children — بينما الطلبات القديمة الفردية تحفظ child_id مباشرة.
+        $approvedRequests = \App\Models\Shared\LocationChangeRequest::where('driver_id', $route->driver_id)
             ->where('status', \App\Models\Shared\LocationChangeRequest::STATUS_APPROVED)
             ->whereDate('change_date', $dateString)
-            ->get()
-            ->keyBy(function ($item) {
-                return $item->child_id . '_' . $item->point_type;
-            });
+            ->with('targets')
+            ->get();
+
+        // نبني خريطة: "child_id_pointType" => LocationChangeRequest
+        // نبدأ بالطلبات الفردية (child_id مباشر)، ثم نُكمل من targets الطلبات المُجمَّعة
+        $approvedLocationChanges = collect();
+
+        foreach ($approvedRequests as $lcr) {
+            if ($lcr->child_id) {
+                // طلب فردي قديم — child_id مباشر على الطلب
+                $key = $lcr->child_id . '_' . $lcr->point_type;
+                $approvedLocationChanges->put($key, $lcr);
+            } else {
+                // طلب مُجمَّع — التفاصيل في targets
+                foreach ($lcr->targets as $target) {
+                    if ($target->child_id) {
+                        $key = $target->child_id . '_' . $lcr->point_type;
+                        $approvedLocationChanges->put($key, $lcr);
+                    }
+                }
+            }
+        }
+
 
         // المرحلة 2: بناء المحطات بنفس الترتيب الأصلي، مع تطبيق أي تغيير موقع مؤقت لليوم وإعادة ترقيم المحطات المتبقية فقط
         $sequence = 1;
@@ -240,8 +262,8 @@ class DailyTripGenerationService
             $changeKey = ($stop->child_id ?? 0) . '_' . $pointType;
             $locChange = $approvedLocationChanges->get($changeKey);
 
-            $lat   = $locChange ? $locChange->new_lat : $stop->lat;
-            $lng   = $locChange ? $locChange->new_lng : $stop->lng;
+            $lat   = $locChange ? $locChange->new_lat   : $stop->lat;
+            $lng   = $locChange ? $locChange->new_lng   : $stop->lng;
             $label = $locChange ? $locChange->new_label : $stop->label;
 
             TripStop::create([
@@ -262,6 +284,7 @@ class DailyTripGenerationService
             }
         }
     }
+
 
     private function notifyDriverAndParents(Trip $trip, Route $route): void
     {
