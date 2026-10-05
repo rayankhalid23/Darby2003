@@ -3,20 +3,6 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AdminController; // استدعاء الـ Controller الخاص باللوحة لو وجد
 
-Route::get('/test-db', function () {
-    try {
-        $user = \Illuminate\Support\Facades\DB::table('users')->first();
-        return response()->json(['status' => 'ok', 'user_sample' => $user ? ['id' => $user->id, 'email' => $user->email] : null]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status' => 'error',
-            'message' => $e->getMessage(),
-            'code' => $e->getCode(),
-            'file' => $e->getFile(),
-            'line' => $e->getLine()
-        ], 500);
-    }
-});
 
 // 1. مسار عرض صفحة تسجيل الدخول
 Route::get('/login', function () {
