@@ -12,8 +12,8 @@ fi
 
 php artisan config:clear >/dev/null 2>&1 || true
 
-if [ "$APP_ENV" = "production" ] || [ "$RUN_MIGRATIONS" = "true" ]; then
-    php artisan migrate --force
+if [ "$RUN_MIGRATIONS" = "true" ]; then
+    php artisan migrate --force || true
 fi
 
 php artisan storage:link 2>/dev/null || true
