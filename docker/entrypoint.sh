@@ -35,4 +35,10 @@ if [ "$RUN_SCHEDULER" != "false" ]; then
     ) &
 fi
 
+if [ "$RUN_QUEUE_WORKER" != "false" ]; then
+    (
+        php artisan queue:work --sleep=3 --tries=3 --timeout=90 --no-interaction >> /dev/stdout 2>&1
+    ) &
+fi
+
 exec apache2-foreground

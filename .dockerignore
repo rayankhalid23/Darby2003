@@ -5,6 +5,7 @@ vendor
 osrm-data
 python
 ai_service
+ai-service
 scratch
 tests
 storage/logs/*.log
