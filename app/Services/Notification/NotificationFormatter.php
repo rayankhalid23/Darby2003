@@ -119,8 +119,11 @@ class NotificationFormatter
         $entityId = $data['entity_id'] ?? null;
         $entityType = $data['entity_type'] ?? null;
         $screen = $data['screen'] ?? 'HOME';
-        $action = $data['action'] ?? 'open';
-        $extraPayload = $data['payload'] ?? [];
+        $reservedKeys = ['title', 'message', 'action_url', 'entity_id', 'entity_type', 'screen', 'action', 'payload'];
+        $extraPayload = array_merge(
+            array_diff_key($data, array_flip($reservedKeys)),
+            $data['payload'] ?? []
+        );
 
         // قيم افتراضية للمتغيرات الشائعة
         $tripId = $data['trip_id'] ?? $entityId ?? '';

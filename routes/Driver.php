@@ -6,13 +6,13 @@ use App\Http\Controllers\Api\Driver\ProfileController;
 use App\Http\Controllers\Api\Driver\DriverPreferenceController;
 use App\Http\Controllers\Api\Driver\AddressController;
 use App\Http\Controllers\Api\Driver\ZoneController; 
-use App\Http\Controllers\API\Trip\DriverTripController;
+use App\Http\Controllers\Api\Trip\DriverTripController;
 use App\Http\Controllers\Api\DriverTrackingController;
 use App\Http\Controllers\Api\Driver\SupportTicketController;
 use App\Http\Controllers\Api\Driver\DriverStatisticsController;
 
 // أو إذا كان داخل مجلد فرعي:
- use App\Http\Controllers\API\Driver\DriverProfileController;
+ use App\Http\Controllers\Api\Driver\DriverProfileController;
 /*
 |--------------------------------------------------------------------------
 | Driver Routes (تم إزالة الـ prefix التكراري ليطابق v1/driver مباشرة)

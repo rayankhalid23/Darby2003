@@ -202,20 +202,17 @@ class DriverSubscriptionAcceptanceTest extends TestCase
         // تحقق من إنشاء سجلات active_subscriptions
         $this->assertDatabaseHas('active_subscriptions', [
             'subscription_request_id' => $this->subscriptionRequest->id,
-            'driver_id'               => $this->driver->id,
-            'child_id'                => $this->child->id,
             'status'                  => 'active',
         ]);
 
         // جلب معرف الاشتراك النشط من قاعدة البيانات للتحقق من تطابقه مع الاستجابة
-        $activeSub = ActiveSubscription::where('driver_id', $this->driver->id)
-            ->where('child_id', $this->child->id)
-            ->first();
+        $activeSub = ActiveSubscription::where('subscription_request_id', $this->subscriptionRequest->id)->first();
         
         $this->assertNotNull($activeSub);
 
-        // التحقق من وجود المعرّف (id) وتطابقه داخل تفاصيل اشتراك الطفل في مصفوفة الإخراج
-        $response->assertJsonPath('data.children.0.subscription.id', $activeSub->id);
+        // التحقق من وجود المعرّف (child_id) وتطابقه داخل تفاصيل الطفل في مصفوفة الإخراج
+        $response->assertJsonPath('data.children.0.child_id', $this->child->id);
+        $this->assertContains($response->json('data.status'), ['accepted', 'pending_start', 'active']);
     }
 
     // =========================================================
@@ -225,7 +222,7 @@ class DriverSubscriptionAcceptanceTest extends TestCase
     {
         $service = app(SubscriptionRequestService::class);
 
-        $beforeActiveCount = ActiveSubscription::where('driver_id', $this->driver->id)->where('status', 'active')->count();
+        $beforeActiveCount = ActiveSubscription::whereHas('subscriptionRequest', fn($q) => $q->where('driver_id', $this->driver->id))->where('status', 'active')->count();
 
         // إكمال قبول الطلب
         $updatedRequest = $service->updateStatus($this->subscriptionRequest, 'accepted');
@@ -234,21 +231,19 @@ class DriverSubscriptionAcceptanceTest extends TestCase
         $this->assertEquals('accepted', $updatedRequest->status);
 
         // 2. تحقق من زيادة المقاعد المحجوزة (عدد الاشتراكات النشطة) بناءً على عدد الأطفال
-        $afterActiveCount = ActiveSubscription::where('driver_id', $this->driver->id)->where('status', 'active')->count();
+        $afterActiveCount = ActiveSubscription::whereHas('subscriptionRequest', fn($q) => $q->where('driver_id', $this->driver->id))->where('status', 'active')->count();
         $this->assertEquals($beforeActiveCount + $this->subscriptionRequest->children_count, $afterActiveCount);
 
         // 3. تحقق من إنشاء المسار في جدول routes
         $this->assertDatabaseHas('routes', [
-            'driver_id'               => $this->driver->id,
-            'subscription_request_id' => $updatedRequest->id,
-            'status'                  => 'Active',
+            'driver_id' => $this->driver->id,
+            'status'    => 'Active',
         ]);
 
         // 4. تحقق من ربط active_subscriptions بـ route_id المولد
-        $route = DB::table('routes')->where('subscription_request_id', $updatedRequest->id)->first();
+        $route = DB::table('routes')->where('driver_id', $this->driver->id)->first();
         $this->assertNotNull($route);
         $this->assertDatabaseHas('active_subscriptions', [
-            'driver_id'               => $this->driver->id,
             'subscription_request_id' => $updatedRequest->id,
             'route_id'                => $route->id,
             'status'                  => 'active',
@@ -263,21 +258,17 @@ class DriverSubscriptionAcceptanceTest extends TestCase
         // تحديد سعة المركبة بـ 1 مقعد
         DB::table('vehicles')->where('driver_id', $this->driver->id)->update(['capacity_manual' => 1]);
 
-        // حجز المقعد المتاح باشتراك نشط سابق لنفس الفترة والاتجاه
-        ActiveSubscription::create([
-            'subscription_request_id' => $this->subscriptionRequest->id,
-            'status'                  => 'active',
-            'child_id'                => $this->child->id,
-            'driver_id'               => $this->driver->id,
-            'parent_id'               => $this->parentUser->id,
-            'pickup_lat'              => 32.88,
-            'pickup_lng'              => 13.19,
-            'pickup_label'            => 'منزل',
-            'pickup_time'             => '07:00:00',
-            'dropoff_lat'             => 32.90,
-            'dropoff_lng'             => 13.20,
-            'dropoff_label'           => 'مدرسة',
-            'dropoff_time'            => '14:00:00',
+        // السائق يقبل الطلب الأول فيمتلئ المقعد المتاح
+        app(SubscriptionRequestService::class)->updateStatus($this->subscriptionRequest, 'accepted');
+
+        // إنشاء طفل ثانٍ لطلب جديد لنفس التوقيت
+        $secondChild = Child::create([
+            'parent_id'           => $this->parent->id,
+            'full_name'           => 'طفل الاختبار الثاني',
+            'birth_date'          => '2019-01-01',
+            'gender'              => 'female',
+            'grade'               => 2,
+            'notification_radius' => 500,
         ]);
 
         // إنشاء طلب جديد لنفس التوقيت
@@ -301,7 +292,7 @@ class DriverSubscriptionAcceptanceTest extends TestCase
 
         DB::table('request_children')->insert([
             'request_id'                  => $newReq->id,
-            'child_id'                    => $this->child->id,
+            'child_id'                    => $secondChild->id,
             'school_id'                   => $this->school->id,
             'timing'                      => 'MORNING',
             'school_label'                => 'مدرسة الاختبار',

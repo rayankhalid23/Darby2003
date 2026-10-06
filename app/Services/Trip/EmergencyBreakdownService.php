@@ -463,6 +463,7 @@ class EmergencyBreakdownService
 
         $parentUserIds = Child::whereIn('id', $strandedChildIds)
             ->pluck('parent_id')
+            ->filter()
             ->unique();
 
         $users = User::whereIn('id', $parentUserIds)->get();
@@ -475,14 +476,19 @@ class EmergencyBreakdownService
         $subDriverPhone = $substituteDriver->user?->phone_number ?? '';
         $vehicleInfo = $subVehicle ? "مركبة: {$subVehicle->make} {$subVehicle->model} (لوحة: {$subVehicle->plate_number})" : '';
 
+        $substituteTripId = $dispatch->substitute_trip_id ?? $originalTrip->id;
+
         $this->notificationService->sendToUsers($users, NotificationFormatter::TYPE_EMERGENCY_SUBSTITUTE_ACCEPTED_PARENT, [
             'title'                  => '🔄 تم تعيين سائق بديل للرحلة',
             'substitute_driver_name' => $subDriverName,
             'substitute_phone'       => $subDriverPhone,
             'vehicle_info'           => $vehicleInfo,
-            'trip_id'                => (string) $originalTrip->id,
+            'trip_id'                => (string) $substituteTripId,
+            'entity_id'              => (string) $substituteTripId,
+            'original_trip_id'       => (string) $originalTrip->id,
+            'substitute_trip_id'     => (string) $substituteTripId,
+            'dispatch_id'            => (string) $dispatch->id,
             'message'                => "توقفت الحافلة بسبب عطل طارئ، وتم تكليف السائق البديل ({$subDriverName} - {$subDriverPhone}) لاستكمال نقل الأبناء بسلام. {$vehicleInfo}",
-            'entity_id'              => (string) $originalTrip->id,
         ]);
     }
 
@@ -538,17 +544,20 @@ class EmergencyBreakdownService
         if (!empty($strandedChildIds)) {
             $parentUserIds = Child::whereIn('id', $strandedChildIds)
                 ->pluck('parent_id')
+                ->filter()
                 ->unique();
 
             $users = User::whereIn('id', $parentUserIds)->get();
             if ($users->isNotEmpty()) {
                 $this->notificationService->sendToUsers($users, NotificationFormatter::TYPE_EMERGENCY_BREAKDOWN_PARENT_PICKUP, [
-                    'title'         => '⚠️ تعطل الحافلة: يرجى استلام طفلك',
-                    'location_text' => "إحداثيات: {$lat}, {$lng}",
-                    'maps_url'      => $mapsUrl,
-                    'trip_id'       => (string) $trip->id,
-                    'message'       => "توقفت الحافلة بسبب عطل طارئ وتعذر توفير بديل حالياً. الأبناء في أمان، يرجى التوجه لموقعهم لاستلام ابنك: {$mapsUrl}",
-                    'entity_id'     => (string) $trip->id,
+                    'title'            => '⚠️ تعطل الحافلة: يرجى استلام طفلك',
+                    'location_text'    => "إحداثيات: {$lat}, {$lng}",
+                    'maps_url'         => $mapsUrl,
+                    'trip_id'          => (string) $trip->id,
+                    'entity_id'        => (string) $trip->id,
+                    'original_trip_id' => (string) $trip->id,
+                    'dispatch_id'      => (string) $dispatch->id,
+                    'message'          => "توقفت الحافلة بسبب عطل طارئ وتعذر توفير بديل حالياً. الأبناء في أمان، يرجى التوجه لموقعهم لاستلام ابنك: {$mapsUrl}",
                 ]);
             }
         }

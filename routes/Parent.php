@@ -8,12 +8,12 @@ use App\Http\Controllers\Api\Parent\ParentSchoolController;
 use App\Http\Controllers\Api\Admin\ZoneController;
 use App\Http\Controllers\Api\Parent\DriverSearchController;
 use App\Http\Controllers\Api\Admin\SchoolController;
-use App\Http\Controllers\API\Trip\ParentChildController;
+use App\Http\Controllers\Api\Trip\ParentChildController;
 use App\Http\Controllers\Api\Parent\DriverReviewController;
 use App\Http\Controllers\Api\Parent\ComplaintController;
 use App\Http\Controllers\Api\Parent\WalletController;
 use App\Http\Controllers\Api\Shared\InvoiceController;
-use App\Http\Controllers\API\Parent\ParentSubscriptionController;
+use App\Http\Controllers\Api\Parent\ParentSubscriptionController;
 
 use App\Http\Controllers\Api\Trip\ParentTripController;
 

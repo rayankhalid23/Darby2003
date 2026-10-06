@@ -1,10 +1,10 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\API\Parent\ParentSubscriptionController;
-use App\Http\Controllers\API\Driver\DriverSubscriptionController;
+use App\Http\Controllers\Api\Parent\ParentSubscriptionController;
+use App\Http\Controllers\Api\Driver\DriverSubscriptionController;
 use App\Http\Controllers\Api\Shared\ChatController;
-use App\Http\Controllers\API\Driver\DriverRouteController;
+use App\Http\Controllers\Api\Driver\DriverRouteController;
 use App\Http\Controllers\Api\Trip\DriverTripController;
 
 

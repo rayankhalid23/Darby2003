@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api\Trip;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\API\Trip\ChildAbsenceRequest;
+use App\Http\Requests\Api\Trip\ChildAbsenceRequest;
 use App\Models\Shared\AbsenceLog;
 use App\Models\Shared\ActiveSubscription;
 use App\Services\Trip\TripLifecycleService;

@@ -849,7 +849,8 @@ class DriverTripController extends Controller
 
             return response()->json($result, 200);
         } catch (\Exception $e) {
-            $code = $e->getCode() >= 400 && $e->getCode() < 600 ? $e->getCode() : 400;
+            $rawCode = $e->getCode();
+            $code = (is_numeric($rawCode) && (int)$rawCode >= 400 && (int)$rawCode < 600) ? (int)$rawCode : 400;
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], $code);
         }
     }

@@ -6,6 +6,7 @@ use App\Models\Shared\Trip;
 use App\Models\Shared\TripStop;
 use App\Models\Shared\ActiveSubscription;
 use App\Models\Shared\Route;
+use App\Models\Shared\TripBreakdownDispatch;
 use App\Models\Parent\ParentModel;
 use App\Models\Parent\Child;
 use Illuminate\Support\Facades\Cache;
@@ -273,12 +274,15 @@ class ParentTripService
                 : null;
 
             $result[] = [
-                'trip_id'       => $trip->id,
-                'trip_type'     => strtolower($trip->trip_type ?? 'morning'),
-                'direction'     => $direction,
-                'status'        => strtolower($trip->status ?? 'in_progress'),
-                'started_at'    => $trip->actual_start_time ? Carbon::parse($trip->actual_start_time)->format('h:i A') : null,
-                'driver'        => [
+                'trip_id'          => $trip->id,
+                'trip_type'        => strtolower($trip->trip_type ?? 'morning'),
+                'direction'        => $direction,
+                'status'           => strtolower($trip->status ?? 'in_progress'),
+                'is_substitute'    => false,
+                'original_trip_id' => null,
+                'dispatch_id'      => null,
+                'started_at'       => $trip->actual_start_time ? Carbon::parse($trip->actual_start_time)->format('h:i A') : null,
+                'driver'           => [
                     'id'    => $driver?->id,
                     'name'  => $driverUser?->full_name ?? $driverUser?->name ?? null,
                     'phone' => $driverUser?->phone_number ?? $driverUser?->phone ?? null,
@@ -295,6 +299,187 @@ class ParentTripService
                 ],
                 'children' => $childrenArray,
             ];
+        }
+
+        // =========================================================================
+        // 🚨 دمج رحلات الإنقاذ الطارئة (السائق البديل) لأطفال ولي الأمر العالقين
+        // =========================================================================
+        $activeDispatches = \App\Models\Shared\TripBreakdownDispatch::where('status', \App\Models\Shared\TripBreakdownDispatch::STATUS_ACCEPTED)
+            ->whereNotNull('substitute_trip_id')
+            ->where(function ($q) use ($childIds) {
+                foreach ($childIds as $cid) {
+                    $q->orWhereJsonContains('stranded_children_ids', (int) $cid)
+                      ->orWhereJsonContains('stranded_children_ids', (string) $cid);
+                }
+            })
+            ->with(['substituteDriver.user', 'substituteDriver.vehicles', 'substituteTrip'])
+            ->get();
+
+        $existingTripIds = collect($result)->pluck('trip_id')->all();
+
+        foreach ($activeDispatches as $dispatch) {
+            $subTrip = $dispatch->substituteTrip;
+            if (!$subTrip || strtolower($subTrip->status) !== 'in_progress') {
+                continue;
+            }
+
+            $subTripDate = $subTrip->trip_date ? Carbon::parse($subTrip->trip_date)->toDateString() : null;
+            if ($subTripDate && $subTripDate !== $targetDate) {
+                continue;
+            }
+
+            // أطفال هذا الولي فقط العالقين ضمن هذه المهمة
+            $strandedForThisParent = array_values(array_intersect($childIds, array_map('intval', (array) ($dispatch->stranded_children_ids ?? []))));
+            if (empty($strandedForThisParent)) {
+                continue;
+            }
+
+            // إذا كانت رحلة البديل موجودة مسبقاً في النتيجة (مثلاً البديل هو سائق اشتراك طفل آخر لنفس الولي)
+            $existingIndex = array_search($subTrip->id, $existingTripIds, true);
+            if ($existingIndex !== false) {
+                $result[$existingIndex]['is_substitute']    = true;
+                $result[$existingIndex]['original_trip_id'] = $dispatch->trip_id;
+                $result[$existingIndex]['dispatch_id']      = $dispatch->id;
+                continue;
+            }
+
+            $direction = strtolower($subTrip->trip_type) === 'afternoon' ? 'to_home' : 'to_school';
+
+            // محطات رحلة الإنقاذ
+            $subTripStops = DB::table('trip_stops')->where('trip_id', $subTrip->id)->get();
+            $totalTripChildren = $subTripStops->whereNotNull('child_id')->unique('child_id')->count();
+            $currentOnboardCount = $subTripStops->whereNotNull('child_id')
+                ->whereIn('status', ['boarded', 'picked_up'])
+                ->unique('child_id')
+                ->count();
+
+            $childrenModels = Child::whereIn('id', $strandedForThisParent)->with(['address', 'school'])->get()->keyBy('id');
+            $childSubs = $subscriptions->keyBy('child_id');
+
+            $subChildrenArray = [];
+            foreach ($strandedForThisParent as $cid) {
+                $childObj = $childrenModels->get($cid);
+                if (!$childObj) continue;
+
+                $childSub = $childSubs->get($cid);
+                $stop = $subTripStops->where('child_id', $cid)->where('stop_type', 'home')->first()
+                    ?? $subTripStops->where('child_id', $cid)->first();
+
+                $childStatus = $stop?->status ?? 'waiting';
+                $mappedChildStatus = match ($childStatus) {
+                    'boarded', 'picked_up', 'onboard'                      => 'onboard',
+                    'dropped_off', 'dropped_off_school', 'delivered_home' => 'dropped_off',
+                    'absent', 'absent_pre', 'absent_late'                  => 'absent',
+                    'waiting', 'pending'                                   => 'waiting',
+                    default                                                => $childStatus,
+                };
+
+                $rawPhoto = $childObj->photo_url ?? null;
+                $photoUrl = $rawPhoto ? (str_starts_with($rawPhoto, 'http') ? $rawPhoto : Storage::url($rawPhoto)) : asset('assets/images/default-child.png');
+
+                $childSchool = $childSub?->school ?? $childObj->school;
+
+                $pickupEvent = DB::table('trip_events')
+                    ->where('trip_id', $subTrip->id)
+                    ->where('child_id', $cid)
+                    ->whereIn('action_type', ['picked_up', 'boarded'])
+                    ->latest('scanned_at')
+                    ->first();
+
+                $dropoffEvent = DB::table('trip_events')
+                    ->where('trip_id', $subTrip->id)
+                    ->where('child_id', $cid)
+                    ->whereIn('action_type', ['dropped_off', 'dropped_off_school', 'delivered_home'])
+                    ->latest('scanned_at')
+                    ->first();
+
+                $pickupTime = $pickupEvent 
+                    ? Carbon::parse($pickupEvent->scanned_at)->format('h:i A') 
+                    : ($childSub?->pickup_time ? Carbon::parse($childSub->pickup_time)->format('h:i A') : null);
+
+                $dropoffTime = $dropoffEvent 
+                    ? Carbon::parse($dropoffEvent->scanned_at)->format('h:i A') 
+                    : null;
+
+                $childAddress = $childObj->address;
+                $homeLat = $stop?->lat ?? $childAddress?->lat ?? $childSub?->pickup_lat;
+                $homeLng = $stop?->lng ?? $childAddress?->lng ?? $childSub?->pickup_lng;
+                $homeTitle = $stop?->label ?? $childAddress?->label ?? $childSub?->pickup_label ?? null;
+
+                $homeAddressData = [
+                    'title'  => $homeTitle,
+                    'street' => $homeTitle,
+                    'lat'    => $homeLat !== null ? (float)$homeLat : null,
+                    'lng'    => $homeLng !== null ? (float)$homeLng : null,
+                ];
+
+                $schoolLat = $childSchool?->lat ?? $childSub?->dropoff_lat;
+                $schoolLng = $childSchool?->lng ?? $childSub?->dropoff_lng;
+                $schoolData = [
+                    'id'      => $childSchool?->id,
+                    'name'    => $childSchool?->name ?? null,
+                    'branch'  => $childSchool?->branch ?? null,
+                    'address' => $childSchool?->address ?? null,
+                    'lat'     => $schoolLat !== null ? (float)$schoolLat : null,
+                    'lng'     => $schoolLng !== null ? (float)$schoolLng : null,
+                ];
+
+                $subChildrenArray[] = [
+                    'child_id'     => $childObj->id,
+                    'child_name'   => $childObj->full_name ?? $childObj->name,
+                    'child_photo'  => $photoUrl,
+                    'child_status' => $mappedChildStatus,
+                    'pickup_time'  => $pickupTime,
+                    'dropoff_time' => $dropoffTime,
+                    'home_address' => $homeAddressData,
+                    'school'       => $schoolData,
+                ];
+            }
+
+            if (empty($subChildrenArray)) {
+                continue;
+            }
+
+            $subDriver = $dispatch->substituteDriver ?? $subTrip->driver;
+            $subDriverUser = $subDriver?->user;
+            $subVehicle = optional($subDriver?->vehicles)->first();
+
+            $subDriverAvatar = optional($subDriverUser)->avatar_url ?? optional($subDriverUser)->photo_url;
+            $subDriverPhotoUrl = $subDriverAvatar ? (str_starts_with($subDriverAvatar, 'http') ? $subDriverAvatar : Storage::url($subDriverAvatar)) : asset('assets/images/default-driver.png');
+
+            $subVehicleInfo = $subVehicle
+                ? trim("{$subVehicle->brand} {$subVehicle->model} {$subVehicle->year}" . ($subVehicle->color ? " - {$subVehicle->color}" : ''))
+                : null;
+
+            $result[] = [
+                'trip_id'          => $subTrip->id,
+                'trip_type'        => strtolower($subTrip->trip_type ?? 'morning'),
+                'direction'        => $direction,
+                'status'           => strtolower($subTrip->status ?? 'in_progress'),
+                'is_substitute'    => true,
+                'original_trip_id' => (int) $dispatch->trip_id,
+                'dispatch_id'      => (int) $dispatch->id,
+                'started_at'       => $subTrip->actual_start_time ? Carbon::parse($subTrip->actual_start_time)->format('h:i A') : null,
+                'driver'           => [
+                    'id'    => $subDriver?->id,
+                    'name'  => $subDriverUser?->full_name ?? $subDriverUser?->name ?? null,
+                    'phone' => $subDriverUser?->phone_number ?? $subDriverUser?->phone ?? null,
+                    'photo' => $subDriverPhotoUrl,
+                    'lat'   => $subDriver?->current_lat !== null ? (float)$subDriver->current_lat : null,
+                    'lng'   => $subDriver?->current_lng !== null ? (float)$subDriver->current_lng : null,
+                ],
+                'vehicle' => [
+                    'info'         => $subVehicleInfo,
+                    'plate_number' => $subVehicle?->plate_number ?? null,
+                    'capacity'     => $subVehicle?->capacity_manual ?? $subVehicle?->capacity ?? null,
+                ],
+                'bus_occupancy' => [
+                    'current_onboard_count' => $currentOnboardCount,
+                    'total_trip_children'   => $totalTripChildren,
+                ],
+                'children' => $subChildrenArray,
+            ];
+            $existingTripIds[] = $subTrip->id;
         }
 
         return $result;
@@ -318,29 +503,50 @@ class ParentTripService
         $trip = Trip::with(['driver.user', 'driver.vehicles'])->findOrFail($tripId);
 
         $parentIds = $this->resolveParentIds($userId);
-        $childIds  = DB::table('children')->whereIn('parent_id', $parentIds)->pluck('id')->toArray();
+        $allChildIds  = DB::table('children')->whereIn('parent_id', $parentIds)->pluck('id')->toArray();
 
-        if (empty($childIds)) {
+        if (empty($allChildIds)) {
             throw new \Exception('غير مصرح لك بالاطلاع على هذه الرحلة.');
         }
 
         // الطفل مرتبط بالرحلة إما عبر محطاتها الفعلية، أو عبر اشتراك نشط على نفس مسارها
-        $hasStop = DB::table('trip_stops')
+        $stopChildIds = DB::table('trip_stops')
             ->where('trip_id', $trip->id)
-            ->whereIn('child_id', $childIds)
-            ->exists();
+            ->whereIn('child_id', $allChildIds)
+            ->pluck('child_id')
+            ->toArray();
 
-        $hasSubscription = ActiveSubscription::forChildren($childIds)
+        $subChildIds = ActiveSubscription::forChildren($allChildIds)
             ->forDriver($trip->driver_id)
             ->when($trip->route_id, fn($q) => $q->where('route_id', $trip->route_id))
             ->where('status', '!=', 'cancelled')
-            ->exists();
+            ->with('requestChild')
+            ->get()
+            ->pluck('child_id')
+            ->filter()
+            ->values()
+            ->toArray();
 
-        if (!$hasStop && !$hasSubscription) {
+        // 🚨 فحص مهام الإنقاذ الطارئة (السائق البديل)
+        $dispatchChildIds = [];
+        $activeDispatch = \App\Models\Shared\TripBreakdownDispatch::where('substitute_trip_id', $trip->id)
+            ->where('status', \App\Models\Shared\TripBreakdownDispatch::STATUS_ACCEPTED)
+            ->first();
+
+        if ($activeDispatch && !empty($activeDispatch->stranded_children_ids)) {
+            $dispatchChildIds = array_values(array_intersect(
+                $allChildIds,
+                array_map('intval', (array) $activeDispatch->stranded_children_ids)
+            ));
+        }
+
+        $relevantChildIds = array_values(array_unique(array_merge($stopChildIds, $subChildIds, $dispatchChildIds)));
+
+        if (empty($relevantChildIds)) {
             throw new \Exception('غير مصرح لك بالاطلاع على هذه الرحلة.');
         }
 
-        return ['trip' => $trip, 'child_ids' => $childIds];
+        return ['trip' => $trip, 'child_ids' => $relevantChildIds];
     }
 
     public function getLiveTracking(int $userId, int $tripId): array
@@ -359,28 +565,34 @@ class ParentTripService
             $isOnline = true;
         }
 
+        ['child_ids' => $childIds] = $this->authorizeParentTripAccess($userId, $tripId);
+
         $firstSub = ActiveSubscription::forDriver($trip->driver_id)->where('status', 'active')->with('school')->first();
+        if (!$firstSub && !empty($childIds)) {
+            $firstSub = ActiveSubscription::forChildren($childIds)->with('school')->first();
+        }
         $school = optional($firstSub?->school);
         $direction = strtolower($trip->trip_type) === 'afternoon' ? 'to_home' : 'to_school';
 
-        $destLat = $direction === 'to_school' ? ($school->lat ?? $firstSub->dropoff_lat ?? null) : ($firstSub->pickup_lat ?? null);
-        $destLng = $direction === 'to_school' ? ($school->lng ?? $firstSub->dropoff_lng ?? null) : ($firstSub->pickup_lng ?? null);
+        $destLat = $direction === 'to_school' ? ($school->lat ?? $firstSub?->dropoff_lat ?? null) : ($firstSub?->pickup_lat ?? null);
+        $destLng = $direction === 'to_school' ? ($school->lng ?? $firstSub?->dropoff_lng ?? null) : ($firstSub?->pickup_lng ?? null);
 
         // ⚠️ كان الاسم يُرسل null دائماً رغم توفره، فيظهر للتطبيق مربّع وجهة بلا عنوان
         $destName = $direction === 'to_school'
             ? ($school->name ?? $firstSub?->dropoff_label ?? 'المدرسة')
             : ($firstSub?->pickup_label ?? 'المنزل');
 
-        $parentIds = $this->resolveParentIds($userId);
-        $childIds = DB::table('children')->whereIn('parent_id', $parentIds)->pluck('id')->toArray();
-
         $childrenArray = [];
         if (!empty($childIds)) {
             $subscriptions = ActiveSubscription::forChildren($childIds)
-                ->forDriver($trip->driver_id)
                 ->where('status', 'active')
                 ->with(['child.address', 'child.school', 'school'])
                 ->get();
+
+            // إذا كان السائق هو نفسه صاحب الاشتراك نفلتر به، وإلا (مثل السائق البديل) نأخذ اشتراكات هؤلاء الأطفال
+            $subscriptionsByChild = $subscriptions->groupBy('child_id')->map(function ($subs) use ($trip) {
+                return $subs->firstWhere('driver_id', $trip->driver_id) ?? $subs->first();
+            });
 
             $tripStopsByChild = DB::table('trip_stops')
                 ->where('trip_id', $trip->id)
@@ -389,15 +601,25 @@ class ParentTripService
                 ->get()
                 ->keyBy('child_id');
 
-            foreach ($subscriptions as $sub) {
-                $childrenArray[] = $this->buildChildLocations($sub, $tripStopsByChild->get($sub->child_id));
+            foreach ($subscriptionsByChild as $sub) {
+                if ($sub) {
+                    $childrenArray[] = $this->buildChildLocations($sub, $tripStopsByChild->get($sub->child_id));
+                }
             }
         }
 
+        $dispatch = TripBreakdownDispatch::where('substitute_trip_id', $trip->id)
+            ->where('status', TripBreakdownDispatch::STATUS_ACCEPTED)
+            ->first();
+        $isSubstitute = (bool) $dispatch;
+
         return [
-            'trip_id' => $trip->id,
-            'status'  => $trip->status,
-            'driver_location' => [
+            'trip_id'          => $trip->id,
+            'status'           => $trip->status,
+            'is_substitute'    => $isSubstitute,
+            'original_trip_id' => $isSubstitute ? $dispatch->trip_id : null,
+            'dispatch_id'      => $isSubstitute ? $dispatch->id : null,
+            'driver_location'  => [
                 'lat' => $driverLat !== null ? (float)$driverLat : null,
                 'lng' => $driverLng !== null ? (float)$driverLng : null,
             ],
@@ -870,11 +1092,13 @@ class ParentTripService
     {
         ['trip' => $trip, 'child_ids' => $childIds] = $this->authorizeParentTripAccess($userId, $tripId);
 
-        $subscriptions = ActiveSubscription::forChildren($childIds)
-            ->forDriver($trip->driver_id)
+        $subscriptionsQuery = ActiveSubscription::forChildren($childIds)
             ->with(['child.school', 'child.address', 'school'])
-            ->get()
-            ->unique('child_id');
+            ->get();
+
+        $subscriptions = $subscriptionsQuery->groupBy('child_id')->map(function ($subs) use ($trip) {
+            return $subs->firstWhere('driver_id', $trip->driver_id) ?? $subs->first();
+        })->filter();
 
         $direction = strtolower($trip->trip_type) === 'afternoon' ? 'to_home' : 'to_school';
 
@@ -964,11 +1188,19 @@ class ParentTripService
         $driverAvatar = optional($driverUser)->avatar_url ?? optional($driverUser)->photo_url;
         $driverPhotoUrl = $driverAvatar ? (str_starts_with($driverAvatar, 'http') ? $driverAvatar : Storage::url($driverAvatar)) : asset('assets/images/default-driver.png');
 
+        $dispatch = TripBreakdownDispatch::where('substitute_trip_id', $trip->id)
+            ->where('status', TripBreakdownDispatch::STATUS_ACCEPTED)
+            ->first();
+        $isSubstitute = (bool) $dispatch;
+
         return [
-            'trip_id'     => $trip->id,
-            'trip_type'   => $trip->trip_type,
-            'direction'   => $direction,
-            'status'      => $trip->status,
+            'trip_id'          => $trip->id,
+            'trip_type'        => $trip->trip_type,
+            'direction'        => $direction,
+            'status'           => $trip->status,
+            'is_substitute'    => $isSubstitute,
+            'original_trip_id' => $isSubstitute ? $dispatch->trip_id : null,
+            'dispatch_id'      => $isSubstitute ? $dispatch->id : null,
             'driver'      => [
                 'id'    => $driver?->id,
                 'name'  => $driverUser?->full_name ?? $driverUser?->name,
@@ -1274,8 +1506,10 @@ class ParentTripService
             ->get();
 
         $result = [];
+        $includedTripIds = [];
 
         foreach ($activeTrips as $trip) {
+            $includedTripIds[] = $trip->id;
             $cacheKey = "driver_last_loc_{$trip->driver_id}";
             $cachedLoc = Cache::get($cacheKey);
 
@@ -1296,8 +1530,70 @@ class ParentTripService
             }
 
             $result[] = [
-                'trip_id' => $trip->id,
-                'driver_location' => [
+                'trip_id'          => $trip->id,
+                'is_substitute'    => false,
+                'original_trip_id' => null,
+                'dispatch_id'      => null,
+                'driver_location'  => [
+                    'lat' => $driverLat !== null ? (float)$driverLat : null,
+                    'lng' => $driverLng !== null ? (float)$driverLng : null,
+                ],
+                'destination' => [
+                    'lat' => $destLat !== null ? (float)$destLat : null,
+                    'lng' => $destLng !== null ? (float)$destLng : null,
+                ],
+                'children' => $childrenArray,
+            ];
+        }
+
+        // 🚑 دمج رحلات الإنقاذ النشطة للسائق البديل في حال قبول العطل
+        $acceptedDispatches = TripBreakdownDispatch::where('status', TripBreakdownDispatch::STATUS_ACCEPTED)
+            ->whereNotNull('substitute_trip_id')
+            ->get();
+
+        foreach ($acceptedDispatches as $disp) {
+            if (in_array($disp->substitute_trip_id, $includedTripIds)) {
+                continue;
+            }
+
+            $stranded = array_map('intval', (array)($disp->stranded_children_ids ?? []));
+            $matchingChildIds = array_values(array_intersect($stranded, $childIds));
+            if (empty($matchingChildIds)) {
+                continue;
+            }
+
+            $subTrip = Trip::find($disp->substitute_trip_id);
+            if (!$subTrip || $subTrip->status !== 'in_progress') {
+                continue;
+            }
+
+            $includedTripIds[] = $subTrip->id;
+
+            $cacheKey = "driver_last_loc_{$subTrip->driver_id}";
+            $cachedLoc = Cache::get($cacheKey);
+
+            $driverLat = $cachedLoc['lat'] ?? $subTrip->driver?->current_lat ?? null;
+            $driverLng = $cachedLoc['lng'] ?? $subTrip->driver?->current_lng ?? null;
+
+            $dispSubs = $subscriptions->whereIn('child_id', $matchingChildIds);
+            $firstSub = $dispSubs->first();
+            $school = optional($firstSub?->school);
+            $direction = strtolower($subTrip->trip_type) === 'afternoon' ? 'to_home' : 'to_school';
+
+            $destLat = $direction === 'to_school' ? ($school->lat ?? null) : ($firstSub?->pickup_lat ?? null);
+            $destLng = $direction === 'to_school' ? ($school->lng ?? null) : ($firstSub?->pickup_lng ?? null);
+
+            $childrenArray = [];
+            foreach ($dispSubs as $sub) {
+                $childrenArray[] = $this->buildChildLocations($sub);
+            }
+
+            $result[] = [
+                'trip_id'          => $subTrip->id,
+                'is_substitute'    => true,
+                'original_trip_id' => $disp->trip_id,
+                'dispatch_id'      => $disp->id,
+                'driver_location'  => [
                     'lat' => $driverLat !== null ? (float)$driverLat : null,
                     'lng' => $driverLng !== null ? (float)$driverLng : null,
                 ],

@@ -503,12 +503,56 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
             'notifiable_id' => $this->substituteDriverUser2->id,
         ]);
 
-        // 6. التحقق من إشعار ولي الأمر ببيانات السائق البديل
+        // 6. التحقق من إشعار ولي الأمر ببيانات السائق البديل وتوجيهه لرحلة البديل
         $this->assertDatabaseHas('notifications', [
             'notifiable_id' => $this->parentUser->id,
         ]);
+        $parentNotif = DB::table('notifications')
+            ->where('notifiable_id', $this->parentUser->id)
+            ->where('data', 'like', '%' . NotificationFormatter::TYPE_EMERGENCY_SUBSTITUTE_ACCEPTED_PARENT . '%')
+            ->first();
+        $this->assertNotNull($parentNotif);
+        $notifData = json_decode($parentNotif->data, true);
+        $this->assertEquals(NotificationFormatter::TYPE_EMERGENCY_SUBSTITUTE_ACCEPTED_PARENT, $notifData['type']);
+        $this->assertEquals((string) $dispatch->substitute_trip_id, (string) ($notifData['entity_id'] ?? null));
+        $this->assertEquals((string) $this->trip->id, (string) ($notifData['payload']['original_trip_id'] ?? null));
+        $this->assertEquals((string) $dispatch->substitute_trip_id, (string) ($notifData['payload']['substitute_trip_id'] ?? null));
+        $this->assertEquals((string) $dispatchId, (string) ($notifData['payload']['dispatch_id'] ?? null));
 
-        // 7. محاولة سائق آخر القبول بعد حسمها -> يجب أن تفشل بخطأ 409
+        // 7. التحقق من شاشة الرحلات النشطة لولي الأمر GET /api/v1/parent/trips/active
+        $activeResponse = $this->actingAs($this->parentUser, 'sanctum')
+            ->getJson('/api/v1/parent/trips/active');
+        $this->assertEquals(200, $activeResponse->status(), 'Active trips error: ' . json_encode($activeResponse->json()));
+        $activeData = $activeResponse->json('data');
+        $this->assertNotEmpty($activeData);
+        $this->assertEquals($dispatch->substitute_trip_id, $activeData[0]['trip_id']);
+        $this->assertTrue($activeData[0]['is_substitute']);
+        $this->assertEquals($this->trip->id, $activeData[0]['original_trip_id']);
+        $this->assertEquals($dispatchId, $activeData[0]['dispatch_id']);
+        $this->assertEquals($this->substituteDriver1->id, $activeData[0]['driver']['id']);
+        $this->assertCount(2, $activeData[0]['children']);
+
+        // 8. التحقق من التتبع المباشر لولي الأمر GET /api/v1/parent/trips/{substitute_trip_id}/track
+        $trackResponse = $this->actingAs($this->parentUser, 'sanctum')
+            ->getJson("/api/v1/parent/trips/{$dispatch->substitute_trip_id}/track");
+        $this->assertEquals(200, $trackResponse->status(), 'Track error: ' . json_encode($trackResponse->json()));
+        $trackData = $trackResponse->json('data');
+        $this->assertEquals($dispatch->substitute_trip_id, $trackData['trip_id']);
+        $this->assertTrue($trackData['is_substitute']);
+        $this->assertEquals($this->trip->id, $trackData['original_trip_id']);
+        $this->assertCount(2, $trackData['children']);
+
+        // 9. التحقق من تفاصيل الرحلة لولي الأمر GET /api/v1/parent/trips/{substitute_trip_id}
+        $detailsResponse = $this->actingAs($this->parentUser, 'sanctum')
+            ->getJson("/api/v1/parent/trips/{$dispatch->substitute_trip_id}");
+        $this->assertEquals(200, $detailsResponse->status(), 'Details error: ' . json_encode($detailsResponse->json()));
+        $detailsData = $detailsResponse->json('data');
+        $this->assertEquals($dispatch->substitute_trip_id, $detailsData['trip_id']);
+        $this->assertTrue($detailsData['is_substitute']);
+        $this->assertEquals($this->trip->id, $detailsData['original_trip_id']);
+        $this->assertCount(2, $detailsData['children']);
+
+        // 10. محاولة سائق آخر القبول بعد حسمها -> يجب أن تفشل بخطأ 409
         $conflictResponse = $this->actingAs($this->substituteDriverUser2, 'sanctum')
             ->postJson("/api/v1/driver/emergency-dispatches/{$dispatchId}/accept");
 
