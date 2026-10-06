@@ -29,7 +29,13 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 # بدون هذه الإضافة. تجاهل هذا الشرط يوفّر عملية بناء تستغرق ثوانٍ بدل تجميع grpc C++ الثقيل.
 RUN composer install --no-interaction --optimize-autoloader --no-dev --ignore-platform-req=ext-grpc
 
-RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+RUN mkdir -p /var/www/html/storage/logs \
+             /var/www/html/storage/framework/cache/data \
+             /var/www/html/storage/framework/sessions \
+             /var/www/html/storage/framework/views \
+             /var/www/html/bootstrap/cache \
+    && chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache \
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh

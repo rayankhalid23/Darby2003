@@ -23,6 +23,17 @@ if [ "$APP_ENV" = "production" ]; then
     php artisan view:cache
 fi
 
+# ضمان صلاحيات المجلدات لـ www-data في كل تشغيل للحاوية
+mkdir -p /var/www/html/storage/logs \
+         /var/www/html/storage/framework/cache/data \
+         /var/www/html/storage/framework/sessions \
+         /var/www/html/storage/framework/views \
+         /var/www/html/bootstrap/cache
+touch /var/www/html/storage/logs/laravel.log || true
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
+
 # Render (الخطة المجانية) ما توفر cron جاهز، فنشغّل حلقة تستدعي جدولة Laravel
 # كل دقيقة داخل نفس الحاوية بدل الاعتماد على cron خارجي.
 if [ "$RUN_SCHEDULER" != "false" ]; then
