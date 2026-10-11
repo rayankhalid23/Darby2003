@@ -99,6 +99,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('{tripId}/children/{tripChildId}/status', [DriverTripController::class, 'updateChildTripStatus']);
         Route::post('register-absence', [DriverTripController::class, 'registerAbsence']);
         Route::post('{tripId}/report-breakdown', [DriverTripController::class, 'reportBreakdown']);
+        Route::post('{tripId}/confirm-breakdown-transfer', [DriverTripController::class, 'confirmBreakdownTransfer']);
         Route::post('{tripId}/resume', [DriverTripController::class, 'resumeTrip']);
         Route::post('{tripId}/complete', [DriverTripController::class, 'complete']);
     });

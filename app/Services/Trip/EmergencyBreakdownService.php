@@ -5,6 +5,7 @@ namespace App\Services\Trip;
 use App\Models\Driver\Driver;
 use App\Models\Driver\DriverSeatSlot;
 use App\Models\Parent\Child;
+use App\Models\Parent\School;
 use App\Models\Shared\ActiveSubscription;
 use App\Models\Shared\PricingSetting;
 use App\Models\Shared\Route;
@@ -402,42 +403,100 @@ class EmergencyBreakdownService
             ]);
         }
 
-        // 2. جلب محطات الأطفال العالقين من الرحلة الأصلية
+        // 2. تصنيف الأطفال العالقين: من صعد الحافلة فعلياً (boarded) ومن ينتظر في منزله (pending)
         $strandedChildIds = $dispatch->stranded_children_ids ?? [];
-        $originalStops = TripStop::where('trip_id', $originalTrip->id)
-            ->whereIn('child_id', $strandedChildIds)
-            ->get();
 
-        // 3. إضافة محطة الالتقاط الموحدة من موقع الحافلة المعطلة
+        // الأطفال الذين صعدوا في الحافلة المعطلة بالفعل
+        $boardedChildIds = TripStop::where('trip_id', $originalTrip->id)
+            ->whereIn('child_id', $strandedChildIds)
+            ->where('status', TripStop::STATUS_BOARDED)
+            ->pluck('child_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        // الأطفال الذين ما زالوا في انتظار الحافلة في منازلهم ولم يتم التقاطهم بعد
+        $waitingChildIds = array_values(array_diff($strandedChildIds, $boardedChildIds));
+
         $highestSeq = TripStop::where('trip_id', $substituteTrip->id)->max('sequence_order') ?? 0;
 
-        TripStop::create([
-            'trip_id'        => $substituteTrip->id,
-            'stop_type'      => TripStop::TYPE_HOME,
-            'child_id'       => null,
-            'lat'            => $dispatch->breakdown_lat,
-            'lng'            => $dispatch->breakdown_lng,
-            'label'          => 'نقطة استلام الأطفال من الحافلة المتوقفة',
-            'sequence_order' => ++$highestSeq,
-            'status'         => TripStop::STATUS_PENDING,
-        ]);
-
-        // 4. إضافة محطات الوجهة لكل طفل عالق
-        foreach ($originalStops as $origStop) {
+        // 3. محطة السيارة المتوقفة: فقط إذا كان هناك أطفال صعدوا بالفعل داخل الحافلة المعطلة!
+        // إذا لم يصعد أي طفل (السائق لم يأخذ أطفالاً أبداً)، فلا توجد محطة للسيارة المتوقفة بل التوجه مباشرة لمنازل الأطفال.
+        if (!empty($boardedChildIds)) {
             TripStop::create([
                 'trip_id'        => $substituteTrip->id,
-                'stop_type'      => $origStop->stop_type,
-                'child_id'       => $origStop->child_id,
-                'school_id'      => $origStop->school_id,
-                'lat'            => $origStop->lat,
-                'lng'            => $origStop->lng,
-                'label'          => $origStop->label . ' (استكمال إنقاذ)',
+                'stop_type'      => TripStop::TYPE_HOME,
+                'child_id'       => null,
+                'lat'            => $dispatch->breakdown_lat,
+                'lng'            => $dispatch->breakdown_lng,
+                'label'          => 'السيارة المتوقفة (استلام الطلاب)',
                 'sequence_order' => ++$highestSeq,
                 'status'         => TripStop::STATUS_PENDING,
+                'reason'         => json_encode(['boarded_child_ids' => $boardedChildIds]),
             ]);
         }
 
-        // 5. إعادة حساب ترتيب المحطات والأوقات التقديرية الحية (Live ETAs)
+        // 4. إضافة محطات منازل الأطفال الذين ما زالوا ينتظرون في بيوتهم (استكمال التقاط)
+        // ملاحظة: الأطفال الذين صعدوا مسبقاً لا تُضاف منازلهم مطلقاً لأنهم متواجدون بالحافلة المتوقفة.
+        if (!empty($waitingChildIds)) {
+            $waitingHomeStops = TripStop::where('trip_id', $originalTrip->id)
+                ->where('stop_type', TripStop::TYPE_HOME)
+                ->whereIn('child_id', $waitingChildIds)
+                ->get();
+
+            foreach ($waitingHomeStops as $origStop) {
+                TripStop::create([
+                    'trip_id'        => $substituteTrip->id,
+                    'stop_type'      => TripStop::TYPE_HOME,
+                    'child_id'       => $origStop->child_id,
+                    'school_id'      => null,
+                    'lat'            => $origStop->lat,
+                    'lng'            => $origStop->lng,
+                    'label'          => $origStop->label . ' (استكمال إنقاذ)',
+                    'sequence_order' => ++$highestSeq,
+                    'status'         => TripStop::STATUS_PENDING,
+                ]);
+            }
+        }
+
+        // 5. إضافة محطات المدارس (Dropoff): دعم المدارس المختلفة لجميع الأطفال العالقين
+        $schoolIds = Child::whereIn('id', $strandedChildIds)
+            ->pluck('school_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $origSchoolStops = TripStop::where('trip_id', $originalTrip->id)
+            ->where('stop_type', TripStop::TYPE_SCHOOL)
+            ->whereIn('school_id', $schoolIds)
+            ->get()
+            ->keyBy('school_id');
+
+        foreach ($schoolIds as $sId) {
+            $origSchoolStop = $origSchoolStops->get($sId);
+            $schoolModel = $origSchoolStop ? null : School::find($sId);
+
+            $lat = $origSchoolStop?->lat ?? $schoolModel?->lat;
+            $lng = $origSchoolStop?->lng ?? $schoolModel?->lng;
+            $label = $origSchoolStop?->label ?? $schoolModel?->name ?? 'المدرسة';
+
+            if ($lat && $lng) {
+                TripStop::create([
+                    'trip_id'        => $substituteTrip->id,
+                    'stop_type'      => TripStop::TYPE_SCHOOL,
+                    'child_id'       => null,
+                    'school_id'      => $sId,
+                    'lat'            => $lat,
+                    'lng'            => $lng,
+                    'label'          => $label,
+                    'sequence_order' => ++$highestSeq,
+                    'status'         => TripStop::STATUS_PENDING,
+                ]);
+            }
+        }
+
+        // 6. إعادة حساب الأوقات التقديرية الحية (Live ETAs)
         $subLat = $substituteDriver->current_lat ?? $dispatch->breakdown_lat;
         $subLng = $substituteDriver->current_lng ?? $dispatch->breakdown_lng;
 

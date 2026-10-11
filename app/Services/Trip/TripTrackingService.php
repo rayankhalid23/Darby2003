@@ -63,16 +63,17 @@ class TripTrackingService
             ]);
         }
 
-        // نحدّث موقع الكاش + الطابع الزمني في كل نبضة (وليس فقط عند تغيّر الموقع بأكثر من 15م)
-        // حتى يعكس is_online عند ولي الأمر آخر وقت اتصال فعلي من السائق، لا آخر نقطة محفوظة بقاعدة البيانات
+        // نحدّث موقع الكاش + الطابع الزمني والسرعة والاتجاه في كل نبضة
         Cache::put($cacheKey, [
             'lat'        => $lat,
             'lng'        => $lng,
+            'speed'      => $speed,
+            'heading'    => $heading !== null ? (float) $heading : null,
             'timestamp'  => now()->timestamp,
             'updated_at' => now()->toIso8601String(),
         ], now()->addHours(6));
 
-        // 3. مزامنة الموقع اللحظي مع Firestore (trips_tracking/{tripId}) ليقرأها تطبيق ولي الأمر مباشرة
+        // 3. مزامنة الموقع اللحظي مع Firestore (trips_tracking/{tripId}) ليقرأها تطبيق ولي الأمر والرادار مباشرة
         $this->pushLocationToFirestore($tripId, $driverId, $lat, $lng, $speed, $heading, $trip->status === 'in_progress');
 
         return [
@@ -88,7 +89,7 @@ class TripTrackingService
      * الحقول الموحدة (Standard Schema المتفق عليه مع الفرونت):
      *   trip_id, driver_id, driver_lat, driver_lng, heading, speed, is_online, status, updated_at
      */
-    protected function pushLocationToFirestore(int $tripId, int $driverId, float $lat, float $lng, float $speed = 0, ?float $heading = null, bool $isOnline = true): void
+    public function pushLocationToFirestore(int $tripId, int $driverId, float $lat, float $lng, float $speed = 0, ?float $heading = null, bool $isOnline = true): void
     {
         $serviceAccountPath = config('firebase.credentials.file', storage_path('app/firebase/firebase-service-account.json'));
 

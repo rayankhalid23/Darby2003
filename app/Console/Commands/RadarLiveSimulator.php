@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Models\Driver\Driver;
 use App\Models\Shared\Trip;
 use App\Models\Shared\TripTracking;
+use App\Services\Trip\TripTrackingService;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * يحرّك كل الرحلات النشطة (status=in_progress) التي أنشأها trip:seed-radar-demo على
@@ -113,11 +115,14 @@ class RadarLiveSimulator extends Command
                 $speedKmh = $interval > 0 ? round(($distanceKm / $interval) * 3600, 1) : 0;
                 $heading = $this->bearing($prev[0], $prev[1], $cur[0], $cur[1]);
 
+                $speedVal = min($speedKmh, 80);
+                $headingVal = (float) $heading;
+
                 TripTracking::create([
                     'trip_id'     => $unit['trip_id'],
                     'latitude'    => $cur[0],
                     'longitude'   => $cur[1],
-                    'speed'       => min($speedKmh, 80),
+                    'speed'       => $speedVal,
                     'recorded_at' => now(),
                 ]);
 
@@ -126,6 +131,31 @@ class RadarLiveSimulator extends Command
                     'current_lng'  => $cur[1],
                     'last_ping_at' => now(),
                 ]);
+
+                // تحديث كاش التيليماتري اللحظي
+                Cache::put("driver_last_loc_{$unit['driver_id']}", [
+                    'lat'        => $cur[0],
+                    'lng'        => $cur[1],
+                    'speed'      => $speedVal,
+                    'heading'    => $headingVal,
+                    'timestamp'  => now()->timestamp,
+                    'updated_at' => now()->toIso8601String(),
+                ], now()->addHours(6));
+
+                // مزامنة فورية مع Firestore لرادار الأدمن وتتبع ولي الأمر
+                try {
+                    app(TripTrackingService::class)->pushLocationToFirestore(
+                        $unit['trip_id'],
+                        $unit['driver_id'],
+                        $cur[0],
+                        $cur[1],
+                        $speedVal,
+                        $headingVal,
+                        true
+                    );
+                } catch (\Throwable $e) {
+                    // Firestore sync failure never breaks the simulator
+                }
 
                 $this->line(sprintf(
                     '   [%s] trip_id=%-4d %-28s نقطة %d/%d  (%.6f, %.6f)  %d كم/س  اتجاه %d°',

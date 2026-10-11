@@ -493,10 +493,12 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         // 4. التحقق من تحديث محطات السائق البديل فوراً
         $subTripStops = TripStop::where('trip_id', $dispatch->substitute_trip_id)->get();
         $this->assertTrue($subTripStops->isNotEmpty());
-        // وجود محطة الالتقاط ومحطات الأطفال العالقين
         $this->assertTrue($subTripStops->contains('lat', 32.88500000));
-        $this->assertTrue($subTripStops->contains('child_id', $this->child1->id));
-        $this->assertTrue($subTripStops->contains('child_id', $this->child2->id));
+        $transferStop = $subTripStops->firstWhere('lat', 32.88500000);
+        $this->assertNotNull($transferStop);
+        $this->assertStringContainsString((string) $this->child1->id, (string) $transferStop->reason);
+        $this->assertStringContainsString((string) $this->child2->id, (string) $transferStop->reason);
+        $this->assertTrue($subTripStops->contains('school_id', $this->school->id));
 
         // 5. التحقق من إشعار الإلغاء للسائق الثاني
         $this->assertDatabaseHas('notifications', [

@@ -238,19 +238,27 @@
 
 ---
 
-### 3.2 الرادار الحي للرحلات الجارية (Live Active Trips Radar)
+### 3.2 الرادار الحي للرحلات الجارية (Live Active Trips Radar - Hybrid Firebase & Fallback)
 * **Method:** `GET`
 * **URL:** `/api/admin/dashboard/active-trips`
-* **وصف:** يُرجع قائمة الرحلات النشطة حالياً في طرابلس مع الموقع الجغرافي وتعيينات الخريطة.
+* **وصف:** يُرجع قائمة الرحلات النشطة حالياً في طرابلس مع الموقع الجغرافي اللحظي، وتعيينات الخريطة، وميتا-داتا الفايربيز.
+* **الاستراتيجية الهجينة (Hybrid Architecture):**
+  1. **الأساس (Realtime):** الفرونت يطلب هذا المسار أولاً لجلب تفاصيل السائقين والوجهات، ثم يفتح استماعاً حياً (onSnapshot) على Firestore في المجموعة `trips_tracking` حيث تُحدّث إحداثيات وسرعة واتجاه الحافلات فوراً.
+  2. **البديل (Fallback):** في حال تعذر الاتصال بـ Firebase، يتحول الفرونت تلقائياً للـ Polling الدوري (كل 3-5 ثوانٍ) عبر هذا المسار، حيث يقرأ الباك إند كاش التيليماتري اللحظي لضمان أدق حركة حتى بدون Firebase.
 * **Request Body:** لا يوجد.
 * **Success Response (200 OK):**
 ```json
 {
   "success": true,
   "count": 2,
+  "firebase": {
+    "collection": "trips_tracking",
+    "strategy": "realtime_with_backend_fallback"
+  },
   "data": [
     {
       "id": 24,
+      "trip_id": 24,
       "driver_id": 3,
       "name": "عبد السلام المصراتي",
       "phone": "0913456789",
@@ -261,16 +269,46 @@
       "status": "في الطريق للاستلام",
       "lat": 32.91,
       "lng": 13.17,
+      "heading": 135.0,
+      "speed": "55 كم/س",
+      "is_online": true,
+      "firestore_doc": "trips_tracking/24",
       "map_x": 28.0,
       "map_y": 45.0,
       "region": "حي الأندلس",
-      "speed": "55 كم/س",
       "last_update": "منذ دقيقتين"
     }
   ],
   "is_demo": false
 }
 ```
+
+#### 💡 كود مقترح لفرونت الأدمن (React / Vue / Flutter):
+```javascript
+// 1. جلب البيانات الأولية من الباك إند
+const res = await axios.get('/api/admin/dashboard/active-trips');
+renderTripsOnMap(res.data.data);
+
+// 2. الاستماع اللحظي عبر Firebase Firestore
+const unsubscribe = db.collection('trips_tracking')
+  .where('status', '==', 'active')
+  .onSnapshot(
+    (snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        const trip = change.doc.data();
+        updateMarkerPosition(trip.trip_id, trip.driver_lat, trip.driver_lng, trip.heading, trip.speed);
+      });
+    },
+    (error) => {
+      // 3. Fallback: عند فشل اتصال Firebase، الانتقال للـ Polling كل 4 ثوانٍ
+      console.warn('Firebase error, falling back to Backend polling:', error);
+      startBackendPollingFallback(4000);
+    }
+  );
+```
+
+> 📘 **الدليل الكامل المفصّل لربط رادار الأدمن بالفايربيز مع كود TypeScript/React كامل:**  
+> يُرجى مراجعة الملف المستقل: [`FRONTEND_ADMIN_RADAR_FIREBASE_GUIDE.md`](FRONTEND_ADMIN_RADAR_FIREBASE_GUIDE.md)
 
 ---
 

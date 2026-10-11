@@ -682,20 +682,46 @@ class DriverTripController extends Controller
                 ->orderBy('sequence_order')
                 ->get()
                 ->map(function ($stop) {
+                    $isTransferStop = false;
+                    $transferredChildren = [];
+
+                    if ($stop->reason) {
+                        $reasonData = json_decode($stop->reason, true);
+                        if (!empty($reasonData['boarded_child_ids'])) {
+                            $isTransferStop = true;
+                            $transferredChildren = \App\Models\Parent\Child::whereIn('id', $reasonData['boarded_child_ids'])
+                                ->with('school')
+                                ->get()
+                                ->map(fn($c) => [
+                                    'id'          => (int) $c->id,
+                                    'child_id'    => (int) $c->id,
+                                    'name'        => $c->full_name ?? $c->name,
+                                    'school_id'   => $c->school_id ? (int) $c->school_id : null,
+                                    'school_name' => $c->school?->name,
+                                ])
+                                ->values()
+                                ->all();
+                        }
+                    }
+
                     return [
-                        'id'             => (int) $stop->id,
-                        'stop_type'      => $stop->stop_type,
-                        'sequence_order' => (int) $stop->sequence_order,
-                        'status'         => $stop->status,
-                        'child_id'       => $stop->child_id ? (int) $stop->child_id : null,
-                        'child_name'     => $stop->child?->full_name ?? $stop->child?->name,
-                        'school_id'      => $stop->school_id ? (int) $stop->school_id : null,
-                        'school_name'    => $stop->school?->name,
-                        'label'          => $stop->label,
-                        'latitude'       => (float) $stop->lat,
-                        'longitude'      => (float) $stop->lng,
-                        'eta'            => $stop->eta ? substr((string) $stop->eta, 0, 5) : null,
-                        'eta_minutes'    => $stop->eta_minutes !== null ? (int) $stop->eta_minutes : null,
+                        'id'                         => (int) $stop->id,
+                        'stop_type'                  => $stop->stop_type,
+                        'sequence_order'             => (int) $stop->sequence_order,
+                        'status'                     => $stop->status,
+                        'child_id'                   => $stop->child_id ? (int) $stop->child_id : null,
+                        'child_name'                 => $stop->child?->full_name ?? $stop->child?->name,
+                        'school_id'                  => $stop->school_id ? (int) $stop->school_id : null,
+                        'school_name'                => $stop->school?->name,
+                        'label'                      => $stop->label,
+                        'latitude'                   => (float) $stop->lat,
+                        'longitude'                  => (float) $stop->lng,
+                        'eta'                        => $stop->eta ? substr((string) $stop->eta, 0, 5) : null,
+                        'eta_minutes'                => $stop->eta_minutes !== null ? (int) $stop->eta_minutes : null,
+                        'is_breakdown_transfer'      => $isTransferStop,
+                        'can_bulk_confirm'           => $isTransferStop && $stop->status === \App\Models\Shared\TripStop::STATUS_PENDING,
+                        'transferred_children_count' => count($transferredChildren),
+                        'transferred_children'       => $transferredChildren,
                     ];
                 });
 
@@ -710,6 +736,119 @@ class DriverTripController extends Controller
 
         } catch (Throwable $e) {
             return response()->json(['status' => 'error', 'message' => 'الرحلة غير موجودة.'], 404);
+        }
+    }
+
+    /**
+     * POST /api/v1/driver/trips/{tripId}/confirm-breakdown-transfer
+     * تأكيد استلام وصعود جميع الأطفال العالقين في الحافلة المعطلة دفعة واحدة للسائق البديل
+     */
+    public function confirmBreakdownTransfer(Request $request, $tripId): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            $driverId = $user->driver->id;
+
+            $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
+
+            if (strtolower((string) $trip->status) !== 'in_progress') {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_NOT_IN_PROGRESS',
+                    'message'    => 'يجب أن تكون الرحلة جارية لتأكيد استلام الأطفال.',
+                ], 409);
+            }
+
+            // البحث عن محطة استلام السيارة المعطلة
+            $transferStop = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('label', 'like', '%السيارة المتوقفة%')
+                ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
+                ->first();
+
+            if (!$transferStop) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRANSFER_STOP_NOT_FOUND',
+                    'message'    => 'لم يتم العثور على محطة استلام أطفال من الحافلة المتوقفة أو تم تأكيدها مسبقاً.',
+                ], 404);
+            }
+
+            $reasonData = json_decode($transferStop->reason ?? '{}', true);
+            $childIds = $reasonData['boarded_child_ids'] ?? [];
+
+            if (empty($childIds)) {
+                $dispatch = \App\Models\Shared\TripBreakdownDispatch::where('substitute_trip_id', $trip->id)->first();
+                if ($dispatch && !empty($dispatch->stranded_children_ids)) {
+                    $childIds = \App\Models\Shared\TripStop::where('trip_id', $dispatch->trip_id)
+                        ->whereIn('child_id', $dispatch->stranded_children_ids)
+                        ->where('status', \App\Models\Shared\TripStop::STATUS_BOARDED)
+                        ->pluck('child_id')
+                        ->toArray();
+                }
+            }
+
+            if (empty($childIds)) {
+                $transferStop->update(['status' => \App\Models\Shared\TripStop::STATUS_BOARDED]);
+                return response()->json([
+                    'status'  => 'success',
+                    'message' => 'تم تأكيد محطة السيارة المتوقفة بنجاح.',
+                ], 200);
+            }
+
+            $lat = $request->latitude ?? $request->lat ?? $transferStop->lat;
+            $lng = $request->longitude ?? $request->lng ?? $transferStop->lng;
+            $eventTripType = ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب') ? 'ذهاب' : 'عودة';
+
+            DB::transaction(function () use ($trip, $childIds, $transferStop, $lat, $lng, $eventTripType) {
+                $transferStop->update(['status' => \App\Models\Shared\TripStop::STATUS_BOARDED]);
+
+                foreach ($childIds as $cId) {
+                    $sub = ActiveSubscription::forChild((int) $cId)->where('status', 'active')->first()
+                        ?? ActiveSubscription::forChild((int) $cId)->first();
+
+                    TripEvent::updateOrCreate(
+                        ['trip_id' => $trip->id, 'child_id' => $cId, 'action_type' => 'picked_up'],
+                        [
+                            'subscription_id' => $sub?->id,
+                            'trip_type'       => $eventTripType,
+                            'location_lat'    => (float) $lat,
+                            'location_lng'    => (float) $lng,
+                            'scanned_at'      => Carbon::now(),
+                            'trip_cost'       => 0,
+                        ]
+                    );
+
+                    $child = \App\Models\Parent\Child::with('parent.user')->find($cId);
+                    $parentUser = $child?->parent?->user;
+                    if ($parentUser) {
+                        $this->notificationService->sendToUser(
+                            $parentUser,
+                            \App\Services\Notification\NotificationFormatter::TYPE_CHILD_PICKED_UP,
+                            [
+                                'title'      => 'تم استلام الطفل بالحافلة البديلة 🚏',
+                                'message'    => "تم نقل طفلكم ({$child->full_name}) إلى الحافلة البديلة بسلام من موقع الحافلة المتوقفة.",
+                                'child_name' => $child->full_name,
+                                'trip_id'    => (string) $trip->id,
+                                'child_id'   => $cId,
+                                'entity_id'  => $trip->id . '_sub_transfer_' . $cId,
+                            ]
+                        );
+                    }
+                }
+            });
+
+            $confirmedChildren = \App\Models\Parent\Child::whereIn('id', $childIds)->get(['id', 'full_name']);
+
+            return response()->json([
+                'status'                     => 'success',
+                'message'                    => 'تم تأكيد استلام وصعود جميع أطفال الحافلة المتوقفة بنجاح.',
+                'stop_id'                    => $transferStop->id,
+                'transferred_children_count' => count($childIds),
+                'children'                   => $confirmedChildren,
+            ], 200);
+
+        } catch (Throwable $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
 
@@ -1040,7 +1179,33 @@ class DriverTripController extends Controller
             // 🔒 التحقق من ملكية الاشتراك للسائق الحالي لمنع التلاعب باشتراكات سائقين آخرين (IDOR)
             $sub = ActiveSubscription::where('id', $subId)->forDriver($driverId)->first();
             if (!$sub) {
-                $sub = ActiveSubscription::where('child_id', $subId)->forDriver($driverId)->first();
+                $sub = ActiveSubscription::forChild((int) $subId)->forDriver($driverId)->first();
+            }
+
+            // في حال كان السائق بديلاً في حالة طوارئ، أو الطفل مدرج في محطات رحلة السائق الحالي
+            if (!$sub) {
+                $subCandidate = ActiveSubscription::find($subId);
+                $isSubstituteChild = false;
+                if ($subCandidate) {
+                    $isSubstituteChild = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                        ->where('child_id', $subCandidate->child_id)
+                        ->exists();
+                }
+                if (!$isSubstituteChild) {
+                    $isSubstituteChild = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                        ->where('child_id', $subId)
+                        ->exists()
+                        || \App\Models\Shared\TripBreakdownDispatch::where('substitute_trip_id', $trip->id)
+                            ->where(function ($q) use ($subId) {
+                                $q->whereJsonContains('stranded_children_ids', (int) $subId)
+                                  ->orWhereJsonContains('stranded_children_ids', (string) $subId);
+                            })
+                            ->exists();
+                }
+
+                if ($isSubstituteChild) {
+                    $sub = $subCandidate ?? ActiveSubscription::forChild((int) $subId)->first();
+                }
             }
 
             if (!$sub) {

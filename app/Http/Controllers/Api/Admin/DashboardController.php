@@ -10,6 +10,7 @@ use App\Models\Shared\ActiveSubscription;
 use App\Models\Shared\TripTracking;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 class DashboardController extends Controller
 {
@@ -156,6 +157,7 @@ class DashboardController extends Controller
     /**
      * GET /api/admin/dashboard/active-trips
      * يُرجع قائمة الرحلات النشطة الآن مع تفاصيل السائق والأطفال والموقع
+     * ويعتمد نظاماً هجيناً (Firestore Realtime + Backend Telemetry Fallback)
      */
     public function activeTrips(): JsonResponse
     {
@@ -181,10 +183,34 @@ class DashboardController extends Controller
                 $driver   = $trip->driver;
                 $user     = $driver?->user;
 
-                // --- الموقع الحالي: من آخر تتبع أو من current_lat/lng للسائق ---
+                // --- التيليماتري اللحظية: فحص الكاش الحي أولاً، ثم جدول trip_tracking، ثم جدول drivers ---
+                $cacheKey = $driver ? "driver_last_loc_{$driver->id}" : null;
+                $cachedLoc = $cacheKey ? Cache::get($cacheKey) : null;
                 $lastTrack = $trip->tracking->first();
-                $lat = $lastTrack?->latitude  ?? $driver?->current_lat ?? 32.9 + (rand(-50, 50) / 1000);
-                $lng = $lastTrack?->longitude ?? $driver?->current_lng ?? 13.2 + (rand(-50, 50) / 1000);
+
+                $lat = $cachedLoc['lat'] ?? $lastTrack?->latitude ?? $driver?->current_lat ?? (32.9 + (rand(-50, 50) / 1000));
+                $lng = $cachedLoc['lng'] ?? $lastTrack?->longitude ?? $driver?->current_lng ?? (13.2 + (rand(-50, 50) / 1000));
+
+                $isOnline = false;
+                if (isset($cachedLoc['timestamp']) && (time() - $cachedLoc['timestamp'] <= 300)) {
+                    $isOnline = true;
+                }
+
+                $heading = isset($cachedLoc['heading']) ? (float) $cachedLoc['heading'] : null;
+
+                $speedDisplay = '0 كم/س';
+                if (isset($cachedLoc['speed'])) {
+                    $speedDisplay = round((float) $cachedLoc['speed']) . ' كم/س';
+                } elseif ($lastTrack?->speed) {
+                    $speedDisplay = round((float) $lastTrack->speed) . ' كم/س';
+                }
+
+                $lastUpdateDisplay = 'منذ قليل';
+                if (!empty($cachedLoc['updated_at'])) {
+                    $lastUpdateDisplay = Carbon::parse($cachedLoc['updated_at'])->diffForHumans();
+                } elseif ($lastTrack?->recorded_at) {
+                    $lastUpdateDisplay = $lastTrack->recorded_at->diffForHumans();
+                }
 
                 // --- الأطفال المرتبطين بهذه الرحلة عبر اشتراكات السائق ---
                 $childrenNames = $driver?->activeSubscriptions
@@ -212,22 +238,26 @@ class DashboardController extends Controller
                 $mapY = round(max(10, min(85, ((33.2 - $lat) / 0.7) * 75 + 10)), 1);
 
                 return [
-                    'id'          => $trip->id,
-                    'driver_id'   => $driver?->id,
-                    'name'        => $user?->full_name ?? 'سائق غير معروف',
-                    'phone'       => $user?->phone_number ?? '---',
-                    'avatar'      => $user?->avatar_url ?? "https://ui-avatars.com/api/?name=" . urlencode($user?->full_name ?? 'D') . "&background=3b82f6&color=fff&size=100",
-                    'children'    => $childrenNames,
-                    'destination' => $destination,
-                    'duration'    => $duration,
-                    'status'      => 'في الطريق للاستلام',
-                    'lat'         => $lat,
-                    'lng'         => $lng,
-                    'map_x'       => $mapX,   // نسبة X% على خريطة SVG
-                    'map_y'       => $mapY,   // نسبة Y% على خريطة SVG
-                    'region'      => $this->getRegionName($lat, $lng),
-                    'speed'       => $lastTrack?->speed ? round($lastTrack->speed) . ' كم/س' : '45 كم/س',
-                    'last_update' => $lastTrack?->recorded_at?->diffForHumans() ?? 'منذ قليل',
+                    'id'             => $trip->id,
+                    'trip_id'        => $trip->id,
+                    'driver_id'      => $driver?->id,
+                    'name'           => $user?->full_name ?? 'سائق غير معروف',
+                    'phone'          => $user?->phone_number ?? '---',
+                    'avatar'         => $user?->avatar_url ?? "https://ui-avatars.com/api/?name=" . urlencode($user?->full_name ?? 'D') . "&background=3b82f6&color=fff&size=100",
+                    'children'       => $childrenNames,
+                    'destination'    => $destination,
+                    'duration'       => $duration,
+                    'status'         => 'في الطريق للاستلام',
+                    'lat'            => (float) $lat,
+                    'lng'            => (float) $lng,
+                    'heading'        => $heading,
+                    'speed'          => $speedDisplay,
+                    'is_online'      => $isOnline,
+                    'firestore_doc'  => "trips_tracking/{$trip->id}",
+                    'map_x'          => $mapX,   // نسبة X% على خريطة SVG
+                    'map_y'          => $mapY,   // نسبة Y% على خريطة SVG
+                    'region'         => $this->getRegionName((float) $lat, (float) $lng),
+                    'last_update'    => $lastUpdateDisplay,
                 ];
             });
 
@@ -237,10 +267,14 @@ class DashboardController extends Controller
         }
 
         return response()->json([
-            'success' => true,
-            'count'   => $activeTrips->count(),
-            'data'    => $activeTrips,
-            'is_demo' => Trip::where('status', 'in_progress')->doesntExist(),
+            'success'  => true,
+            'count'    => $activeTrips->count(),
+            'firebase' => [
+                'collection' => 'trips_tracking',
+                'strategy'   => 'realtime_with_backend_fallback',
+            ],
+            'data'     => $activeTrips,
+            'is_demo'  => Trip::where('status', 'in_progress')->doesntExist(),
         ]);
     }
 
@@ -270,58 +304,70 @@ class DashboardController extends Controller
     {
         return collect([
             [
-                'id'          => 1,
-                'driver_id'   => 1,
-                'name'        => 'عبد السلام المصراتي',
-                'phone'       => '091-3456789',
-                'avatar'      => 'https://ui-avatars.com/api/?name=%D8%B9%D8%A8%D8%AF%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85&background=3b82f6&color=fff&size=100',
-                'children'    => 'علي ومروة',
-                'destination' => 'مدرسة الجيل الجديد الدولي...',
-                'duration'    => '12 دقيقة',
-                'status'      => 'في الطريق للاستلام',
-                'lat'         => 32.91,
-                'lng'         => 13.17,
-                'map_x'       => 28.0,
-                'map_y'       => 45.0,
-                'region'      => 'حي الأندلس',
-                'speed'       => '55 كم/س',
-                'last_update' => 'منذ دقيقتين',
+                'id'            => 1,
+                'trip_id'       => 1,
+                'driver_id'     => 1,
+                'name'          => 'عبد السلام المصراتي',
+                'phone'         => '091-3456789',
+                'avatar'        => 'https://ui-avatars.com/api/?name=%D8%B9%D8%A8%D8%AF%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85&background=3b82f6&color=fff&size=100',
+                'children'      => 'علي ومروة',
+                'destination'   => 'مدرسة الجيل الجديد الدولي...',
+                'duration'      => '12 دقيقة',
+                'status'        => 'في الطريق للاستلام',
+                'lat'           => 32.91,
+                'lng'           => 13.17,
+                'heading'       => 45.0,
+                'speed'         => '55 كم/س',
+                'is_online'     => true,
+                'firestore_doc' => 'trips_tracking/1',
+                'map_x'         => 28.0,
+                'map_y'         => 45.0,
+                'region'        => 'حي الأندلس',
+                'last_update'   => 'منذ دقيقتين',
             ],
             [
-                'id'          => 2,
-                'driver_id'   => 2,
-                'name'        => 'مفتاح الزنتاني',
-                'phone'       => '092-6549873',
-                'avatar'      => 'https://ui-avatars.com/api/?name=%D9%85%D9%81%D8%AA%D8%A7%D8%AD&background=10b981&color=fff&size=100',
-                'children'    => 'أحمد وسند',
-                'destination' => 'مدرسة الشروق الأهلية، الس...',
-                'duration'    => '4 دقائق',
-                'status'      => 'في الطريق للاستلام',
-                'lat'         => 32.90,
-                'lng'         => 13.22,
-                'map_x'       => 52.0,
-                'map_y'       => 38.0,
-                'region'      => 'بن عاشور',
-                'speed'       => '40 كم/س',
-                'last_update' => 'منذ دقيقة',
+                'id'            => 2,
+                'trip_id'       => 2,
+                'driver_id'     => 2,
+                'name'          => 'مفتاح الزنتاني',
+                'phone'         => '092-6549873',
+                'avatar'        => 'https://ui-avatars.com/api/?name=%D9%85%D9%81%D8%AA%D8%A7%D8%AD&background=10b981&color=fff&size=100',
+                'children'      => 'أحمد وسند',
+                'destination'   => 'مدرسة الشروق الأهلية، الس...',
+                'duration'      => '4 دقائق',
+                'status'        => 'في الطريق للاستلام',
+                'lat'           => 32.90,
+                'lng'           => 13.22,
+                'heading'       => 90.0,
+                'speed'         => '40 كم/س',
+                'is_online'     => true,
+                'firestore_doc' => 'trips_tracking/2',
+                'map_x'         => 52.0,
+                'map_y'         => 38.0,
+                'region'        => 'بن عاشور',
+                'last_update'   => 'منذ دقيقة',
             ],
             [
-                'id'          => 3,
-                'driver_id'   => 3,
-                'name'        => 'علي غومة',
-                'phone'       => '092-2223344',
-                'avatar'      => 'https://ui-avatars.com/api/?name=%D8%B9%D9%84%D9%8A&background=f59e0b&color=fff&size=100',
-                'children'    => 'سارة وخالد',
-                'destination' => 'مدرسة طرابلس المركزية...',
-                'duration'    => '8 دقائق',
-                'status'      => 'في الطريق للاستلام',
-                'lat'         => 32.89,
-                'lng'         => 13.38,
-                'map_x'       => 78.0,
-                'map_y'       => 48.0,
-                'region'      => 'تاجوراء',
-                'speed'       => '65 كم/س',
-                'last_update' => 'الآن',
+                'id'            => 3,
+                'trip_id'       => 3,
+                'driver_id'     => 3,
+                'name'          => 'علي غومة',
+                'phone'         => '092-2223344',
+                'avatar'        => 'https://ui-avatars.com/api/?name=%D8%B9%D9%84%D9%8A&background=f59e0b&color=fff&size=100',
+                'children'      => 'سارة وخالد',
+                'destination'   => 'مدرسة طرابلس المركزية...',
+                'duration'      => '8 دقائق',
+                'status'        => 'في الطريق للاستلام',
+                'lat'           => 32.89,
+                'lng'           => 13.38,
+                'heading'       => 180.0,
+                'speed'         => '65 كم/س',
+                'is_online'     => true,
+                'firestore_doc' => 'trips_tracking/3',
+                'map_x'         => 78.0,
+                'map_y'         => 48.0,
+                'region'        => 'تاجوراء',
+                'last_update'   => 'الآن',
             ],
         ]);
     }
