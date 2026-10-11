@@ -9,6 +9,7 @@ use App\Models\Parent\School;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 class ActiveSubscription extends Model
 {
@@ -75,30 +76,55 @@ class ActiveSubscription extends Model
     }
 
     /**
-     * ⚠️ child_id/driver_id/parent_id/school_id ما عادوش أعمدة فعلية — بس بما إن
-     * BelongsTo يبني استعلامه عبر $this->{$foreignKey} (يمر بالـaccessor)، إبقاء
-     * هذي العلاقات كما هي بالضبط (بدل hasOneThrough أو حذفها) يخلي كل ->with(['child'])/
-     * ->with(['driver'])/->with(['parent'])/->with(['school']) الموجودة بالكود القديم
-     * تشتغل صح بدون أي تعديل، طالما الـaccessors تحت موجودة.
+     * العلاقات التوافقية مع الجداول المرتبطة عبر HasOneThrough
+     * لتسهيل الاستعلام بـ whereHas و with دون اشتراط وجود الأعمدة مباشرة في جدول active_subscriptions.
      */
-    public function child(): BelongsTo
+    public function child(): HasOneThrough
     {
-        return $this->belongsTo(Child::class, 'child_id');
+        return $this->hasOneThrough(
+            Child::class,
+            RequestChild::class,
+            'id',               // Foreign key on request_children (id)
+            'id',               // Foreign key on children (id)
+            'request_child_id', // Local key on active_subscriptions
+            'child_id'          // Local key on request_children
+        );
     }
 
-    public function driver(): BelongsTo
+    public function driver(): HasOneThrough
     {
-        return $this->belongsTo(Driver::class, 'driver_id');
+        return $this->hasOneThrough(
+            Driver::class,
+            SubscriptionRequest::class,
+            'id',                      // Foreign key on subscription_requests (id)
+            'id',                      // Foreign key on drivers (id)
+            'subscription_request_id', // Local key on active_subscriptions
+            'driver_id'                // Local key on subscription_requests
+        );
     }
 
-    public function parent(): BelongsTo
+    public function parent(): HasOneThrough
     {
-        return $this->belongsTo(User::class, 'parent_id');
+        return $this->hasOneThrough(
+            User::class,
+            SubscriptionRequest::class,
+            'id',                      // Foreign key on subscription_requests (id)
+            'id',                      // Foreign key on users (id)
+            'subscription_request_id', // Local key on active_subscriptions
+            'parent_id'                // Local key on subscription_requests
+        );
     }
 
-    public function school(): BelongsTo
+    public function school(): HasOneThrough
     {
-        return $this->belongsTo(School::class, 'school_id');
+        return $this->hasOneThrough(
+            School::class,
+            RequestChild::class,
+            'id',               // Foreign key on request_children (id)
+            'id',               // Foreign key on schools (id)
+            'request_child_id', // Local key on active_subscriptions
+            'school_id'         // Local key on request_children
+        );
     }
 
     // ============================================================
