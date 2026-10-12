@@ -771,4 +771,233 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         $dispatch = TripBreakdownDispatch::find($dispatchId);
         $this->assertEquals(TripBreakdownDispatch::STATUS_CANCELLED, $dispatch->status);
     }
+
+    /**
+     * اختبار سيناريو: السائق الأساسي لديه 5 أطفال (صعد 2، وما زال 3 في الانتظار).
+     * عند الإبلاغ عن العطل:
+     * - الأطفال العالقون في الحافلة هم 2 فقط (boarded).
+     * - الأطفال الـ 3 المنتظرون في منازلهم (pending) لا يذهبون للسائق البديل ولا يظهرون في مساره.
+     * - مسار السائق البديل يحتوي فقط على أطفاله الأصليين + محطة استلام من الحافلة المتوقفة (للطفلين) + مدرستهما.
+     * - التحقق من إشعار وصول السائق للوجهة/المحطة (وصول للحافلة المتوقفة أو للمدرسة أو للمنزل).
+     */
+    public function test_breakdown_with_five_children_transfers_only_boarded_to_substitute_driver(): void
+    {
+        $service = app(EmergencyBreakdownService::class);
+
+        // 1. إنشاء 3 أطفال إضافيين مع عناوينهم واشتراكاتهم
+        $child3 = Child::create([
+            'parent_id'     => $this->parent->id,
+            'school_id'     => $this->school->id,
+            'address_id'    => $this->homeAddress->id,
+            'full_name'     => 'يوسف أحمد (منتظر)',
+            'birth_date'    => '2017-02-01',
+            'gender'        => 'male',
+            'grade'         => 2,
+            'qr_code_token' => 'QR_CHILD_3',
+        ]);
+        $child4 = Child::create([
+            'parent_id'     => $this->parent->id,
+            'school_id'     => $this->school->id,
+            'address_id'    => $this->homeAddress->id,
+            'full_name'     => 'مريم أحمد (منتظرة)',
+            'birth_date'    => '2019-03-01',
+            'gender'        => 'female',
+            'grade'         => 1,
+            'qr_code_token' => 'QR_CHILD_4',
+        ]);
+        $child5 = Child::create([
+            'parent_id'     => $this->parent->id,
+            'school_id'     => $this->school->id,
+            'address_id'    => $this->homeAddress->id,
+            'full_name'     => 'سارة أحمد (منتظرة)',
+            'birth_date'    => '2020-04-01',
+            'gender'        => 'female',
+            'grade'         => 1,
+            'qr_code_token' => 'QR_CHILD_5',
+        ]);
+
+        // إضافة محطات الـ 3 أطفال كـ pending (لم يصعدوا بعد)
+        $stop3 = TripStop::create([
+            'trip_id'        => $this->trip->id,
+            'stop_type'      => TripStop::TYPE_HOME,
+            'child_id'       => $child3->id,
+            'lat'            => 32.88100000,
+            'lng'            => 13.18100000,
+            'label'          => 'منزل يوسف',
+            'sequence_order' => 4,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+        $stop4 = TripStop::create([
+            'trip_id'        => $this->trip->id,
+            'stop_type'      => TripStop::TYPE_HOME,
+            'child_id'       => $child4->id,
+            'lat'            => 32.88200000,
+            'lng'            => 13.18200000,
+            'label'          => 'منزل مريم',
+            'sequence_order' => 5,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+        $stop5 = TripStop::create([
+            'trip_id'        => $this->trip->id,
+            'stop_type'      => TripStop::TYPE_HOME,
+            'child_id'       => $child5->id,
+            'lat'            => 32.88300000,
+            'lng'            => 13.18300000,
+            'label'          => 'منزل سارة',
+            'sequence_order' => 6,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+
+        // التأكد من أن الرحلة بها 5 أطفال في المحطات: 2 صعدوا (boarded) و 3 في الانتظار (pending)
+        $totalChildrenStops = TripStop::where('trip_id', $this->trip->id)
+            ->whereNotNull('child_id')
+            ->count();
+        $this->assertEquals(5, $totalChildrenStops);
+
+        // 2. السائق الأساسي يبلغ عن عطل
+        $reportResult = $service->reportBreakdown(
+            $this->trip,
+            32.88500000,
+            13.18500000,
+            'عطل طارئ بعد ركوب طالبين'
+        );
+
+        // التأكد من أن النظام حصر الأطفال الـ 5 المتبقين لنقلهم للسائق البديل
+        $this->assertEquals(5, $reportResult['stranded_children_count']);
+        $dispatchId = $reportResult['dispatch_id'];
+        $dispatch = TripBreakdownDispatch::find($dispatchId);
+        $this->assertEquals(5, count($dispatch->stranded_children_ids));
+        $this->assertContains($this->child1->id, $dispatch->stranded_children_ids);
+        $this->assertContains($this->child2->id, $dispatch->stranded_children_ids);
+        $this->assertContains($child3->id, $dispatch->stranded_children_ids);
+        $this->assertContains($child4->id, $dispatch->stranded_children_ids);
+        $this->assertContains($child5->id, $dispatch->stranded_children_ids);
+
+        // 3. إنشاء رحلة خاصة بالسائق البديل بها طفل خاص به مسبقاً
+        $subChild = Child::create([
+            'parent_id'     => $this->parent->id,
+            'school_id'     => $this->school->id,
+            'address_id'    => $this->homeAddress->id,
+            'full_name'     => 'طفل السائق البديل',
+            'birth_date'    => '2016-01-01',
+            'gender'        => 'male',
+            'grade'         => 3,
+            'qr_code_token' => 'QR_SUB_CHILD',
+        ]);
+
+        $subRoute = Route::create([
+            'driver_id'   => $this->substituteDriver1->id,
+            'vehicle_id'  => $this->substituteVehicle1->id,
+            'route_name'  => 'مسار السائق البديل',
+            'route_type'  => 'Morning',
+            'shift_slot'  => 'morning_go',
+            'status'      => 'Active',
+            'start_time'  => '07:00:00',
+        ]);
+
+        $subTrip = Trip::create([
+            'driver_id'            => $this->substituteDriver1->id,
+            'route_id'             => $subRoute->id,
+            'trip_type'            => 'Morning',
+            'shift_slot'           => 'morning_go',
+            'status'               => 'in_progress',
+            'start_lat'            => 32.87600000,
+            'start_lng'            => 13.17600000,
+            'scheduled_start_time' => now(),
+            'actual_start_time'    => now(),
+            'trip_date'            => Carbon::today()->toDateString(),
+        ]);
+
+        TripStop::create([
+            'trip_id'        => $subTrip->id,
+            'stop_type'      => TripStop::TYPE_HOME,
+            'child_id'       => $subChild->id,
+            'lat'            => 32.87800000,
+            'lng'            => 13.17800000,
+            'label'          => 'منزل طفل البديل الأصلي',
+            'sequence_order' => 1,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+
+        TripStop::create([
+            'trip_id'        => $subTrip->id,
+            'stop_type'      => TripStop::TYPE_SCHOOL,
+            'school_id'      => $this->school->id,
+            'lat'            => 32.89000000,
+            'lng'            => 13.19000000,
+            'label'          => 'المدرسة',
+            'sequence_order' => 2,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+
+        // 4. السائق البديل يقبل مهمة الإنقاذ
+        $acceptResult = $service->acceptBreakdownDispatch($dispatchId, $this->substituteDriver1->id);
+        $this->assertEquals('success', $acceptResult['status']);
+
+        // 5. فحص المحطات في رحلة السائق البديل
+        $subStops = TripStop::where('trip_id', $subTrip->id)->get();
+
+        // يجب أن تظهر منازل الأطفال الـ 3 الذين لم يصعدوا بعد في مسار السائق البديل لاستكمال نقلهم
+        $subChildIdsInRoute = $subStops->pluck('child_id')->filter()->all();
+        $this->assertContains($child3->id, $subChildIdsInRoute);
+        $this->assertContains($child4->id, $subChildIdsInRoute);
+        $this->assertContains($child5->id, $subChildIdsInRoute);
+
+        // المحطات في رحلة البديل يجب أن تشمل:
+        // - محطة طفله الأصلي (child_id = subChild->id)
+        // - محطة استلام الأطفال من السيارة المتوقفة (الطفلين child1, child2 الصاعدين)
+        // - محطات منازل الأطفال الـ 3 المنتظرين (child3, child4, child5)
+        // - محطة المدرسة
+        $this->assertContains($subChild->id, $subChildIdsInRoute);
+        $breakdownStop = $subStops->firstWhere('label', 'السيارة المتوقفة (استلام الطلاب)');
+        $this->assertNotNull($breakdownStop);
+        $this->assertNull($breakdownStop->child_id);
+        $reasonData = json_decode($breakdownStop->reason, true);
+        $this->assertEquals([$this->child1->id, $this->child2->id], $reasonData['boarded_child_ids']);
+
+        // التأكد من وجود محطات المنازل للأطفال الـ 3
+        $this->assertNotNull($subStops->firstWhere('child_id', $child3->id));
+        $this->assertNotNull($subStops->firstWhere('child_id', $child4->id));
+        $this->assertNotNull($subStops->firstWhere('child_id', $child5->id));
+
+        // 6. اختبار إشعار وصول السائق للوجهة (GPS Tracking)
+        $trackingService = app(\App\Services\Trip\TripTrackingService::class);
+
+        // السائق البديل يقترب من موقع الحافلة المتوقفة (أقل من 60 متر)
+        $resLocation = $trackingService->updateDriverLocation(
+            $subTrip->id,
+            (float) $breakdownStop->lat,
+            (float) $breakdownStop->lng,
+            20.0
+        );
+
+        $this->assertEquals('success', $resLocation['status']);
+        $this->assertNotEmpty($resLocation['proximity']['alerts']);
+        $this->assertEquals('arrived_breakdown_bus', $resLocation['proximity']['alerts'][0]['type']);
+
+        // السائق البديل يصل لمنزل أحد الأطفال الـ 3 المنتظرين (أقل من 60 متر)
+        $child3Stop = $subStops->firstWhere('child_id', $child3->id);
+        $resHome = $trackingService->updateDriverLocation(
+            $subTrip->id,
+            (float) $child3Stop->lat,
+            (float) $child3Stop->lng,
+            10.0
+        );
+        $this->assertEquals('success', $resHome['status']);
+        $homeAlert = collect($resHome['proximity']['alerts'])->firstWhere('type', 'arrived_home');
+        $this->assertNotNull($homeAlert);
+
+        // السائق يصل إلى المدرسة (أقل من 80 متر)
+        $schoolStop = $subStops->firstWhere('stop_type', TripStop::TYPE_SCHOOL);
+        $resSchool = $trackingService->updateDriverLocation(
+            $subTrip->id,
+            (float) $schoolStop->lat,
+            (float) $schoolStop->lng,
+            15.0
+        );
+
+        $this->assertEquals('success', $resSchool['status']);
+        $schoolAlert = collect($resSchool['proximity']['alerts'])->firstWhere('type', 'arrived_school');
+        $this->assertNotNull($schoolAlert);
+    }
 }

@@ -232,7 +232,31 @@ class TripTrackingService
             $distKm = $this->calculateHaversineDistance($driverLat, $driverLng, (float) $stop->lat, (float) $stop->lng);
             $distMeters = $distKm * 1000;
 
-            if ($stop->stop_type === TripStop::TYPE_HOME) {
+            // فحص محطة استلام الطلاب من السيارة المعطلة (child_id is null أو label يحتوي على السيارة المتوقفة)
+            if ($stop->child_id === null && ($stop->stop_type === TripStop::TYPE_HOME || str_contains($stop->label ?? '', 'السيارة المتوقفة'))) {
+                // إشعار وصول السائق البديل إلى موقع الحافلة المعطلة لاستلام الأطفال (60 متر أو أقل)
+                if ($distMeters <= 60 && $stop->status === TripStop::STATUS_PENDING) {
+                    $breakdownArrKey = "arrival_driver_breakdown_sent_{$trip->id}_{$stop->id}";
+                    if (!Cache::has($breakdownArrKey)) {
+                        Cache::put($breakdownArrKey, true, now()->addHours(6));
+
+                        if ($driverUser) {
+                            $this->notificationService->sendToUser($driverUser, NotificationFormatter::TYPE_DRIVER_ARRIVED_HOME, [
+                                'title'     => 'وصلت إلى موقع الحافلة المتوقفة 🚌',
+                                'message'   => 'لقد وصلت إلى موقع الحافلة المتوقفة، يرجى استلام الطلاب العالقين ومتابعة الرحلة.',
+                                'trip_id'   => (string) $trip->id,
+                                'entity_id' => $trip->id . '_breakdown_' . $stop->id,
+                            ]);
+                        }
+
+                        $alerts[] = [
+                            'type'            => 'arrived_breakdown_bus',
+                            'stop_id'         => $stop->id,
+                            'distance_meters' => round($distMeters, 1),
+                        ];
+                    }
+                }
+            } elseif ($stop->stop_type === TripStop::TYPE_HOME) {
                 $child = $stop->child;
                 $childName = $child?->full_name ?? $child?->name ?? 'الطفل';
                 $parentUser = $child?->parent?->user;
@@ -335,10 +359,11 @@ class TripTrackingService
                 }
             } elseif ($stop->stop_type === TripStop::TYPE_SCHOOL) {
                 $schoolName = $stop->school?->name ?? $stop->label ?? 'المدرسة';
+                $schoolIdentifier = $stop->school_id ?? $stop->id;
 
                 // 3️⃣ إشعار وصول السائق إلى المدرسة (مسافة 80 متر أو أقل)
                 if ($distMeters <= 80) {
-                    $driverSchoolArrKey = "arrival_driver_school_sent_{$trip->id}_{$stop->school_id}";
+                    $driverSchoolArrKey = "arrival_driver_school_sent_{$trip->id}_{$schoolIdentifier}";
                     if (!Cache::has($driverSchoolArrKey)) {
                         Cache::put($driverSchoolArrKey, true, now()->addHours(6));
 
@@ -353,12 +378,12 @@ class TripTrackingService
                                 'school_name' => $schoolName,
                                 'trip_id'     => (string) $trip->id,
                                 'school_id'   => $stop->school_id,
-                                'entity_id'   => $trip->id . '_driver_school_' . $stop->school_id,
+                                'entity_id'   => $trip->id . '_driver_school_' . $schoolIdentifier,
                             ]);
                         }
 
                         // تفعيل عداد انتظار المدرسة في الكاش (15 دقيقة)
-                        Cache::put("trip_school_waiting_{$trip->id}_{$stop->school_id}", [
+                        Cache::put("trip_school_waiting_{$trip->id}_{$schoolIdentifier}", [
                             'start_time'  => now()->toIso8601String(),
                             'max_minutes' => 15,
                         ], now()->addHours(2));

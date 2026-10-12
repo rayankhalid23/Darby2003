@@ -63,7 +63,8 @@ class EmergencyBreakdownService
                 'suspension_reason' => $reason ?? 'عطل طارئ وتوقف للمركبة',
             ]);
 
-            // 3. حصر الأطفال العالقين في الحافلة (محطات pending أو boarded)
+            // 3. حصر جميع الأطفال المعنيين بالرحلة المتبقين (من صعد الحافلة ومن ينتظر في منزله)
+            // لنقلهم جميعاً إلى السائق البديل لاستكمال الرحلة كاملة
             $strandedStops = TripStop::where('trip_id', $trip->id)
                 ->whereNotNull('child_id')
                 ->whereIn('status', [TripStop::STATUS_PENDING, TripStop::STATUS_BOARDED])
@@ -403,7 +404,7 @@ class EmergencyBreakdownService
             ]);
         }
 
-        // 2. تصنيف الأطفال العالقين: من صعد الحافلة فعلياً (boarded) ومن ينتظر في منزله (pending)
+        // 2. تصنيف الأطفال: من صعد الحافلة المعطلة (boarded) ومن ينتظر في منزله (pending)
         $strandedChildIds = $dispatch->stranded_children_ids ?? [];
 
         // الأطفال الذين صعدوا في الحافلة المعطلة بالفعل
@@ -421,7 +422,6 @@ class EmergencyBreakdownService
         $highestSeq = TripStop::where('trip_id', $substituteTrip->id)->max('sequence_order') ?? 0;
 
         // 3. محطة السيارة المتوقفة: فقط إذا كان هناك أطفال صعدوا بالفعل داخل الحافلة المعطلة!
-        // إذا لم يصعد أي طفل (السائق لم يأخذ أطفالاً أبداً)، فلا توجد محطة للسيارة المتوقفة بل التوجه مباشرة لمنازل الأطفال.
         if (!empty($boardedChildIds)) {
             TripStop::create([
                 'trip_id'        => $substituteTrip->id,
@@ -436,8 +436,7 @@ class EmergencyBreakdownService
             ]);
         }
 
-        // 4. إضافة محطات منازل الأطفال الذين ما زالوا ينتظرون في بيوتهم (استكمال التقاط)
-        // ملاحظة: الأطفال الذين صعدوا مسبقاً لا تُضاف منازلهم مطلقاً لأنهم متواجدون بالحافلة المتوقفة.
+        // 4. إضافة محطات منازل الأطفال الذين ما زالوا ينتظرون في منازلهم (استكمال التقاطهم من بيوتهم)
         if (!empty($waitingChildIds)) {
             $waitingHomeStops = TripStop::where('trip_id', $originalTrip->id)
                 ->where('stop_type', TripStop::TYPE_HOME)
@@ -459,7 +458,7 @@ class EmergencyBreakdownService
             }
         }
 
-        // 5. إضافة محطات المدارس (Dropoff): دعم المدارس المختلفة لجميع الأطفال العالقين
+        // 5. إضافة محطات المدارس (Dropoff): لجميع الأطفال (الذين صعدوا بالحافلة + الذين سيتم التقاطهم من منازلهم)
         $schoolIds = Child::whereIn('id', $strandedChildIds)
             ->pluck('school_id')
             ->filter()
@@ -467,13 +466,22 @@ class EmergencyBreakdownService
             ->values()
             ->all();
 
+        // تجنب تكرار محطات المدارس الموجودة مسبقاً في مسار السائق البديل
+        $existingSchoolIds = TripStop::where('trip_id', $substituteTrip->id)
+            ->where('stop_type', TripStop::TYPE_SCHOOL)
+            ->pluck('school_id')
+            ->filter()
+            ->all();
+
+        $schoolsToAdd = array_diff($schoolIds, $existingSchoolIds);
+
         $origSchoolStops = TripStop::where('trip_id', $originalTrip->id)
             ->where('stop_type', TripStop::TYPE_SCHOOL)
-            ->whereIn('school_id', $schoolIds)
+            ->whereIn('school_id', $schoolsToAdd)
             ->get()
             ->keyBy('school_id');
 
-        foreach ($schoolIds as $sId) {
+        foreach ($schoolsToAdd as $sId) {
             $origSchoolStop = $origSchoolStops->get($sId);
             $schoolModel = $origSchoolStop ? null : School::find($sId);
 
