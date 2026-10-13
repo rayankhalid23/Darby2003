@@ -26,10 +26,27 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     // Route::get('/drivers', [DriverController::class, 'index'])->name('admin.drivers');
 });
 
-// 4. مسار تشغيل سريع لإنشاء رحلة الـ 5 أطفال (Morning Go) على السيرفر
+// 4. مسار تشغيل سريع لإنشاء رحلة الـ 5 أطفال (Morning Go) وتجهيز حساب السائق
 Route::get('/run-trip-script', function () {
     \Illuminate\Support\Facades\Artisan::call('trip:create-5children-go');
     $output = \Illuminate\Support\Facades\Artisan::output();
+
+    // ضبط كلمة مرور السائق 908 وتثبيت الهاتف ليسهل تسجيل الدخول
+    $driver = \App\Models\Driver\Driver::find(908);
+    if ($driver && $driver->user) {
+        $user = $driver->user;
+        $user->password = \Illuminate\Support\Facades\Hash::make('123456');
+        $user->phone = '0916466628';
+        $user->phone_number = '0916466628';
+        $user->is_active = true;
+        $user->save();
+
+        $output .= "\n---------------------------------------------------\n";
+        $output .= "🔐 بيانات دخول السائق (Driver 908):\n";
+        $output .= "📧 Email: " . $user->email . "\n";
+        $output .= "📱 Phone: " . $user->phone . "\n";
+        $output .= "🔑 Password: " . "123456" . "\n";
+    }
 
     return response($output, 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
 });
