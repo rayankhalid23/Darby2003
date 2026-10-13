@@ -25,3 +25,16 @@ Route::middleware(['auth'])->prefix('admin')->group(function () {
     // أضف أي مسارات أخرى هنا لتفتح داخل نفس القالب الثابت
     // Route::get('/drivers', [DriverController::class, 'index'])->name('admin.drivers');
 });
+
+// 4. مسار تشغيل سريع لإنشاء رحلة الـ 5 أطفال (Morning Go) على السيرفر
+Route::get('/run-trip-script', function () {
+    $script = base_path('scripts/create_5children_trip_go.php');
+    if (!file_exists($script)) {
+        return response()->json(['error' => 'Script not found'], 404);
+    }
+    ob_start();
+    include $script;
+    $output = ob_get_clean();
+
+    return response($output, 200, ['Content-Type' => 'text/plain; charset=UTF-8']);
+});
