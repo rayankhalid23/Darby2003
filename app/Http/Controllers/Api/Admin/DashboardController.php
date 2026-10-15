@@ -166,8 +166,14 @@ class DashboardController extends Controller
                 'driver.user',
                 'driver.vehicles',
                 'driver.activeSubscriptions' => function ($q) {
-                    $q->where('active_subscriptions.status', 'active')->with('child');
+                    $q->where('active_subscriptions.status', 'active')
+                      ->with(['child.parent', 'child.school', 'school']);
                 },
+                'stops' => function ($q) {
+                    $q->with(['child.parent', 'child.school', 'school'])->orderBy('sequence_order');
+                },
+                'events.child.parent',
+                'events.child.school',
                 // آخر تحديث موقع من جدول trip_tracking
                 'tracking' => function ($q) {
                     $q->latest('recorded_at')->limit(1);
@@ -212,12 +218,163 @@ class DashboardController extends Controller
                     $lastUpdateDisplay = $lastTrack->recorded_at->diffForHumans();
                 }
 
-                // --- الأطفال المرتبطين بهذه الرحلة عبر اشتراكات السائق ---
-                $childrenNames = $driver?->activeSubscriptions
-                    ?->pluck('child.name')
-                    ->filter()
-                    ->take(2)
-                    ->implode(' و ') ?? 'غير محدد';
+                // --- استخراج وتفصيل بيانات الأطفال وحالاتهم داخل هذه الرحلة ---
+                $childrenMap = collect();
+
+                // 1. من خلال محطات الرحلة (TripStops)
+                if ($trip->stops && $trip->stops->isNotEmpty()) {
+                    foreach ($trip->stops->whereNotNull('child_id')->groupBy('child_id') as $childId => $cStops) {
+                        $firstStop = $cStops->first();
+                        $child = $firstStop->child;
+                        if (!$child) continue;
+
+                        $stopStatuses = $cStops->pluck('status')->all();
+
+                        $isDelivered = in_array(\App\Models\Shared\TripStop::STATUS_DROPPED_OFF_SCHOOL, $stopStatuses, true)
+                            || in_array(\App\Models\Shared\TripStop::STATUS_DELIVERED_HOME, $stopStatuses, true);
+
+                        $isOnBoard = !$isDelivered && in_array(\App\Models\Shared\TripStop::STATUS_BOARDED, $stopStatuses, true);
+
+                        $isAbsent = !$isDelivered && !$isOnBoard && (
+                            in_array(\App\Models\Shared\TripStop::STATUS_ABSENT_PRE, $stopStatuses, true)
+                            || in_array(\App\Models\Shared\TripStop::STATUS_ABSENT_LATE, $stopStatuses, true)
+                            || in_array(\App\Models\Shared\TripStop::STATUS_SKIPPED_UNRESPONSIVE, $stopStatuses, true)
+                        );
+
+                        $cStatus = 'pending';
+                        $cStatusLabel = 'بانتظار الاستلام (لم يُصعد بعد)';
+
+                        if ($isDelivered) {
+                            $cStatus = 'delivered';
+                            $cStatusLabel = 'تم التوصيل';
+                        } elseif ($isOnBoard) {
+                            $cStatus = 'on_board';
+                            $cStatusLabel = 'على متن الحافلة (مع السائق)';
+                        } elseif ($isAbsent) {
+                            $cStatus = 'absent';
+                            $cStatusLabel = 'غائب';
+                        }
+
+                        $parent = $child->parent;
+                        $school = $child->school ?? $firstStop->school;
+
+                        $childrenMap->put($childId, [
+                            'child_id'     => (int) $child->id,
+                            'child_name'   => $child->full_name ?? $child->name ?? 'طفل',
+                            'name'         => $child->full_name ?? $child->name ?? 'طفل',
+                            'parent_name'  => $parent?->full_name ?? 'غير محدد',
+                            'parent_phone' => $parent?->phone_number ?? 'غير متوفر',
+                            'school_name'  => $school?->name ?? 'المدرسة',
+                            'school'       => $school?->name ?? 'المدرسة',
+                            'status'       => $cStatus,
+                            'status_label' => $cStatusLabel,
+                        ]);
+                    }
+                }
+
+                // 2. فحص أحداث المسح المباشرة (TripEvents) لضمان الدقة اللحظية
+                if ($trip->events && $trip->events->isNotEmpty()) {
+                    foreach ($trip->events->whereNotNull('child_id')->groupBy('child_id') as $cId => $cEvents) {
+                        $hasDropoff = $cEvents->contains(fn($e) => in_array($e->action_type, ['dropped_off', 'dropoff'], true));
+                        $hasPickup  = $cEvents->contains(fn($e) => in_array($e->action_type, ['picked_up', 'pickup'], true));
+                        $hasAbsent  = $cEvents->contains(fn($e) => in_array($e->action_type, ['absent', 'skip', 'skipped'], true));
+
+                        if ($childrenMap->has($cId)) {
+                            $item = $childrenMap->get($cId);
+                            if ($hasDropoff) {
+                                $item['status'] = 'delivered';
+                                $item['status_label'] = 'تم التوصيل';
+                            } elseif ($hasPickup) {
+                                $item['status'] = 'on_board';
+                                $item['status_label'] = 'على متن الحافلة (مع السائق)';
+                            } elseif ($hasAbsent) {
+                                $item['status'] = 'absent';
+                                $item['status_label'] = 'غائب';
+                            }
+                            $childrenMap->put($cId, $item);
+                        } else {
+                            $firstEvent = $cEvents->first();
+                            $child = $firstEvent->child;
+                            if ($child) {
+                                $parent = $child->parent;
+                                $school = $child->school;
+
+                                $cStatus = 'pending';
+                                $cStatusLabel = 'بانتظار الاستلام (لم يُصعد بعد)';
+                                if ($hasDropoff) {
+                                    $cStatus = 'delivered';
+                                    $cStatusLabel = 'تم التوصيل';
+                                } elseif ($hasPickup) {
+                                    $cStatus = 'on_board';
+                                    $cStatusLabel = 'على متن الحافلة (مع السائق)';
+                                } elseif ($hasAbsent) {
+                                    $cStatus = 'absent';
+                                    $cStatusLabel = 'غائب';
+                                }
+
+                                $childrenMap->put($cId, [
+                                    'child_id'     => (int) $child->id,
+                                    'child_name'   => $child->full_name ?? $child->name ?? 'طفل',
+                                    'name'         => $child->full_name ?? $child->name ?? 'طفل',
+                                    'parent_name'  => $parent?->full_name ?? 'غير محدد',
+                                    'parent_phone' => $parent?->phone_number ?? 'غير متوفر',
+                                    'school_name'  => $school?->name ?? 'المدرسة',
+                                    'school'       => $school?->name ?? 'المدرسة',
+                                    'status'       => $cStatus,
+                                    'status_label' => $cStatusLabel,
+                                ]);
+                            }
+                        }
+                    }
+                }
+
+                // 3. احتياط: الاشتراكات النشطة للسائق المرتبطة بمسار الرحلة
+                if ($childrenMap->isEmpty() && $driver?->activeSubscriptions) {
+                    $subs = $driver->activeSubscriptions->filter(function ($sub) use ($trip) {
+                        return empty($trip->route_id) || $sub->route_id == $trip->route_id;
+                    });
+                    if ($subs->isEmpty()) {
+                        $subs = $driver->activeSubscriptions;
+                    }
+
+                    foreach ($subs as $sub) {
+                        $child = $sub->child;
+                        if (!$child || $childrenMap->has($child->id)) continue;
+
+                        $parent = $child->parent;
+                        $school = $sub->school ?? $child->school;
+
+                        $childrenMap->put($child->id, [
+                            'child_id'     => (int) $child->id,
+                            'child_name'   => $child->full_name ?? $child->name ?? 'طفل',
+                            'name'         => $child->full_name ?? $child->name ?? 'طفل',
+                            'parent_name'  => $parent?->full_name ?? 'غير محدد',
+                            'parent_phone' => $parent?->phone_number ?? 'غير متوفر',
+                            'school_name'  => $school?->name ?? 'المدرسة',
+                            'school'       => $school?->name ?? 'المدرسة',
+                            'status'       => 'pending',
+                            'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
+                        ]);
+                    }
+                }
+
+                $childrenList = $childrenMap->values();
+
+                // العدادات المطلوبة بدقة:
+                $totalChildrenCount   = $childrenList->count();
+                $onBoardCount         = $childrenList->where('status', 'on_board')->count();
+                $pendingPickupCount   = $childrenList->where('status', 'pending')->count();
+                $deliveredCount       = $childrenList->where('status', 'delivered')->count();
+                $absentCount          = $childrenList->where('status', 'absent')->count();
+
+                // اسم نصي ملخص للتوافقية مع الواجهات القديمة
+                $childrenSummaryNames = $childrenList->pluck('child_name')->take(2)->implode(' و ');
+                if ($totalChildrenCount > 2) {
+                    $childrenSummaryNames .= ' وآخرين (' . $totalChildrenCount . ')';
+                }
+                if (empty($childrenSummaryNames)) {
+                    $childrenSummaryNames = 'غير محدد';
+                }
 
                 // --- حساب مدة الرحلة ---
                 $duration = 'جارٍ التحميل';
@@ -238,26 +395,39 @@ class DashboardController extends Controller
                 $mapY = round(max(10, min(85, ((33.2 - $lat) / 0.7) * 75 + 10)), 1);
 
                 return [
-                    'id'             => $trip->id,
-                    'trip_id'        => $trip->id,
-                    'driver_id'      => $driver?->id,
-                    'name'           => $user?->full_name ?? 'سائق غير معروف',
-                    'phone'          => $user?->phone_number ?? '---',
-                    'avatar'         => $user?->avatar_url ?? "https://ui-avatars.com/api/?name=" . urlencode($user?->full_name ?? 'D') . "&background=3b82f6&color=fff&size=100",
-                    'children'       => $childrenNames,
-                    'destination'    => $destination,
-                    'duration'       => $duration,
-                    'status'         => 'في الطريق للاستلام',
-                    'lat'            => (float) $lat,
-                    'lng'            => (float) $lng,
-                    'heading'        => $heading,
-                    'speed'          => $speedDisplay,
-                    'is_online'      => $isOnline,
-                    'firestore_doc'  => "trips_tracking/{$trip->id}",
-                    'map_x'          => $mapX,   // نسبة X% على خريطة SVG
-                    'map_y'          => $mapY,   // نسبة Y% على خريطة SVG
-                    'region'         => $this->getRegionName((float) $lat, (float) $lng),
-                    'last_update'    => $lastUpdateDisplay,
+                    'id'                      => $trip->id,
+                    'trip_id'                 => $trip->id,
+                    'driver_id'               => $driver?->id,
+                    'name'                    => $user?->full_name ?? 'سائق غير معروف',
+                    'phone'                   => $user?->phone_number ?? '---',
+                    'avatar'                  => $user?->avatar_url ?? "https://ui-avatars.com/api/?name=" . urlencode($user?->full_name ?? 'D') . "&background=3b82f6&color=fff&size=100",
+                    'children'                => $childrenSummaryNames,
+                    'children_details'        => $childrenList->all(),
+                    'total_children_count'    => $totalChildrenCount,
+                    'children_on_board_count' => $onBoardCount,       // عدد الأطفال اللي معاه
+                    'pending_pickup_count'    => $pendingPickupCount, // عدد الأطفال اللي مزال ما خذاهمش
+                    'delivered_count'         => $deliveredCount,     // عدد الأطفال اللي وصلهم
+                    'absent_count'            => $absentCount,        // عدد الأطفال الغائبين
+                    'children_counts'         => [
+                        'total'          => $totalChildrenCount,
+                        'on_board'       => $onBoardCount,         // معاه
+                        'pending_pickup' => $pendingPickupCount,   // مزال ماخداهمش
+                        'delivered'      => $deliveredCount,       // وصلهم
+                        'absent'         => $absentCount,
+                    ],
+                    'destination'             => $destination,
+                    'duration'                => $duration,
+                    'status'                  => 'في الطريق للاستلام',
+                    'lat'                     => (float) $lat,
+                    'lng'                     => (float) $lng,
+                    'heading'                 => $heading,
+                    'speed'                   => $speedDisplay,
+                    'is_online'               => $isOnline,
+                    'firestore_doc'           => "trips_tracking/{$trip->id}",
+                    'map_x'                   => $mapX,   // نسبة X% على خريطة SVG
+                    'map_y'                   => $mapY,   // نسبة Y% على خريطة SVG
+                    'region'                  => $this->getRegionName((float) $lat, (float) $lng),
+                    'last_update'             => $lastUpdateDisplay,
                 ];
             });
 
@@ -304,70 +474,200 @@ class DashboardController extends Controller
     {
         return collect([
             [
-                'id'            => 1,
-                'trip_id'       => 1,
-                'driver_id'     => 1,
-                'name'          => 'عبد السلام المصراتي',
-                'phone'         => '091-3456789',
-                'avatar'        => 'https://ui-avatars.com/api/?name=%D8%B9%D8%A8%D8%AF%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85&background=3b82f6&color=fff&size=100',
-                'children'      => 'علي ومروة',
-                'destination'   => 'مدرسة الجيل الجديد الدولي...',
-                'duration'      => '12 دقيقة',
-                'status'        => 'في الطريق للاستلام',
-                'lat'           => 32.91,
-                'lng'           => 13.17,
-                'heading'       => 45.0,
-                'speed'         => '55 كم/س',
-                'is_online'     => true,
-                'firestore_doc' => 'trips_tracking/1',
-                'map_x'         => 28.0,
-                'map_y'         => 45.0,
-                'region'        => 'حي الأندلس',
-                'last_update'   => 'منذ دقيقتين',
+                'id'                      => 1,
+                'trip_id'                 => 1,
+                'driver_id'               => 1,
+                'name'                    => 'عبد السلام المصراتي',
+                'phone'                   => '091-3456789',
+                'avatar'                  => 'https://ui-avatars.com/api/?name=%D8%B9%D8%A8%D8%AF%D8%A7%D9%84%D8%B3%D9%84%D8%A7%D9%85&background=3b82f6&color=fff&size=100',
+                'children'                => 'علي ومروة وأحمد (3)',
+                'children_details'        => [
+                    [
+                        'child_id'     => 101,
+                        'child_name'   => 'علي المصراتي',
+                        'name'         => 'علي المصراتي',
+                        'parent_name'  => 'محمد المصراتي',
+                        'parent_phone' => '091-1112233',
+                        'school_name'  => 'مدرسة الجيل الجديد الدولية',
+                        'school'       => 'مدرسة الجيل الجديد الدولية',
+                        'status'       => 'on_board',
+                        'status_label' => 'على متن الحافلة (مع السائق)',
+                    ],
+                    [
+                        'child_id'     => 102,
+                        'child_name'   => 'مروة المصراتي',
+                        'name'         => 'مروة المصراتي',
+                        'parent_name'  => 'محمد المصراتي',
+                        'parent_phone' => '091-1112233',
+                        'school_name'  => 'مدرسة الجيل الجديد الدولية',
+                        'school'       => 'مدرسة الجيل الجديد الدولية',
+                        'status'       => 'pending',
+                        'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
+                    ],
+                    [
+                        'child_id'     => 103,
+                        'child_name'   => 'أحمد الترهوني',
+                        'name'         => 'أحمد الترهوني',
+                        'parent_name'  => 'خالد الترهوني',
+                        'parent_phone' => '092-4445566',
+                        'school_name'  => 'مدرسة الجيل الجديد الدولية',
+                        'school'       => 'مدرسة الجيل الجديد الدولية',
+                        'status'       => 'delivered',
+                        'status_label' => 'تم التوصيل',
+                    ],
+                ],
+                'total_children_count'    => 3,
+                'children_on_board_count' => 1,
+                'pending_pickup_count'    => 1,
+                'delivered_count'         => 1,
+                'absent_count'            => 0,
+                'children_counts'         => [
+                    'total'          => 3,
+                    'on_board'       => 1,
+                    'pending_pickup' => 1,
+                    'delivered'      => 1,
+                    'absent'         => 0,
+                ],
+                'destination'             => 'مدرسة الجيل الجديد الدولي...',
+                'duration'                => '12 دقيقة',
+                'status'                  => 'في الطريق للاستلام',
+                'lat'                     => 32.91,
+                'lng'                     => 13.17,
+                'heading'                 => 45.0,
+                'speed'                   => '55 كم/س',
+                'is_online'               => true,
+                'firestore_doc'           => 'trips_tracking/1',
+                'map_x'                   => 28.0,
+                'map_y'                   => 45.0,
+                'region'                  => 'حي الأندلس',
+                'last_update'             => 'منذ دقيقتين',
             ],
             [
-                'id'            => 2,
-                'trip_id'       => 2,
-                'driver_id'     => 2,
-                'name'          => 'مفتاح الزنتاني',
-                'phone'         => '092-6549873',
-                'avatar'        => 'https://ui-avatars.com/api/?name=%D9%85%D9%81%D8%AA%D8%A7%D8%AD&background=10b981&color=fff&size=100',
-                'children'      => 'أحمد وسند',
-                'destination'   => 'مدرسة الشروق الأهلية، الس...',
-                'duration'      => '4 دقائق',
-                'status'        => 'في الطريق للاستلام',
-                'lat'           => 32.90,
-                'lng'           => 13.22,
-                'heading'       => 90.0,
-                'speed'         => '40 كم/س',
-                'is_online'     => true,
-                'firestore_doc' => 'trips_tracking/2',
-                'map_x'         => 52.0,
-                'map_y'         => 38.0,
-                'region'        => 'بن عاشور',
-                'last_update'   => 'منذ دقيقة',
+                'id'                      => 2,
+                'trip_id'                 => 2,
+                'driver_id'               => 2,
+                'name'                    => 'مفتاح الزنتاني',
+                'phone'                   => '092-6549873',
+                'avatar'                  => 'https://ui-avatars.com/api/?name=%D9%85%D9%81%D8%AA%D8%A7%D8%AD&background=10b981&color=fff&size=100',
+                'children'                => 'أحمد وسند',
+                'children_details'        => [
+                    [
+                        'child_id'     => 104,
+                        'child_name'   => 'أحمد الزنتاني',
+                        'name'         => 'أحمد الزنتاني',
+                        'parent_name'  => 'طارق الزنتاني',
+                        'parent_phone' => '091-7778899',
+                        'school_name'  => 'مدرسة الشروق الأهلية',
+                        'school'       => 'مدرسة الشروق الأهلية',
+                        'status'       => 'on_board',
+                        'status_label' => 'على متن الحافلة (مع السائق)',
+                    ],
+                    [
+                        'child_id'     => 105,
+                        'child_name'   => 'سند الورفلي',
+                        'name'         => 'سند الورفلي',
+                        'parent_name'  => 'جمال الورفلي',
+                        'parent_phone' => '092-3332211',
+                        'school_name'  => 'مدرسة الشروق الأهلية',
+                        'school'       => 'مدرسة الشروق الأهلية',
+                        'status'       => 'on_board',
+                        'status_label' => 'على متن الحافلة (مع السائق)',
+                    ],
+                ],
+                'total_children_count'    => 2,
+                'children_on_board_count' => 2,
+                'pending_pickup_count'    => 0,
+                'delivered_count'         => 0,
+                'absent_count'            => 0,
+                'children_counts'         => [
+                    'total'          => 2,
+                    'on_board'       => 2,
+                    'pending_pickup' => 0,
+                    'delivered'      => 0,
+                    'absent'         => 0,
+                ],
+                'destination'             => 'مدرسة الشروق الأهلية، الس...',
+                'duration'                => '4 دقائق',
+                'status'                  => 'في الطريق للاستلام',
+                'lat'                     => 32.90,
+                'lng'                     => 13.22,
+                'heading'                 => 90.0,
+                'speed'                   => '40 كم/س',
+                'is_online'               => true,
+                'firestore_doc'           => 'trips_tracking/2',
+                'map_x'                   => 52.0,
+                'map_y'                   => 38.0,
+                'region'                  => 'بن عاشور',
+                'last_update'             => 'منذ دقيقة',
             ],
             [
-                'id'            => 3,
-                'trip_id'       => 3,
-                'driver_id'     => 3,
-                'name'          => 'علي غومة',
-                'phone'         => '092-2223344',
-                'avatar'        => 'https://ui-avatars.com/api/?name=%D8%B9%D9%84%D9%8A&background=f59e0b&color=fff&size=100',
-                'children'      => 'سارة وخالد',
-                'destination'   => 'مدرسة طرابلس المركزية...',
-                'duration'      => '8 دقائق',
-                'status'        => 'في الطريق للاستلام',
-                'lat'           => 32.89,
-                'lng'           => 13.38,
-                'heading'       => 180.0,
-                'speed'         => '65 كم/س',
-                'is_online'     => true,
-                'firestore_doc' => 'trips_tracking/3',
-                'map_x'         => 78.0,
-                'map_y'         => 48.0,
-                'region'        => 'تاجوراء',
-                'last_update'   => 'الآن',
+                'id'                      => 3,
+                'trip_id'                 => 3,
+                'driver_id'               => 3,
+                'name'                    => 'علي غومة',
+                'phone'                   => '092-2223344',
+                'avatar'                  => 'https://ui-avatars.com/api/?name=%D8%B9%D9%84%D9%8A&background=f59e0b&color=fff&size=100',
+                'children'                => 'سارة وخالد وفاطمة (3)',
+                'children_details'        => [
+                    [
+                        'child_id'     => 106,
+                        'child_name'   => 'سارة غومة',
+                        'name'         => 'سارة غومة',
+                        'parent_name'  => 'نادر غومة',
+                        'parent_phone' => '091-8889900',
+                        'school_name'  => 'مدرسة طرابلس المركزية',
+                        'school'       => 'مدرسة طرابلس المركزية',
+                        'status'       => 'on_board',
+                        'status_label' => 'على متن الحافلة (مع السائق)',
+                    ],
+                    [
+                        'child_id'     => 107,
+                        'child_name'   => 'خالد بن علي',
+                        'name'         => 'خالد بن علي',
+                        'parent_name'  => 'عبد الرؤوف بن علي',
+                        'parent_phone' => '092-1234567',
+                        'school_name'  => 'مدرسة طرابلس المركزية',
+                        'school'       => 'مدرسة طرابلس المركزية',
+                        'status'       => 'pending',
+                        'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
+                    ],
+                    [
+                        'child_id'     => 108,
+                        'child_name'   => 'فاطمة بن علي',
+                        'name'         => 'فاطمة بن علي',
+                        'parent_name'  => 'عبد الرؤوف بن علي',
+                        'parent_phone' => '092-1234567',
+                        'school_name'  => 'مدرسة طرابلس المركزية',
+                        'school'       => 'مدرسة طرابلس المركزية',
+                        'status'       => 'pending',
+                        'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
+                    ],
+                ],
+                'total_children_count'    => 3,
+                'children_on_board_count' => 1,
+                'pending_pickup_count'    => 2,
+                'delivered_count'         => 0,
+                'absent_count'            => 0,
+                'children_counts'         => [
+                    'total'          => 3,
+                    'on_board'       => 1,
+                    'pending_pickup' => 2,
+                    'delivered'      => 0,
+                    'absent'         => 0,
+                ],
+                'destination'             => 'مدرسة طرابلس المركزية...',
+                'duration'                => '8 دقائق',
+                'status'                  => 'في الطريق للاستلام',
+                'lat'                     => 32.89,
+                'lng'                     => 13.38,
+                'heading'                 => 180.0,
+                'speed'                   => '65 كم/س',
+                'is_online'               => true,
+                'firestore_doc'           => 'trips_tracking/3',
+                'map_x'                   => 78.0,
+                'map_y'                   => 48.0,
+                'region'                  => 'تاجوراء',
+                'last_update'             => 'الآن',
             ],
         ]);
     }
