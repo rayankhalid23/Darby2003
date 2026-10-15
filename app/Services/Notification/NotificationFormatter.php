@@ -132,6 +132,7 @@ class NotificationFormatter
         $tripId = $data['trip_id'] ?? $entityId ?? '';
         $childName = $data['child_name'] ?? 'الطالب';
         $driverName = $data['driver_name'] ?? 'السائق';
+        $driverPhone = $data['driver_phone'] ?? $data['phone'] ?? $data['phone_number'] ?? '';
         $parentName = $data['parent_name'] ?? 'ولي الأمر';
         $reqId = $data['request_id'] ?? $entityId ?? '';
         $contractNo = $data['contract_number'] ?? $data['contract_id'] ?? $entityId ?? '';
@@ -783,7 +784,8 @@ class NotificationFormatter
 
             case self::TYPE_DRIVER_INACTIVITY_REJECTION_ADMIN:
                 $title = $customTitle ?? '⚠️ تنبيه: سائق غير نشط يرفض الطلبات بكثرة';
-                $message = $customMessage ?? ($driverName !== 'السائق' ? "قام السائق ({$driverName}) برفض عدة طلبات مؤخراً دون وجود اشتراكات نشطة." : 'قام سائق برفض عدة طلبات مؤخراً دون وجود أي اشتراك نشط لديه.');
+                $phonePart = (!empty($driverPhone) && $driverPhone !== 'غير متوفر') ? " - هاتف: ({$driverPhone})" : '';
+                $message = $customMessage ?? ($driverName !== 'السائق' ? "قام السائق ({$driverName}){$phonePart} برفض عدة طلبات مؤخراً دون وجود اشتراكات نشطة." : "قام سائق برفض عدة طلبات مؤخراً دون وجود أي اشتراك نشط لديه.{$phonePart}");
                 $screen = 'ADMIN_DRIVER_DETAILS';
                 $entityType = 'driver';
                 $action = 'open_driver_review';

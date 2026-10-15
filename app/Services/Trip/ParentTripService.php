@@ -1093,7 +1093,7 @@ class ParentTripService
         ['trip' => $trip, 'child_ids' => $childIds] = $this->authorizeParentTripAccess($userId, $tripId);
 
         $subscriptionsQuery = ActiveSubscription::forChildren($childIds)
-            ->with(['child.school', 'child.address', 'school'])
+            ->with(['child.school', 'child.address', 'child.parent', 'school'])
             ->get();
 
         $subscriptions = $subscriptionsQuery->groupBy('child_id')->map(function ($subs) use ($trip) {
@@ -1158,16 +1158,25 @@ class ParentTripService
                 'lng'  => $destLng,
             ];
 
+            $parentUser = $c->parent ?? ($c->parent_id ? User::find($c->parent_id) : null);
+            $parentPhone = $parentUser?->phone_number ?? $parentUser?->phone ?? $parentUser?->alternative_phone;
+
             $childrenArray[] = [
-                'child_id'        => $c->id,
-                'child_name'      => $c->full_name ?? $c->name,
-                'child_photo'     => $photoUrl,
-                'child_status'    => $childStatus,
-                'school_name'     => $schoolLocation['name'],
-                'direction'       => $direction,
-                'home_location'   => $homeLocation,
-                'school_location' => $schoolLocation,
-                'destination'     => $childDestination,
+                'child_id'            => $c->id,
+                'child_name'          => $c->full_name ?? $c->name,
+                'child_photo'         => $photoUrl,
+                'child_status'        => $childStatus,
+                'school'              => $schoolLocation['name'],
+                'school_name'         => $schoolLocation['name'],
+                'school_id'           => $schoolLocation['id'],
+                'school_location'     => $schoolLocation,
+                'direction'           => $direction,
+                'home_location'       => $homeLocation,
+                'destination'         => $childDestination,
+                'parent_id'           => $parentUser?->id,
+                'parent_name'         => $parentUser?->full_name ?? $parentUser?->name,
+                'parent_phone'        => $parentPhone,
+                'parent_phone_number' => $parentPhone,
             ];
 
             // نجمع الوجهات الفريدة بدل الاكتفاء بوجهة أول طفل فقط، لأن أطفال نفس الولي
@@ -1182,6 +1191,7 @@ class ParentTripService
 
         $driver = $trip->driver;
         $driverUser = $driver?->user;
+        $driverPhone = $driverUser?->phone_number ?? $driverUser?->phone;
         $vehicle = optional($driver?->vehicles)->first();
         $destinationsList = array_values($destinationsByKey);
 
@@ -1193,6 +1203,23 @@ class ParentTripService
             ->first();
         $isSubstitute = (bool) $dispatch;
 
+        // إحصائيات الرحلة بالكامل: إجمالي الأطفال، كم في الحافلة، وكم طفل وصل
+        $allTripStops = DB::table('trip_stops')
+            ->where('trip_id', $trip->id)
+            ->whereNotNull('child_id')
+            ->get();
+
+        $totalTripChildren = $allTripStops->pluck('child_id')->unique()->count();
+        if ($totalTripChildren === 0) {
+            $totalTripChildren = count($childrenArray);
+        }
+
+        $boardedLike = [\App\Models\Shared\TripStop::STATUS_BOARDED, 'boarded', 'picked_up'];
+        $deliveredLike = [\App\Models\Shared\TripStop::STATUS_DROPPED_OFF_SCHOOL, \App\Models\Shared\TripStop::STATUS_DELIVERED_HOME, 'dropped_off', 'delivered_home', 'dropped_off_school'];
+
+        $inBusCount = $allTripStops->whereIn('status', $boardedLike)->pluck('child_id')->unique()->count();
+        $arrivedCount = $allTripStops->whereIn('status', $deliveredLike)->pluck('child_id')->unique()->count();
+
         return [
             'trip_id'          => $trip->id,
             'trip_type'        => $trip->trip_type,
@@ -1201,14 +1228,32 @@ class ParentTripService
             'is_substitute'    => $isSubstitute,
             'original_trip_id' => $isSubstitute ? $dispatch->trip_id : null,
             'dispatch_id'      => $isSubstitute ? $dispatch->id : null,
+            'driver_phone'     => $driverPhone,
             'driver'      => [
-                'id'    => $driver?->id,
-                'name'  => $driverUser?->full_name ?? $driverUser?->name,
-                'phone' => $driverUser?->phone_number ?? $driverUser?->phone,
-                'photo' => $driverPhotoUrl
+                'id'           => $driver?->id,
+                'name'         => $driverUser?->full_name ?? $driverUser?->name,
+                'phone'        => $driverPhone,
+                'phone_number' => $driverPhone,
+                'photo'        => $driverPhotoUrl
             ],
             'vehicle' => [
                 'info' => $vehicle ? "{$vehicle->brand} {$vehicle->model} ({$vehicle->plate_number})" : null
+            ],
+            'total_children'  => $totalTripChildren,
+            'children_count'  => $totalTripChildren,
+            'in_bus_count'    => $inBusCount,
+            'on_board_count'  => $inBusCount,
+            'arrived_count'   => $arrivedCount,
+            'delivered_count' => $arrivedCount,
+            'statistics'      => [
+                'total_children' => $totalTripChildren,
+                'children'       => $totalTripChildren,
+                'in_bus'         => $inBusCount,
+                'in_bus_count'   => $inBusCount,
+                'on_board'       => $inBusCount,
+                'arrived'        => $arrivedCount,
+                'arrived_count'  => $arrivedCount,
+                'delivered'      => $arrivedCount,
             ],
             'children'    => $childrenArray,
             // ⚠️ للتوافق مع النسخ القديمة من التطبيق فقط: أول وجهة من destinations أدناه.

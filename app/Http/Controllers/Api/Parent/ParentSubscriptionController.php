@@ -347,15 +347,23 @@ class ParentSubscriptionController extends Controller
     {
         try {
             $user = $request->user();
-
             $parentId = (int) $user->id;
+            $today = now()->toDateString();
 
-            $query = \App\Models\Shared\ActiveSubscription::forParent($parentId)
-                ->whereIn('status', ['active', 'pending', 'completed']);
+            $query = \App\Models\Shared\ActiveSubscription::query()
+                ->where('status', 'active')
+                ->whereHas('subscriptionRequest', function ($q) use ($parentId, $today, $request) {
+                    $q->where('parent_id', $parentId)
+                      ->whereNotIn('status', ['cancelled', 'rejected', 'completed'])
+                      ->where(function ($dateQ) use ($today) {
+                          $dateQ->whereNull('end_date')
+                                ->orWhereDate('end_date', '>=', $today);
+                      });
 
-            if ($request->has('driver_id') && !empty($request->driver_id)) {
-                $query->forDriver($request->driver_id);
-            }
+                    if ($request->filled('driver_id')) {
+                        $q->where('driver_id', (int) $request->driver_id);
+                    }
+                });
 
             $hasSubscription = $query->exists();
 

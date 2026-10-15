@@ -163,11 +163,18 @@ class DriverInactivityAlertServiceTest extends TestCase
         $this->assertEquals(NotificationFormatter::TYPE_DRIVER_INACTIVITY_REJECTION_ALERT, $driverNotif->data['type']);
         $this->assertStringContainsString('3', $driverNotif->data['message']);
 
-        // التحقق من وصول إشعار للمدير
+        // التحقق من وصول إشعار للمدير متضمناً اسم السائق ورقم هاتفه
         $adminNotif = $this->adminUser->notifications()->latest()->first();
         $this->assertNotNull($adminNotif);
         $this->assertEquals(NotificationFormatter::TYPE_DRIVER_INACTIVITY_REJECTION_ADMIN, $adminNotif->data['type']);
         $this->assertStringContainsString('3', $adminNotif->data['message']);
+        $this->assertStringContainsString($this->driverUser->full_name, $adminNotif->data['message']);
+        $this->assertStringContainsString($this->driverUser->phone_number, $adminNotif->data['message']);
+
+        // التحقق من احتواء سجل AdminAlert على اسم السائق ورقم هاتفه
+        $alertRecord = AdminAlert::find($result['alert_id']);
+        $this->assertStringContainsString($this->driverUser->full_name, $alertRecord->message);
+        $this->assertStringContainsString($this->driverUser->phone_number, $alertRecord->message);
 
         // التأكد من عدم تغيير حالة السائق (حسب الطلب: رقم 4 مانبيهاش)
         $this->driver->refresh();
@@ -265,5 +272,7 @@ class DriverInactivityAlertServiceTest extends TestCase
         $adminNotif = $this->adminUser->notifications()->where('data->type', NotificationFormatter::TYPE_DRIVER_INACTIVITY_REJECTION_ADMIN)->latest()->first();
         $this->assertNotNull($adminNotif);
         $this->assertEquals(NotificationFormatter::TYPE_DRIVER_INACTIVITY_REJECTION_ADMIN, $adminNotif->data['type']);
+        $this->assertStringContainsString($this->driverUser->full_name, $adminNotif->data['message']);
+        $this->assertStringContainsString($this->driverUser->phone_number, $adminNotif->data['message']);
     }
 }

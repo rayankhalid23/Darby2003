@@ -308,6 +308,13 @@ class EmergencyBreakdownService
             $substituteTrip = $this->integrateStrandedChildrenIntoSubstituteRoute($dispatch, $substituteDriver, $originalTrip);
             $dispatch->update(['substitute_trip_id' => $substituteTrip->id]);
 
+            // تثبيت وقت انتهاء رحلة السائق الأصلي المعطلة فور قبول السائق البديل
+            if (!$originalTrip->completed_at) {
+                $originalTrip->update([
+                    'completed_at' => now(),
+                ]);
+            }
+
             // 4. إرسال إشعار لأولياء الأمور بتفاصيل السائق البديل (الاسم، الهاتف، المركبة)
             $this->notifyParentsSubstituteAssigned($dispatch, $substituteDriver, $originalTrip);
 
@@ -421,111 +428,132 @@ class EmergencyBreakdownService
 
         $highestSeq = TripStop::where('trip_id', $substituteTrip->id)->max('sequence_order') ?? 0;
 
-        // 3. محطة السيارة المتوقفة: فقط إذا كان هناك أطفال صعدوا بالفعل داخل الحافلة المعطلة!
-        if (!empty($boardedChildIds)) {
-            TripStop::create([
-                'trip_id'        => $substituteTrip->id,
-                'stop_type'      => TripStop::TYPE_HOME,
-                'child_id'       => null,
-                'lat'            => $dispatch->breakdown_lat,
-                'lng'            => $dispatch->breakdown_lng,
-                'label'          => 'السيارة المتوقفة (استلام الطلاب)',
-                'sequence_order' => ++$highestSeq,
-                'status'         => TripStop::STATUS_PENDING,
-                'reason'         => json_encode(['boarded_child_ids' => $boardedChildIds]),
-            ]);
-        }
+        $isGoDirection = in_array($substituteTrip->trip_type, ['Morning', 'ذهاب']) 
+            || in_array($substituteTrip->shift_slot, ['morning_go', 'afternoon_go']);
 
-        // 4. إضافة محطات منازل الأطفال الذين ما زالوا ينتظرون في منازلهم (استكمال التقاطهم من بيوتهم)
-        if (!empty($waitingChildIds)) {
-            $waitingHomeStops = TripStop::where('trip_id', $originalTrip->id)
-                ->where('stop_type', TripStop::TYPE_HOME)
-                ->whereIn('child_id', $waitingChildIds)
-                ->get();
+        if ($isGoDirection) {
+            // ==========================================
+            // أ) رحلة الذهاب (Morning / Go: من المنازل إلى المدارس)
+            // ==========================================
 
-            foreach ($waitingHomeStops as $origStop) {
-                $childObj = Child::find($origStop->child_id);
-                TripStop::create([
-                    'trip_id'        => $substituteTrip->id,
-                    'stop_type'      => TripStop::TYPE_HOME,
-                    'child_id'       => $origStop->child_id,
-                    'school_id'      => $origStop->school_id ?? $childObj?->school_id,
-                    'lat'            => $origStop->lat,
-                    'lng'            => $origStop->lng,
-                    'label'          => $origStop->label . ' (استكمال إنقاذ)',
-                    'sequence_order' => ++$highestSeq,
-                    'status'         => TripStop::STATUS_PENDING,
-                ]);
-            }
-        }
+            // 3. محطة السيارة المتوقفة: فقط إذا كان هناك أطفال صعدوا بالفعل داخل الحافلة المعطلة!
+            if (!empty($boardedChildIds)) {
+                $hasCarStop = TripStop::where('trip_id', $substituteTrip->id)
+                    ->where('label', 'like', '%السيارة المتوقفة%')
+                    ->exists();
 
-        // 5. إضافة وتحديث محطات المدارس (Dropoff): لجميع الأطفال (الرئيسيين للسائق البديل + أطفال السائق الأصلي الصاعدين والمنتظرين)
-        $allTripChildIds = TripStop::where('trip_id', $substituteTrip->id)
-            ->whereNotNull('child_id')
-            ->pluck('child_id')
-            ->merge($strandedChildIds)
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        $allSchoolIds = Child::whereIn('id', $allTripChildIds)
-            ->pluck('school_id')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        $existingSchoolIds = TripStop::where('trip_id', $substituteTrip->id)
-            ->where('stop_type', TripStop::TYPE_SCHOOL)
-            ->pluck('school_id')
-            ->filter()
-            ->all();
-
-        $allTargetSchoolIds = array_values(array_unique(array_merge($allSchoolIds, $existingSchoolIds)));
-
-        $origSchoolStops = TripStop::where('trip_id', $originalTrip->id)
-            ->where('stop_type', TripStop::TYPE_SCHOOL)
-            ->whereIn('school_id', $allTargetSchoolIds)
-            ->get()
-            ->keyBy('school_id');
-
-        foreach ($allTargetSchoolIds as $sId) {
-            $schoolStopExists = TripStop::where('trip_id', $substituteTrip->id)
-                ->where('stop_type', TripStop::TYPE_SCHOOL)
-                ->where('school_id', $sId)
-                ->exists();
-
-            if (!$schoolStopExists) {
-                $origSchoolStop = $origSchoolStops->get($sId);
-                $schoolModel = $origSchoolStop ? null : School::find($sId);
-
-                $lat = $origSchoolStop?->lat ?? $schoolModel?->lat;
-                $lng = $origSchoolStop?->lng ?? $schoolModel?->lng;
-                $label = $origSchoolStop?->label ?? $schoolModel?->name ?? 'المدرسة';
-
-                if ($lat && $lng) {
+                if (!$hasCarStop) {
                     TripStop::create([
                         'trip_id'        => $substituteTrip->id,
-                        'stop_type'      => TripStop::TYPE_SCHOOL,
+                        'stop_type'      => TripStop::TYPE_HOME,
                         'child_id'       => null,
-                        'school_id'      => $sId,
-                        'lat'            => $lat,
-                        'lng'            => $lng,
-                        'label'          => $label,
-                        'sequence_order' => 999,
+                        'lat'            => $dispatch->breakdown_lat,
+                        'lng'            => $dispatch->breakdown_lng,
+                        'label'          => 'السيارة المتوقفة (استلام الطلاب)',
+                        'sequence_order' => ++$highestSeq,
                         'status'         => TripStop::STATUS_PENDING,
+                        'reason'         => json_encode(['boarded_child_ids' => $boardedChildIds]),
                     ]);
                 }
             }
-        }
 
-        // 6. ترتيب محطات المسار بالكامل:
-        // في رحلة الذهاب (Morning): جميع محطات الالتقاط (المنازل + محطة السيارة المتوقفة) أولاً،
-        // تليها جميع محطات المدارس مرتبة حسب الأقرب (Nearest Neighbor) من آخر نقطة التقاط!
-        $isGoDirection = ($substituteTrip->trip_type === 'Morning' || $substituteTrip->trip_type === 'ذهاب');
+            // 4. إضافة محطات منازل الأطفال الذين ما زالوا ينتظرون في منازلهم (استكمال التقاطهم من بيوتهم)
+            if (!empty($waitingChildIds)) {
+                $waitingHomeStops = TripStop::where('trip_id', $originalTrip->id)
+                    ->where('stop_type', TripStop::TYPE_HOME)
+                    ->whereIn('child_id', $waitingChildIds)
+                    ->get();
 
-        if ($isGoDirection) {
+                foreach ($waitingChildIds as $wId) {
+                    $exists = TripStop::where('trip_id', $substituteTrip->id)
+                        ->where('stop_type', TripStop::TYPE_HOME)
+                        ->where('child_id', $wId)
+                        ->exists();
+
+                    if (!$exists) {
+                        $origStop = $waitingHomeStops->firstWhere('child_id', $wId);
+                        $childObj = Child::with('address')->find($wId);
+                        $lat = $origStop?->lat ?? $childObj?->address?->lat ?? 32.8872;
+                        $lng = $origStop?->lng ?? $childObj?->address?->lng ?? 13.1913;
+                        $label = $origStop?->label ?? ('منزل الطالب ' . ($childObj?->full_name ?? $wId));
+
+                        TripStop::create([
+                            'trip_id'        => $substituteTrip->id,
+                            'stop_type'      => TripStop::TYPE_HOME,
+                            'child_id'       => $wId,
+                            'school_id'      => $origStop?->school_id ?? $childObj?->school_id,
+                            'lat'            => $lat,
+                            'lng'            => $lng,
+                            'label'          => $label . ' (استكمال إنقاذ)',
+                            'sequence_order' => ++$highestSeq,
+                            'status'         => TripStop::STATUS_PENDING,
+                        ]);
+                    }
+                }
+            }
+
+            // 5. إضافة وتحديث محطات المدارس (Dropoff) لجميع الأطفال (أطفال البديل + أطفال الحافلة المعطلة + أطفال الانتظار)
+            $allTripChildIds = TripStop::where('trip_id', $substituteTrip->id)
+                ->whereNotNull('child_id')
+                ->pluck('child_id')
+                ->merge($strandedChildIds)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $allSchoolIds = Child::whereIn('id', $allTripChildIds)
+                ->pluck('school_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            $existingSchoolIds = TripStop::where('trip_id', $substituteTrip->id)
+                ->where('stop_type', TripStop::TYPE_SCHOOL)
+                ->pluck('school_id')
+                ->filter()
+                ->all();
+
+            $allTargetSchoolIds = array_values(array_unique(array_merge($allSchoolIds, $existingSchoolIds)));
+
+            $origSchoolStops = TripStop::where('trip_id', $originalTrip->id)
+                ->where('stop_type', TripStop::TYPE_SCHOOL)
+                ->whereIn('school_id', $allTargetSchoolIds)
+                ->get()
+                ->keyBy('school_id');
+
+            foreach ($allTargetSchoolIds as $sId) {
+                $schoolStopExists = TripStop::where('trip_id', $substituteTrip->id)
+                    ->where('stop_type', TripStop::TYPE_SCHOOL)
+                    ->where('school_id', $sId)
+                    ->exists();
+
+                if (!$schoolStopExists) {
+                    $origSchoolStop = $origSchoolStops->get($sId);
+                    $schoolModel = $origSchoolStop ? null : School::find($sId);
+
+                    $lat = $origSchoolStop?->lat ?? $schoolModel?->lat;
+                    $lng = $origSchoolStop?->lng ?? $schoolModel?->lng;
+                    $label = $origSchoolStop?->label ?? $schoolModel?->name ?? 'المدرسة';
+
+                    if ($lat && $lng) {
+                        TripStop::create([
+                            'trip_id'        => $substituteTrip->id,
+                            'stop_type'      => TripStop::TYPE_SCHOOL,
+                            'child_id'       => null,
+                            'school_id'      => $sId,
+                            'lat'            => $lat,
+                            'lng'            => $lng,
+                            'label'          => $label,
+                            'sequence_order' => 999,
+                            'status'         => TripStop::STATUS_PENDING,
+                        ]);
+                    }
+                }
+            }
+
+            // 6. ترتيب محطات الذهاب: جميع نقاط الالتقاط أولاً ثم المدارس مرتبة جغرافياً بالأقرب
             $homeStops = TripStop::where('trip_id', $substituteTrip->id)
                 ->where('stop_type', TripStop::TYPE_HOME)
                 ->orderBy('sequence_order')
@@ -565,6 +593,150 @@ class EmergencyBreakdownService
                 );
 
                 foreach ($orderedSchoolPoints as $point) {
+                    $seq++;
+                    $point['stop']->update(['sequence_order' => $seq]);
+                }
+            }
+        } else {
+            // ==========================================
+            // ب) رحلة الإياب / العودة (Return / Afternoon: من المدارس إلى المنازل)
+            // ==========================================
+
+            // 3. محطة السيارة المتوقفة: للطلاب العالقين الذين تم أخذهم من المدارس بالفعل
+            if (!empty($boardedChildIds)) {
+                $hasCarStop = TripStop::where('trip_id', $substituteTrip->id)
+                    ->where('label', 'like', '%السيارة المتوقفة%')
+                    ->exists();
+
+                if (!$hasCarStop) {
+                    TripStop::create([
+                        'trip_id'        => $substituteTrip->id,
+                        'stop_type'      => TripStop::TYPE_SCHOOL,
+                        'child_id'       => null,
+                        'lat'            => $dispatch->breakdown_lat,
+                        'lng'            => $dispatch->breakdown_lng,
+                        'label'          => 'السيارة المتوقفة (استلام طلاب العودة العالقين)',
+                        'sequence_order' => ++$highestSeq,
+                        'status'         => TripStop::STATUS_PENDING,
+                        'reason'         => json_encode(['boarded_child_ids' => $boardedChildIds]),
+                    ]);
+                }
+            }
+
+            // 4. محطات المدارس للأطفال الذين ما زالوا ينتظرون في مدارسهم ولم يُلتقطوا بعد
+            if (!empty($waitingChildIds)) {
+                $waitingSchoolIds = Child::whereIn('id', $waitingChildIds)
+                    ->pluck('school_id')
+                    ->filter()
+                    ->unique()
+                    ->all();
+
+                foreach ($waitingSchoolIds as $wSchoolId) {
+                    $schoolStopExists = TripStop::where('trip_id', $substituteTrip->id)
+                        ->where('stop_type', TripStop::TYPE_SCHOOL)
+                        ->where('school_id', $wSchoolId)
+                        ->exists();
+
+                    if (!$schoolStopExists) {
+                        $schoolModel = School::find($wSchoolId);
+                        if ($schoolModel && $schoolModel->lat && $schoolModel->lng) {
+                            TripStop::create([
+                                'trip_id'        => $substituteTrip->id,
+                                'stop_type'      => TripStop::TYPE_SCHOOL,
+                                'child_id'       => null,
+                                'school_id'      => $wSchoolId,
+                                'lat'            => $schoolModel->lat,
+                                'lng'            => $schoolModel->lng,
+                                'label'          => $schoolModel->name . ' (استلام طلاب العودة)',
+                                'sequence_order' => ++$highestSeq,
+                                'status'         => TripStop::STATUS_PENDING,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            // 5. محطات تنزيل المنازل (Dropoff at Homes) لجميع الأطفال (أطفال البديل + العالقين + المنتظرين)
+            $allTripChildIds = TripStop::where('trip_id', $substituteTrip->id)
+                ->whereNotNull('child_id')
+                ->pluck('child_id')
+                ->merge($strandedChildIds)
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            foreach ($allTripChildIds as $cId) {
+                $homeDropoffExists = TripStop::where('trip_id', $substituteTrip->id)
+                    ->where('stop_type', TripStop::TYPE_HOME)
+                    ->where('child_id', $cId)
+                    ->exists();
+
+                if (!$homeDropoffExists) {
+                    $childObj = Child::with(['address', 'school'])->find($cId);
+                    $origHomeStop = TripStop::where('trip_id', $originalTrip->id)
+                        ->where('stop_type', TripStop::TYPE_HOME)
+                        ->where('child_id', $cId)
+                        ->first();
+
+                    $lat = $origHomeStop?->lat ?? $childObj?->address?->lat ?? 32.8872;
+                    $lng = $origHomeStop?->lng ?? $childObj?->address?->lng ?? 13.1913;
+                    $label = 'تنزيل الطالب ' . ($childObj?->full_name ?? $cId) . ' في منزله';
+
+                    TripStop::create([
+                        'trip_id'        => $substituteTrip->id,
+                        'stop_type'      => TripStop::TYPE_HOME,
+                        'child_id'       => $cId,
+                        'school_id'      => $childObj?->school_id,
+                        'lat'            => $lat,
+                        'lng'            => $lng,
+                        'label'          => $label,
+                        'sequence_order' => 999,
+                        'status'         => TripStop::STATUS_PENDING,
+                    ]);
+                }
+            }
+
+            // 6. ترتيب محطات الإياب: نقاط الالتقاط (السيارة المتوقفة + المدارس) أولاً، تليها منازل الطلاب مرتبة بالأقرب
+            $pickupStops = TripStop::where('trip_id', $substituteTrip->id)
+                ->where('stop_type', TripStop::TYPE_SCHOOL)
+                ->orderBy('sequence_order')
+                ->get();
+
+            $seq = 0;
+            $lastPickupLat = $substituteDriver->current_lat ?? $dispatch->breakdown_lat;
+            $lastPickupLng = $substituteDriver->current_lng ?? $dispatch->breakdown_lng;
+
+            foreach ($pickupStops as $pStop) {
+                $seq++;
+                $pStop->update(['sequence_order' => $seq]);
+                if ($pStop->lat && $pStop->lng) {
+                    $lastPickupLat = (float) $pStop->lat;
+                    $lastPickupLng = (float) $pStop->lng;
+                }
+            }
+
+            $homeDropoffStops = TripStop::where('trip_id', $substituteTrip->id)
+                ->where('stop_type', TripStop::TYPE_HOME)
+                ->get();
+
+            if ($homeDropoffStops->isNotEmpty()) {
+                $homePoints = $homeDropoffStops->map(function ($h) {
+                    return [
+                        'id'   => $h->id,
+                        'lat'  => (float) $h->lat,
+                        'lng'  => (float) $h->lng,
+                        'stop' => $h,
+                    ];
+                })->values()->all();
+
+                $orderedHomePoints = GeoEstimator::orderByNearestNeighbor(
+                    $homePoints,
+                    (float) $lastPickupLat,
+                    (float) $lastPickupLng
+                );
+
+                foreach ($orderedHomePoints as $point) {
                     $seq++;
                     $point['stop']->update(['sequence_order' => $seq]);
                 }

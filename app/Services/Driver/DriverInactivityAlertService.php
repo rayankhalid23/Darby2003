@@ -96,12 +96,12 @@ class DriverInactivityAlertService
 
         // 4. تنفيذ التنبيهات دون تغيير أي حالة للسائق (كما طُلب بدون auto-snooze)
         $driverUser = $driver->user ?? User::find($driver->user_id);
-        $driverName = $driverUser?->name ?? "سائق #{$driver->id}";
-        $driverPhone = $driverUser?->phone_number ?? $driverUser?->phone ?? 'غير متوفر';
+        $driverName = $driverUser?->full_name ?? $driverUser?->name ?? "سائق #{$driver->id}";
+        $driverPhone = $driverUser?->phone_number ?? $driverUser?->alternative_phone ?? $driverUser?->phone ?? 'غير متوفر';
 
         // أ) إنشاء سجل AdminAlert في قاعدة البيانات للإدارة
         $alertTitle = '⚠️ سائق غير نشط يرفض الطلبات المتكررة';
-        $adminMessage = "السائق ({$driverName}) قام برفض {$rejectionsCount} طلبات خلال آخر " . self::WINDOW_DAYS . " أيام دون وجود أي اشتراك نشط لديه.";
+        $adminMessage = "السائق ({$driverName}) - هاتف: ({$driverPhone}) قام برفض {$rejectionsCount} طلبات خلال آخر " . self::WINDOW_DAYS . " أيام دون وجود أي اشتراك نشط لديه.";
 
         $adminAlert = AdminAlert::create([
             'driver_id'       => $driver->id,
@@ -135,11 +135,12 @@ class DriverInactivityAlertService
                     $admins,
                     NotificationFormatter::TYPE_DRIVER_INACTIVITY_REJECTION_ADMIN,
                     [
-                        'title'       => $alertTitle,
-                        'message'     => $adminMessage,
-                        'driver_name' => $driverName,
-                        'entity_id'   => $driver->id,
-                        'entity_type' => 'driver',
+                        'title'        => $alertTitle,
+                        'message'      => $adminMessage,
+                        'driver_name'  => $driverName,
+                        'driver_phone' => $driverPhone,
+                        'entity_id'    => $driver->id,
+                        'entity_type'  => 'driver',
                     ]
                 );
             }

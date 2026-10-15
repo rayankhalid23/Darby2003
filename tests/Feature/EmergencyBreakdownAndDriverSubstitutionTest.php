@@ -1032,4 +1032,235 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         $this->assertEquals($this->school->id, $stopForChild3['school_id']);
         $this->assertNotNull($stopForChild3['school_name']);
     }
+
+    /**
+     * اختبار ظهور الرحلة المعطلة في سجل رحلات السائق الرئيسي (History) بعد قبول السائق البديل
+     */
+    public function test_original_driver_history_shows_broken_down_trip_after_substitute_driver_accepts()
+    {
+        // 1. تشغيل بلاغ العطل للرحلة
+        $service = app(EmergencyBreakdownService::class);
+        $reasonText = 'تعطل ناقل الحركة وتوقف الحافلة بالكامل';
+        $reportResult = $service->reportBreakdown(
+            $this->trip,
+            32.88500000,
+            13.18500000,
+            $reasonText
+        );
+
+        $dispatchId = $reportResult['dispatch_id'];
+        $this->assertNotNull($dispatchId);
+
+        // 2. قبول السائق البديل للطلب
+        $acceptResponse = $this->actingAs($this->substituteDriverUser1, 'sanctum')
+            ->postJson("/api/v1/driver/emergency-dispatches/{$dispatchId}/accept");
+
+        $acceptResponse->assertStatus(200);
+
+        // 3. التحقق من تثبيت تاريخ انتهاء الرحلة الأصلية
+        $this->trip->refresh();
+        $this->assertEquals('suspended_breakdown', $this->trip->status);
+        $this->assertNotNull($this->trip->completed_at);
+
+        // 4. فحص ظهور الرحلة في سجل رحلات السائق الرئيسي (GET /api/v1/driver/trips/history)
+        $historyResponse = $this->actingAs($this->originalDriverUser, 'sanctum')
+            ->getJson('/api/v1/driver/trips/history');
+
+        $historyResponse->assertStatus(200);
+        $historyResponse->assertJson(['status' => 'success']);
+
+        $historyItems = $historyResponse->json('data');
+        $this->assertNotEmpty($historyItems);
+
+        $tripInHistory = collect($historyItems)->firstWhere('trip_id', $this->trip->id);
+        $this->assertNotNull($tripInHistory, 'الرحلة المعطلة لم تظهر في سجل رحلات السائق الرئيسي!');
+
+        $this->assertEquals('suspended_breakdown', $tripInHistory['status']);
+        $this->assertTrue($tripInHistory['is_breakdown']);
+        $this->assertEquals('رحلة معطلة', $tripInHistory['status_text']);
+        $this->assertEquals('معطلة', $tripInHistory['status_label']);
+        $this->assertEquals($reasonText, $tripInHistory['suspension_reason']);
+        $this->assertNotNull($tripInHistory['actual_completed_at']);
+        $this->assertNotNull($tripInHistory['substitute_driver']);
+        $this->assertEquals($this->substituteDriver1->id, $tripInHistory['substitute_driver']['id']);
+        $this->assertEquals($this->substituteDriverUser1->full_name, $tripInHistory['substitute_driver']['name']);
+
+        // 5. فحص فلترة السجل بالحالة معطلة (?status=breakdown أو ?status=suspended_breakdown)
+        $filteredResponse = $this->actingAs($this->originalDriverUser, 'sanctum')
+            ->getJson('/api/v1/driver/trips/history?status=breakdown');
+        $filteredResponse->assertStatus(200);
+        $filteredItems = $filteredResponse->json('data');
+        $this->assertNotEmpty($filteredItems);
+        $this->assertTrue(collect($filteredItems)->contains('trip_id', $this->trip->id));
+
+        // 6. فحص تفاصيل الرحلة السابقة عبر (GET /api/v1/driver/trips/history/{tripId})
+        $detailsResponse = $this->actingAs($this->originalDriverUser, 'sanctum')
+            ->getJson("/api/v1/driver/trips/history/{$this->trip->id}");
+
+        $detailsResponse->assertStatus(200);
+        $detailsResponse->assertJson([
+            'status' => 'success',
+            'data'   => [
+                'trip_id'           => $this->trip->id,
+                'status'            => 'suspended_breakdown',
+                'is_breakdown'      => true,
+                'status_text'       => 'رحلة معطلة',
+                'status_label'      => 'معطلة',
+                'suspension_reason' => $reasonText,
+                'substitute_driver' => [
+                    'id'   => $this->substituteDriver1->id,
+                    'name' => $this->substituteDriverUser1->full_name,
+                ]
+            ]
+        ]);
+    }
+
+    /**
+     * اختبار سيناريو رحلة الإياب/العودة (Return Trip):
+     * - السائق الأساسي ينقل طلاباً من المدرسة إلى المنازل وتعطلت الحافلة
+     * - التأكد من ظهور هواتف أولياء الأمور لكل طفل
+     * - التأكد من توجيه المسار إلى منازل الطلاب كنقاط تنزيل (Dropoff at Homes)
+     */
+    public function test_return_trip_breakdown_integration_and_parent_phones(): void
+    {
+        $service = app(EmergencyBreakdownService::class);
+
+        // 1. إنشاء رحلة إياب (Return Trip) للسائق الأساسي
+        $returnRoute = Route::create([
+            'driver_id'   => $this->originalDriver->id,
+            'vehicle_id'  => $this->originalVehicle->id,
+            'route_name'  => 'مسار الإياب من المدرسة للمنزل',
+            'route_type'  => 'Afternoon',
+            'shift_slot'  => 'afternoon_return',
+            'status'      => 'Active',
+            'start_time'  => '13:30:00',
+        ]);
+
+        $returnTrip = Trip::create([
+            'driver_id'            => $this->originalDriver->id,
+            'route_id'             => $returnRoute->id,
+            'trip_type'            => 'Afternoon',
+            'shift_slot'           => 'afternoon_return',
+            'status'               => 'in_progress',
+            'start_lat'            => 32.89000000,
+            'start_lng'            => 13.19000000,
+            'scheduled_start_time' => now(),
+            'actual_start_time'    => now(),
+            'trip_date'            => Carbon::today()->toDateString(),
+        ]);
+
+        // الطفل 1 صعد الحافلة بالفعل بعد خروجه من المدرسة
+        TripStop::create([
+            'trip_id'        => $returnTrip->id,
+            'stop_type'      => TripStop::TYPE_SCHOOL,
+            'school_id'      => $this->school->id,
+            'child_id'       => $this->child1->id,
+            'lat'            => 32.89000000,
+            'lng'            => 13.19000000,
+            'label'          => 'استلام الطفل من المدرسة',
+            'sequence_order' => 1,
+            'status'         => TripStop::STATUS_BOARDED,
+        ]);
+
+        // الطفل 2 ما زال ينتظر في المدرسة
+        TripStop::create([
+            'trip_id'        => $returnTrip->id,
+            'stop_type'      => TripStop::TYPE_SCHOOL,
+            'school_id'      => $this->school->id,
+            'child_id'       => $this->child2->id,
+            'lat'            => 32.89000000,
+            'lng'            => 13.19000000,
+            'label'          => 'انتظار الطفل بالمدرسة',
+            'sequence_order' => 2,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+
+        // منازل الطفلين للتنزيل
+        TripStop::create([
+            'trip_id'        => $returnTrip->id,
+            'stop_type'      => TripStop::TYPE_HOME,
+            'child_id'       => $this->child1->id,
+            'lat'            => 32.88000000,
+            'lng'            => 13.18000000,
+            'label'          => 'منزل الطفل 1',
+            'sequence_order' => 3,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+
+        TripStop::create([
+            'trip_id'        => $returnTrip->id,
+            'stop_type'      => TripStop::TYPE_HOME,
+            'child_id'       => $this->child2->id,
+            'lat'            => 32.88200000,
+            'lng'            => 13.18200000,
+            'label'          => 'منزل الطفل 2',
+            'sequence_order' => 4,
+            'status'         => TripStop::STATUS_PENDING,
+        ]);
+
+        // 2. تسجيل عطل رحلة الإياب
+        $reportResult = $service->reportBreakdown(
+            $returnTrip,
+            32.88500000,
+            13.18500000,
+            'عطل في نظام التبريد خلال رحلة العودة'
+        );
+        $dispatchId = $reportResult['dispatch_id'];
+        $this->assertNotNull($dispatchId);
+
+        // 3. قبول السائق البديل
+        $acceptResponse = $this->actingAs($this->substituteDriverUser1, 'sanctum')
+            ->postJson("/api/v1/driver/emergency-dispatches/{$dispatchId}/accept");
+        $acceptResponse->assertStatus(200);
+
+        $dispatch = TripBreakdownDispatch::find($dispatchId);
+        $subTripId = $dispatch->substitute_trip_id;
+        $this->assertNotNull($subTripId);
+
+        // 4. فحص استجابة GET /api/v1/driver/trips/{tripId} للسائق البديل في رحلة العودة
+        $detailsRes = $this->actingAs($this->substituteDriverUser1, 'sanctum')
+            ->getJson("/api/v1/driver/trips/{$subTripId}");
+
+        $detailsRes->assertStatus(200);
+        $children = $detailsRes->json('data.children');
+        $this->assertNotEmpty($children);
+
+        // التأكد من وجود رقم ولي الأمر لكل طفل
+        foreach ($children as $c) {
+            $this->assertNotEmpty($c['parent_phone'], "الطفل {$c['name']} ليس لديه رقم ولي أمر!");
+            $this->assertEquals($this->parentUser->phone_number, $c['parent_phone']);
+            $this->assertEquals('home', $c['destination_type']);
+        }
+
+        // 5. فحص استجابة محطات المسار GET /api/v1/driver/trips/{tripId}/stops
+        $stopsRes = $this->actingAs($this->substituteDriverUser1, 'sanctum')
+            ->getJson("/api/v1/driver/trips/{$subTripId}/stops");
+
+        $stopsRes->assertStatus(200);
+        $stopsData = $stopsRes->json('data.stops');
+        $this->assertEquals('return', $stopsRes->json('data.trip_direction'));
+
+        // في رحلة العودة: محطات الالتقاط تسبق محطات التنزيل في المنازل
+        $maxSchoolPickupSeq = collect($stopsData)->where('stop_type', 'school')->max('sequence_order');
+        $minHomeDropoffSeq = collect($stopsData)->where('stop_type', 'home')->min('sequence_order');
+        $this->assertGreaterThan($maxSchoolPickupSeq, $minHomeDropoffSeq);
+
+        // 6. فحص تأكيد استلام طلاب العودة العالقين POST /api/v1/driver/trips/{tripId}/confirm-breakdown-transfer
+        $confirmRes = $this->actingAs($this->substituteDriverUser1, 'sanctum')
+            ->postJson("/api/v1/driver/trips/{$subTripId}/confirm-breakdown-transfer");
+
+        $confirmRes->assertStatus(200);
+        $this->assertEquals('return', $confirmRes->json('trip_direction'));
+        $confirmedList = $confirmRes->json('children');
+        $this->assertNotEmpty($confirmedList);
+
+        foreach ($confirmedList as $confChild) {
+            $this->assertEquals('boarded', $confChild['status']);
+            $this->assertEquals('home', $confChild['destination_type']);
+            $this->assertNotEmpty($confChild['parent_phone']);
+            $this->assertEquals($this->parentUser->phone_number, $confChild['parent_phone']);
+        }
+    }
 }
+
+
