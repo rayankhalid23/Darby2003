@@ -106,6 +106,8 @@ class NotificationFormatter
     public const TYPE_SUPPORT_TICKET_STATUS_CHANGED    = 'support_ticket_status_changed';
     public const TYPE_SUPPORT_TICKET_RESOLVED          = 'support_ticket_resolved';
     public const TYPE_SUPPORT_TICKET_CLOSED            = 'support_ticket_closed';
+    public const TYPE_DRIVER_INACTIVITY_REJECTION_ALERT = 'driver_inactivity_rejection_alert';
+    public const TYPE_DRIVER_INACTIVITY_REJECTION_ADMIN = 'driver_inactivity_rejection_admin';
 
     /**
      * صياغة كائن الإشعار الموحد مع نصوص واضحة ودقيقة في كل الحالات
@@ -119,6 +121,7 @@ class NotificationFormatter
         $entityId = $data['entity_id'] ?? null;
         $entityType = $data['entity_type'] ?? null;
         $screen = $data['screen'] ?? 'HOME';
+        $action = $data['action'] ?? 'open';
         $reservedKeys = ['title', 'message', 'action_url', 'entity_id', 'entity_type', 'screen', 'action', 'payload'];
         $extraPayload = array_merge(
             array_diff_key($data, array_flip($reservedKeys)),
@@ -768,6 +771,22 @@ class NotificationFormatter
                 $screen = 'PROFILE';
                 $entityType = 'driver';
                 $action = 'open_profile';
+                break;
+
+            case self::TYPE_DRIVER_INACTIVITY_REJECTION_ALERT:
+                $title = $customTitle ?? 'تنبيه بخصوص استقبال الطلبات ⚠️';
+                $message = $customMessage ?? 'لاحظنا تكرار رفض الطلبات مؤخراً دون وجود اشتراكات نشطة، يرجى مراجعة تفضيلات التوفر لديك.';
+                $screen = 'DRIVER_PROFILE';
+                $entityType = 'driver';
+                $action = 'open_profile';
+                break;
+
+            case self::TYPE_DRIVER_INACTIVITY_REJECTION_ADMIN:
+                $title = $customTitle ?? '⚠️ تنبيه: سائق غير نشط يرفض الطلبات بكثرة';
+                $message = $customMessage ?? ($driverName !== 'السائق' ? "قام السائق ({$driverName}) برفض عدة طلبات مؤخراً دون وجود اشتراكات نشطة." : 'قام سائق برفض عدة طلبات مؤخراً دون وجود أي اشتراك نشط لديه.');
+                $screen = 'ADMIN_DRIVER_DETAILS';
+                $entityType = 'driver';
+                $action = 'open_driver_review';
                 break;
 
             case self::TYPE_GENERAL_ANNOUNCEMENT:

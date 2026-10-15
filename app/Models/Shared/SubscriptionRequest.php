@@ -63,6 +63,8 @@ class SubscriptionRequest extends Model
         'home_lat',
         'home_lng',
         'home_address_id',
+        'created_at',
+        'updated_at',
     ];
 
     protected $casts = [

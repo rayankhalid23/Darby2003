@@ -444,11 +444,12 @@ class EmergencyBreakdownService
                 ->get();
 
             foreach ($waitingHomeStops as $origStop) {
+                $childObj = Child::find($origStop->child_id);
                 TripStop::create([
                     'trip_id'        => $substituteTrip->id,
                     'stop_type'      => TripStop::TYPE_HOME,
                     'child_id'       => $origStop->child_id,
-                    'school_id'      => null,
+                    'school_id'      => $origStop->school_id ?? $childObj?->school_id,
                     'lat'            => $origStop->lat,
                     'lng'            => $origStop->lng,
                     'label'          => $origStop->label . ' (استكمال إنقاذ)',
@@ -458,53 +459,119 @@ class EmergencyBreakdownService
             }
         }
 
-        // 5. إضافة محطات المدارس (Dropoff): لجميع الأطفال (الذين صعدوا بالحافلة + الذين سيتم التقاطهم من منازلهم)
-        $schoolIds = Child::whereIn('id', $strandedChildIds)
+        // 5. إضافة وتحديث محطات المدارس (Dropoff): لجميع الأطفال (الرئيسيين للسائق البديل + أطفال السائق الأصلي الصاعدين والمنتظرين)
+        $allTripChildIds = TripStop::where('trip_id', $substituteTrip->id)
+            ->whereNotNull('child_id')
+            ->pluck('child_id')
+            ->merge($strandedChildIds)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $allSchoolIds = Child::whereIn('id', $allTripChildIds)
             ->pluck('school_id')
             ->filter()
             ->unique()
             ->values()
             ->all();
 
-        // تجنب تكرار محطات المدارس الموجودة مسبقاً في مسار السائق البديل
         $existingSchoolIds = TripStop::where('trip_id', $substituteTrip->id)
             ->where('stop_type', TripStop::TYPE_SCHOOL)
             ->pluck('school_id')
             ->filter()
             ->all();
 
-        $schoolsToAdd = array_diff($schoolIds, $existingSchoolIds);
+        $allTargetSchoolIds = array_values(array_unique(array_merge($allSchoolIds, $existingSchoolIds)));
 
         $origSchoolStops = TripStop::where('trip_id', $originalTrip->id)
             ->where('stop_type', TripStop::TYPE_SCHOOL)
-            ->whereIn('school_id', $schoolsToAdd)
+            ->whereIn('school_id', $allTargetSchoolIds)
             ->get()
             ->keyBy('school_id');
 
-        foreach ($schoolsToAdd as $sId) {
-            $origSchoolStop = $origSchoolStops->get($sId);
-            $schoolModel = $origSchoolStop ? null : School::find($sId);
+        foreach ($allTargetSchoolIds as $sId) {
+            $schoolStopExists = TripStop::where('trip_id', $substituteTrip->id)
+                ->where('stop_type', TripStop::TYPE_SCHOOL)
+                ->where('school_id', $sId)
+                ->exists();
 
-            $lat = $origSchoolStop?->lat ?? $schoolModel?->lat;
-            $lng = $origSchoolStop?->lng ?? $schoolModel?->lng;
-            $label = $origSchoolStop?->label ?? $schoolModel?->name ?? 'المدرسة';
+            if (!$schoolStopExists) {
+                $origSchoolStop = $origSchoolStops->get($sId);
+                $schoolModel = $origSchoolStop ? null : School::find($sId);
 
-            if ($lat && $lng) {
-                TripStop::create([
-                    'trip_id'        => $substituteTrip->id,
-                    'stop_type'      => TripStop::TYPE_SCHOOL,
-                    'child_id'       => null,
-                    'school_id'      => $sId,
-                    'lat'            => $lat,
-                    'lng'            => $lng,
-                    'label'          => $label,
-                    'sequence_order' => ++$highestSeq,
-                    'status'         => TripStop::STATUS_PENDING,
-                ]);
+                $lat = $origSchoolStop?->lat ?? $schoolModel?->lat;
+                $lng = $origSchoolStop?->lng ?? $schoolModel?->lng;
+                $label = $origSchoolStop?->label ?? $schoolModel?->name ?? 'المدرسة';
+
+                if ($lat && $lng) {
+                    TripStop::create([
+                        'trip_id'        => $substituteTrip->id,
+                        'stop_type'      => TripStop::TYPE_SCHOOL,
+                        'child_id'       => null,
+                        'school_id'      => $sId,
+                        'lat'            => $lat,
+                        'lng'            => $lng,
+                        'label'          => $label,
+                        'sequence_order' => 999,
+                        'status'         => TripStop::STATUS_PENDING,
+                    ]);
+                }
             }
         }
 
-        // 6. إعادة حساب الأوقات التقديرية الحية (Live ETAs)
+        // 6. ترتيب محطات المسار بالكامل:
+        // في رحلة الذهاب (Morning): جميع محطات الالتقاط (المنازل + محطة السيارة المتوقفة) أولاً،
+        // تليها جميع محطات المدارس مرتبة حسب الأقرب (Nearest Neighbor) من آخر نقطة التقاط!
+        $isGoDirection = ($substituteTrip->trip_type === 'Morning' || $substituteTrip->trip_type === 'ذهاب');
+
+        if ($isGoDirection) {
+            $homeStops = TripStop::where('trip_id', $substituteTrip->id)
+                ->where('stop_type', TripStop::TYPE_HOME)
+                ->orderBy('sequence_order')
+                ->get();
+
+            $seq = 0;
+            $lastPickupLat = $substituteDriver->current_lat ?? $dispatch->breakdown_lat;
+            $lastPickupLng = $substituteDriver->current_lng ?? $dispatch->breakdown_lng;
+
+            foreach ($homeStops as $hStop) {
+                $seq++;
+                $hStop->update(['sequence_order' => $seq]);
+                if ($hStop->lat && $hStop->lng) {
+                    $lastPickupLat = (float) $hStop->lat;
+                    $lastPickupLng = (float) $hStop->lng;
+                }
+            }
+
+            $schoolStops = TripStop::where('trip_id', $substituteTrip->id)
+                ->where('stop_type', TripStop::TYPE_SCHOOL)
+                ->get();
+
+            if ($schoolStops->isNotEmpty()) {
+                $schoolPoints = $schoolStops->map(function ($s) {
+                    return [
+                        'id'   => $s->id,
+                        'lat'  => (float) $s->lat,
+                        'lng'  => (float) $s->lng,
+                        'stop' => $s,
+                    ];
+                })->values()->all();
+
+                $orderedSchoolPoints = GeoEstimator::orderByNearestNeighbor(
+                    $schoolPoints,
+                    (float) $lastPickupLat,
+                    (float) $lastPickupLng
+                );
+
+                foreach ($orderedSchoolPoints as $point) {
+                    $seq++;
+                    $point['stop']->update(['sequence_order' => $seq]);
+                }
+            }
+        }
+
+        // 7. إعادة حساب الأوقات التقديرية الحية (Live ETAs)
         $subLat = $substituteDriver->current_lat ?? $dispatch->breakdown_lat;
         $subLng = $substituteDriver->current_lng ?? $dispatch->breakdown_lng;
 

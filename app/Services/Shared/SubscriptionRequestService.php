@@ -957,6 +957,8 @@ class SubscriptionRequestService
         $req->update([
             'status'           => SubscriptionRequest::STATUS_REJECTED,
             'rejection_reason' => $reason,
+            'responded_at'     => Carbon::now(),
+            'updated_at'       => Carbon::now(),
         ]);
 
         try {
@@ -972,6 +974,15 @@ class SubscriptionRequestService
             }
         } catch (\Throwable $e) {
             Log::warning("فشل إرسال إشعار FCM عند رفض الطلب ID {$req->id}: " . $e->getMessage());
+        }
+
+        try {
+            $driver = $req->driver ?? Driver::find($req->driver_id);
+            if ($driver) {
+                app(\App\Services\Driver\DriverInactivityAlertService::class)->checkAndAlertOnExcessiveRejections($driver);
+            }
+        } catch (\Throwable $e) {
+            Log::warning("فشل فحص نشاط السائق عند الرفض للطلب ID {$req->id}: " . $e->getMessage());
         }
 
         return $req->refresh();

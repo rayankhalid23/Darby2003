@@ -228,15 +228,37 @@ class DriverTripController extends Controller
                 ->with(['child.school', 'child.address', 'school'])
                 ->get();
 
-            if ($subs->isEmpty()) {
-                $childIdsFromStopsOrEvents = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
-                    ->pluck('child_id')
-                    ->merge(TripEvent::where('trip_id', $trip->id)->pluck('child_id'))
-                    ->filter()
-                    ->unique();
+            // جمع جميع معرّفات الأطفال الموجودين في محطات هذه الرحلة أو أحداثها أو مهام الطوارئ
+            $tripChildIds = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->whereNotNull('child_id')
+                ->pluck('child_id')
+                ->merge(TripEvent::where('trip_id', $trip->id)->pluck('child_id'));
 
-                if ($childIdsFromStopsOrEvents->isNotEmpty()) {
-                    $subs = ActiveSubscription::forChildren($childIdsFromStopsOrEvents->all())
+            // الأطفال العالقون في محطة النقل من الحافلة المتوقفة
+            $transferStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->whereNotNull('reason')
+                ->get();
+            foreach ($transferStops as $tStop) {
+                $r = json_decode($tStop->reason, true);
+                if (!empty($r['boarded_child_ids'])) {
+                    $tripChildIds = $tripChildIds->merge($r['boarded_child_ids']);
+                }
+            }
+
+            // فحص أي مهمة طارئة مقبولة مرتبطة بهذه الرحلة كرحلة بديلة
+            $dispatch = \App\Models\Shared\TripBreakdownDispatch::where('substitute_trip_id', $trip->id)
+                ->where('status', \App\Models\Shared\TripBreakdownDispatch::STATUS_ACCEPTED)
+                ->first();
+            if ($dispatch && !empty($dispatch->stranded_children_ids)) {
+                $tripChildIds = $tripChildIds->merge($dispatch->stranded_children_ids);
+            }
+
+            $tripChildIds = $tripChildIds->filter()->unique();
+
+            if ($subs->isEmpty()) {
+                if ($tripChildIds->isNotEmpty()) {
+                    $subs = ActiveSubscription::forChildren($tripChildIds->all())
+                        ->where('status', '!=', 'cancelled')
                         ->with(['child.school', 'child.address', 'school'])
                         ->get();
                 }
@@ -246,6 +268,41 @@ class DriverTripController extends Controller
                         ->where('status', '!=', 'cancelled')
                         ->with(['child.school', 'child.address', 'school'])
                         ->get();
+                }
+            } else {
+                $existingChildIds = $subs->pluck('child_id')->filter()->all();
+                $extraChildIds = $tripChildIds->diff($existingChildIds)->values()->all();
+                if (!empty($extraChildIds)) {
+                    $extraSubs = ActiveSubscription::forChildren($extraChildIds)
+                        ->where('status', '!=', 'cancelled')
+                        ->with(['child.school', 'child.address', 'school'])
+                        ->get();
+                    if ($extraSubs->isNotEmpty()) {
+                        $subs = $subs->merge($extraSubs);
+                    }
+                }
+            }
+
+            // ضمان وجود كائنات للأطفال حتى لو لم يكن لديهم اشتراك نشط (حالات الاختبار أو الطوارئ)
+            $loadedChildIds = $subs->pluck('child_id')->filter()->all();
+            $unloadedChildIds = $tripChildIds->diff($loadedChildIds)->values()->all();
+            if (!empty($unloadedChildIds)) {
+                $missingChildren = \App\Models\Parent\Child::with(['school', 'address'])
+                    ->whereIn('id', $unloadedChildIds)
+                    ->get();
+                foreach ($missingChildren as $mc) {
+                    $subs->push((object) [
+                        'id'           => $mc->id,
+                        'child_id'     => $mc->id,
+                        'child'        => $mc,
+                        'school'       => $mc->school,
+                        'school_id'    => $mc->school_id,
+                        'pickup_lat'   => $mc->address?->lat ?? $mc->latitude,
+                        'pickup_lng'   => $mc->address?->lng ?? $mc->longitude,
+                        'pickup_label' => $mc->address?->label ?? 'المنزل الرئيسي',
+                        'dropoff_lat'  => $mc->school?->lat,
+                        'dropoff_lng'  => $mc->school?->lng,
+                    ]);
                 }
             }
 
@@ -565,6 +622,32 @@ class DriverTripController extends Controller
                 ->orderBy('sequence_order')
                 ->get();
 
+            $extraChildIds = $homeStops->pluck('child_id')->filter()->diff($subs->pluck('child_id'))->values()->all();
+            if (!empty($extraChildIds)) {
+                $extraSubs = ActiveSubscription::forChildren($extraChildIds)
+                    ->where('status', '!=', 'cancelled')
+                    ->with(['child', 'school'])
+                    ->get();
+                $subs = $subs->merge($extraSubs);
+
+                $stillMissing = array_diff($extraChildIds, $subs->pluck('child_id')->all());
+                if (!empty($stillMissing)) {
+                    $missingChildren = \App\Models\Parent\Child::with(['school', 'address'])->whereIn('id', $stillMissing)->get();
+                    foreach ($missingChildren as $mc) {
+                        $subs->push((object) [
+                            'id'           => $mc->id,
+                            'child_id'     => $mc->id,
+                            'child'        => $mc,
+                            'school'       => $mc->school,
+                            'school_id'    => $mc->school_id,
+                            'pickup_lat'   => $mc->address?->lat ?? $mc->latitude,
+                            'pickup_lng'   => $mc->address?->lng ?? $mc->longitude,
+                            'pickup_label' => $mc->address?->label ?? 'المنزل الرئيسي',
+                        ]);
+                    }
+                }
+            }
+
             if ($homeStops->isNotEmpty()) {
                 $total = $homeStops->count();
                 $completed = $homeStops->whereNotIn('status', \App\Models\Shared\TripStop::NON_FINAL_STATUSES)->count();
@@ -603,6 +686,20 @@ class DriverTripController extends Controller
                     'pickup_address'  => $pickupAddr,
                     'latitude'        => (float) $pickupLat,
                     'longitude'       => (float) $pickupLng,
+                    'status'          => $currentStatusFields['status'] ?? 'pending',
+                    'pickup_status'   => $currentStatusFields['pickup_status'] ?? 'pending',
+                    'dropoff_status'  => $currentStatusFields['dropoff_status'] ?? 'pending',
+                    'eta'             => $currentStatusFields['eta'] ?? null,
+                ];
+            } elseif ($currentStop && $currentStop->child_id === null) {
+                $currentChildData = [
+                    'trip_child_id'   => null,
+                    'child_id'        => null,
+                    'name'            => $currentStop->label ?? 'نقطة استلام الحافلة المتوقفة',
+                    'school'          => null,
+                    'pickup_address'  => $currentStop->label ?? 'الحافلة المتوقفة',
+                    'latitude'        => (float) $currentStop->lat,
+                    'longitude'       => (float) $currentStop->lng,
                     'status'          => $currentStatusFields['status'] ?? 'pending',
                     'pickup_status'   => $currentStatusFields['pickup_status'] ?? 'pending',
                     'dropoff_status'  => $currentStatusFields['dropoff_status'] ?? 'pending',
@@ -678,7 +775,7 @@ class DriverTripController extends Controller
             $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
 
             $stops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
-                ->with(['child', 'school'])
+                ->with(['child.school', 'school'])
                 ->orderBy('sequence_order')
                 ->get()
                 ->map(function ($stop) {
@@ -711,8 +808,8 @@ class DriverTripController extends Controller
                         'status'                     => $stop->status,
                         'child_id'                   => $stop->child_id ? (int) $stop->child_id : null,
                         'child_name'                 => $stop->child?->full_name ?? $stop->child?->name,
-                        'school_id'                  => $stop->school_id ? (int) $stop->school_id : null,
-                        'school_name'                => $stop->school?->name,
+                        'school_id'                  => $stop->school_id ? (int) $stop->school_id : ($stop->child?->school_id ? (int) $stop->child->school_id : null),
+                        'school_name'                => $stop->school?->name ?? $stop->child?->school?->name,
                         'label'                      => $stop->label,
                         'latitude'                   => (float) $stop->lat,
                         'longitude'                  => (float) $stop->lng,
@@ -1616,6 +1713,7 @@ class DriverTripController extends Controller
                     ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
                     ->where('status', \App\Models\Shared\TripStop::STATUS_BOARDED)
                     ->pluck('child_id')
+                    ->merge(TripEvent::where('trip_id', $trip->id)->where('action_type', 'picked_up')->pluck('child_id'))
                     ->filter()
                     ->unique();
 
@@ -1685,7 +1783,8 @@ class DriverTripController extends Controller
             $child = $nextStop->child_id ? \App\Models\Parent\Child::with(['school', 'address'])->find($nextStop->child_id) : null;
             $school = $nextStop->school_id ? \App\Models\Parent\School::find($nextStop->school_id) : ($child?->school);
             $sub = $nextStop->child_id
-                ? ActiveSubscription::forDriver($trip->driver_id)->forChild($nextStop->child_id)->first()
+                ? (ActiveSubscription::forDriver($trip->driver_id)->forChild($nextStop->child_id)->first()
+                    ?? ActiveSubscription::forChild($nextStop->child_id)->first())
                 : null;
 
             $name = $isSchool

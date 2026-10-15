@@ -999,5 +999,37 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         $this->assertEquals('success', $resSchool['status']);
         $schoolAlert = collect($resSchool['proximity']['alerts'])->firstWhere('type', 'arrived_school');
         $this->assertNotNull($schoolAlert);
+
+        // 7. اختبار استجابة API للسائق البديل: ظهور الأطفال العالقين والمنتظرين + ترتيب المدارس
+        \Laravel\Sanctum\Sanctum::actingAs($this->substituteDriver1->user);
+
+        // أ) GET /api/v1/driver/trips/{tripId} (تفاصيل الرحلة والطلاب)
+        $resTripDetails = $this->getJson("/api/v1/driver/trips/{$subTrip->id}");
+        $resTripDetails->assertStatus(200);
+        $childrenData = $resTripDetails->json('data.children');
+        $childIdsInResponse = collect($childrenData)->pluck('child_id')->all();
+
+        // يجب أن يظهر طفل البديل الأصلي + أطفال الإنقاذ (الصاعدين والمنتظرين الذين لم يركبوا بعد)
+        $this->assertContains($subChild->id, $childIdsInResponse);
+        $this->assertContains($child3->id, $childIdsInResponse);
+        $this->assertContains($child4->id, $childIdsInResponse);
+        $this->assertContains($child5->id, $childIdsInResponse);
+
+        // ب) GET /api/v1/driver/trips/{tripId}/stops (محطات المسار وترتيب المدارس بعد نقاط الالتقاط)
+        $resStops = $this->getJson("/api/v1/driver/trips/{$subTrip->id}/stops");
+        $resStops->assertStatus(200);
+        $stopsList = $resStops->json('data.stops');
+
+        $maxHomeSeq = collect($stopsList)->where('stop_type', 'home')->max('sequence_order');
+        $minSchoolSeq = collect($stopsList)->where('stop_type', 'school')->min('sequence_order');
+
+        // جميع محطات المنازل والالتقاط تسبق جميع محطات المدارس
+        $this->assertGreaterThan($maxHomeSeq, $minSchoolSeq);
+
+        // محطات الأطفال المنتظرين تحتوي على اسم مدرستهم ومعرف المدرسة
+        $stopForChild3 = collect($stopsList)->firstWhere('child_id', $child3->id);
+        $this->assertNotNull($stopForChild3);
+        $this->assertEquals($this->school->id, $stopForChild3['school_id']);
+        $this->assertNotNull($stopForChild3['school_name']);
     }
 }
