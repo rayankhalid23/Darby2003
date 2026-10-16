@@ -261,11 +261,9 @@ class DashboardController extends Controller
                         $childrenMap->put($childId, [
                             'child_id'     => (int) $child->id,
                             'child_name'   => $child->full_name ?? $child->name ?? 'طفل',
-                            'name'         => $child->full_name ?? $child->name ?? 'طفل',
                             'parent_name'  => $parent?->full_name ?? 'غير محدد',
                             'parent_phone' => $parent?->phone_number ?? 'غير متوفر',
                             'school_name'  => $school?->name ?? 'المدرسة',
-                            'school'       => $school?->name ?? 'المدرسة',
                             'status'       => $cStatus,
                             'status_label' => $cStatusLabel,
                         ]);
@@ -315,11 +313,9 @@ class DashboardController extends Controller
                                 $childrenMap->put($cId, [
                                     'child_id'     => (int) $child->id,
                                     'child_name'   => $child->full_name ?? $child->name ?? 'طفل',
-                                    'name'         => $child->full_name ?? $child->name ?? 'طفل',
                                     'parent_name'  => $parent?->full_name ?? 'غير محدد',
                                     'parent_phone' => $parent?->phone_number ?? 'غير متوفر',
                                     'school_name'  => $school?->name ?? 'المدرسة',
-                                    'school'       => $school?->name ?? 'المدرسة',
                                     'status'       => $cStatus,
                                     'status_label' => $cStatusLabel,
                                 ]);
@@ -347,11 +343,9 @@ class DashboardController extends Controller
                         $childrenMap->put($child->id, [
                             'child_id'     => (int) $child->id,
                             'child_name'   => $child->full_name ?? $child->name ?? 'طفل',
-                            'name'         => $child->full_name ?? $child->name ?? 'طفل',
                             'parent_name'  => $parent?->full_name ?? 'غير محدد',
                             'parent_phone' => $parent?->phone_number ?? 'غير متوفر',
                             'school_name'  => $school?->name ?? 'المدرسة',
-                            'school'       => $school?->name ?? 'المدرسة',
                             'status'       => 'pending',
                             'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
                         ]);
@@ -360,7 +354,7 @@ class DashboardController extends Controller
 
                 $childrenList = $childrenMap->values();
 
-                // العدادات المطلوبة بدقة:
+                // العدادات المطلوبة بدقة دون تكرار:
                 $totalChildrenCount   = $childrenList->count();
                 $onBoardCount         = $childrenList->where('status', 'on_board')->count();
                 $pendingPickupCount   = $childrenList->where('status', 'pending')->count();
@@ -408,13 +402,6 @@ class DashboardController extends Controller
                     'pending_pickup_count'    => $pendingPickupCount, // عدد الأطفال اللي مزال ما خذاهمش
                     'delivered_count'         => $deliveredCount,     // عدد الأطفال اللي وصلهم
                     'absent_count'            => $absentCount,        // عدد الأطفال الغائبين
-                    'children_counts'         => [
-                        'total'          => $totalChildrenCount,
-                        'on_board'       => $onBoardCount,         // معاه
-                        'pending_pickup' => $pendingPickupCount,   // مزال ماخداهمش
-                        'delivered'      => $deliveredCount,       // وصلهم
-                        'absent'         => $absentCount,
-                    ],
                     'destination'             => $destination,
                     'duration'                => $duration,
                     'status'                  => 'في الطريق للاستلام',
@@ -485,33 +472,27 @@ class DashboardController extends Controller
                     [
                         'child_id'     => 101,
                         'child_name'   => 'علي المصراتي',
-                        'name'         => 'علي المصراتي',
                         'parent_name'  => 'محمد المصراتي',
                         'parent_phone' => '091-1112233',
                         'school_name'  => 'مدرسة الجيل الجديد الدولية',
-                        'school'       => 'مدرسة الجيل الجديد الدولية',
                         'status'       => 'on_board',
                         'status_label' => 'على متن الحافلة (مع السائق)',
                     ],
                     [
                         'child_id'     => 102,
                         'child_name'   => 'مروة المصراتي',
-                        'name'         => 'مروة المصراتي',
                         'parent_name'  => 'محمد المصراتي',
                         'parent_phone' => '091-1112233',
                         'school_name'  => 'مدرسة الجيل الجديد الدولية',
-                        'school'       => 'مدرسة الجيل الجديد الدولية',
                         'status'       => 'pending',
                         'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
                     ],
                     [
                         'child_id'     => 103,
                         'child_name'   => 'أحمد الترهوني',
-                        'name'         => 'أحمد الترهوني',
                         'parent_name'  => 'خالد الترهوني',
                         'parent_phone' => '092-4445566',
                         'school_name'  => 'مدرسة الجيل الجديد الدولية',
-                        'school'       => 'مدرسة الجيل الجديد الدولية',
                         'status'       => 'delivered',
                         'status_label' => 'تم التوصيل',
                     ],
@@ -521,13 +502,6 @@ class DashboardController extends Controller
                 'pending_pickup_count'    => 1,
                 'delivered_count'         => 1,
                 'absent_count'            => 0,
-                'children_counts'         => [
-                    'total'          => 3,
-                    'on_board'       => 1,
-                    'pending_pickup' => 1,
-                    'delivered'      => 1,
-                    'absent'         => 0,
-                ],
                 'destination'             => 'مدرسة الجيل الجديد الدولي...',
                 'duration'                => '12 دقيقة',
                 'status'                  => 'في الطريق للاستلام',
@@ -554,22 +528,18 @@ class DashboardController extends Controller
                     [
                         'child_id'     => 104,
                         'child_name'   => 'أحمد الزنتاني',
-                        'name'         => 'أحمد الزنتاني',
                         'parent_name'  => 'طارق الزنتاني',
                         'parent_phone' => '091-7778899',
                         'school_name'  => 'مدرسة الشروق الأهلية',
-                        'school'       => 'مدرسة الشروق الأهلية',
                         'status'       => 'on_board',
                         'status_label' => 'على متن الحافلة (مع السائق)',
                     ],
                     [
                         'child_id'     => 105,
                         'child_name'   => 'سند الورفلي',
-                        'name'         => 'سند الورفلي',
                         'parent_name'  => 'جمال الورفلي',
                         'parent_phone' => '092-3332211',
                         'school_name'  => 'مدرسة الشروق الأهلية',
-                        'school'       => 'مدرسة الشروق الأهلية',
                         'status'       => 'on_board',
                         'status_label' => 'على متن الحافلة (مع السائق)',
                     ],
@@ -579,13 +549,6 @@ class DashboardController extends Controller
                 'pending_pickup_count'    => 0,
                 'delivered_count'         => 0,
                 'absent_count'            => 0,
-                'children_counts'         => [
-                    'total'          => 2,
-                    'on_board'       => 2,
-                    'pending_pickup' => 0,
-                    'delivered'      => 0,
-                    'absent'         => 0,
-                ],
                 'destination'             => 'مدرسة الشروق الأهلية، الس...',
                 'duration'                => '4 دقائق',
                 'status'                  => 'في الطريق للاستلام',
@@ -612,33 +575,27 @@ class DashboardController extends Controller
                     [
                         'child_id'     => 106,
                         'child_name'   => 'سارة غومة',
-                        'name'         => 'سارة غومة',
                         'parent_name'  => 'نادر غومة',
                         'parent_phone' => '091-8889900',
                         'school_name'  => 'مدرسة طرابلس المركزية',
-                        'school'       => 'مدرسة طرابلس المركزية',
                         'status'       => 'on_board',
                         'status_label' => 'على متن الحافلة (مع السائق)',
                     ],
                     [
                         'child_id'     => 107,
                         'child_name'   => 'خالد بن علي',
-                        'name'         => 'خالد بن علي',
                         'parent_name'  => 'عبد الرؤوف بن علي',
                         'parent_phone' => '092-1234567',
                         'school_name'  => 'مدرسة طرابلس المركزية',
-                        'school'       => 'مدرسة طرابلس المركزية',
                         'status'       => 'pending',
                         'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
                     ],
                     [
                         'child_id'     => 108,
                         'child_name'   => 'فاطمة بن علي',
-                        'name'         => 'فاطمة بن علي',
                         'parent_name'  => 'عبد الرؤوف بن علي',
                         'parent_phone' => '092-1234567',
                         'school_name'  => 'مدرسة طرابلس المركزية',
-                        'school'       => 'مدرسة طرابلس المركزية',
                         'status'       => 'pending',
                         'status_label' => 'بانتظار الاستلام (لم يُصعد بعد)',
                     ],
@@ -648,13 +605,6 @@ class DashboardController extends Controller
                 'pending_pickup_count'    => 2,
                 'delivered_count'         => 0,
                 'absent_count'            => 0,
-                'children_counts'         => [
-                    'total'          => 3,
-                    'on_board'       => 1,
-                    'pending_pickup' => 2,
-                    'delivered'      => 0,
-                    'absent'         => 0,
-                ],
                 'destination'             => 'مدرسة طرابلس المركزية...',
                 'duration'                => '8 دقائق',
                 'status'                  => 'في الطريق للاستلام',
