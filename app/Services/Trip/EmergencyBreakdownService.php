@@ -146,6 +146,9 @@ class EmergencyBreakdownService
             // 8. إشعار مبدئي لأولياء الأمور بتوقف الرحلة والبحث عن بديل
             $this->notifyParentsInitialSuspension($trip, $strandedStops);
 
+            // 9. إشعار فوري لمشرفي النظام (Admin) بحالة الطوارئ
+            $this->notifyAdminsBreakdown($trip, $dispatch, $strandedChildrenCount);
+
             return [
                 'status'                  => 'broadcasted',
                 'message'                 => 'تم تسجيل توقف الرحلة وإرسال طلبات الإنقاذ العاجلة لـ ' . count($candidateDriverIds) . ' سائق بديل مؤهل في المنطقة.',
@@ -179,12 +182,55 @@ class EmergencyBreakdownService
         $nearbyZoneIds = $this->resolveNearbyZoneIds($breakdownLat, $breakdownLng, $originalTrip);
 
         // 2. استعلام السائقين النشطين والمعتمدين
+        // شرط حاسم: وثائق سارية بالكامل + منع أي سائق لديه رحلة في ذلك التوقيت منعاً باتاً
+        $todayStr = Carbon::today()->toDateString();
+        $tripDate = $originalTrip->trip_date ? Carbon::parse($originalTrip->trip_date)->toDateString() : $todayStr;
+        $shiftSlot = $originalTrip->shift_slot;
+
         $query = Driver::query()
             ->whereIn('status', ['Approved', 'Active'])
             ->where('id', '!=', $originalTrip->driver_id)
-            ->whereDoesntHave('documents', function ($q) {
-                $q->whereIn('doc_type', ['LICENSE', 'INSURANCE', 'STAMP', 'TECHNICAL_INSPECTION'])
-                  ->where('status', 'Expired');
+            // أ) رخصة القيادة سارية
+            ->where(function ($q) use ($todayStr) {
+                $q->whereNull('license_expiry')
+                  ->orWhere('license_expiry', '>=', $todayStr);
+            })
+            // ب) منع أي سائق لديه رحلة في ذلك التوقيت منعاً باتاً:
+            // يتم إرسال طلب الطوارئ حصراً للسائقين الذين ليس لديهم أي رحلة أساساً في ذلك التوقيت
+            ->whereDoesntHave('trips', function ($tq) use ($tripDate, $shiftSlot) {
+                $tq->where(function ($sub) use ($tripDate, $shiftSlot) {
+                    $sub->where(function ($dq) use ($tripDate) {
+                        $dq->whereDate('trip_date', $tripDate)
+                           ->orWhereDate('scheduled_at', $tripDate);
+                    })
+                    ->whereNotIn('status', ['Cancelled', 'cancelled']);
+
+                    if (!empty($shiftSlot)) {
+                        $sub->where(function ($sq) use ($shiftSlot) {
+                            $sq->where('shift_slot', $shiftSlot)
+                               ->orWhereNull('shift_slot');
+                        });
+                    }
+                })
+                // أو لديه أي رحلة جارية/نشطة حالياً
+                ->orWhere(function ($sub) use ($tripDate) {
+                    $sub->whereIn('status', ['in_progress', 'InProgress', 'started'])
+                        ->where(function ($dq) use ($tripDate) {
+                            $dq->whereDate('trip_date', $tripDate)
+                               ->orWhereDate('scheduled_at', $tripDate);
+                        });
+                });
+            })
+            // ج) تجنب أي وثيقة منتهية الصلاحية (سواء في driver_documents أو vehicle_documents)
+            ->whereDoesntHave('documents', function ($q) use ($todayStr) {
+                $q->where(function ($sub) use ($todayStr) {
+                    $sub->whereIn('state', ['expired', 'Expired'])
+                        ->orWhere('status', 'Expired')
+                        ->orWhere(function ($exp) use ($todayStr) {
+                            $exp->whereNotNull('expiry_date')
+                                ->where('expiry_date', '<', $todayStr);
+                        });
+                });
             })
             ->with(['user', 'vehicles', 'zones.subMunicipality', 'seatSlots', 'routes']);
 
@@ -201,7 +247,7 @@ class EmergencyBreakdownService
 
         $candidates = $query->get();
 
-        // 3. التصفية المتقدمة: السعة + ملاءمة المسار والوقت
+        // 3. التصفية المتقدمة: السعة + القرب المكاني وملاءمة الوقت
         $shiftSlot = $originalTrip->shift_slot ?? 'morning_go';
 
         return $candidates->filter(function (Driver $driver) use ($neededSeats, $shiftSlot, $breakdownLat, $breakdownLng, $originalTrip) {
@@ -211,7 +257,7 @@ class EmergencyBreakdownService
                 return false;
             }
 
-            // ب) فحص ملاءمة المسار (Route Feasibility) لعدم الإخلال بمساره الحالي
+            // ب) فحص القرب وملاءمة المسار
             $feasible = $this->checkDriverRouteFeasibility($driver, $breakdownLat, $breakdownLng, $originalTrip);
             return $feasible;
         })->values();
@@ -239,27 +285,26 @@ class EmergencyBreakdownService
     }
 
     /**
-     * التحقق من أن مسار السائق لن يتعطل أو يتجاوز الحد الأقصى للوقت عند استلام الأطفال
+     * التحقق من أن السائق قريب ومساره لن يتعطل عند استلام الأطفال
      */
     protected function checkDriverRouteFeasibility(Driver $driver, float $breakdownLat, float $breakdownLng, Trip $originalTrip): bool
     {
-        // السائق إذا كان لديه موقع حالي، نفحص المسافة بينه وبين موقع العطل
+        // السائق إذا كان لديه موقع حالي، نفحص المسافة بينه وبين موقع العطل (يجب أن يكون قريباً - أقصاها 15 كم)
         if ($driver->current_lat && $driver->current_lng) {
             $distKm = GeoEstimator::haversineKm($driver->current_lat, $driver->current_lng, $breakdownLat, $breakdownLng);
-            // إذا كان بعيداً جداً عن العطل (أكثر من 20 كم) يعتبر غير ملائم زمنياً
-            if ($distKm > 20.0) {
+            if ($distKm > 15.0) {
                 return false;
             }
         }
 
-        // فحص المسار النشط للسائق
+        // فحص المسار النشط للسائق إن وُجد
         $activeRoute = Route::where('driver_id', $driver->id)
             ->where('status', 'Active')
             ->first();
 
         if ($activeRoute && $activeRoute->estimated_duration) {
-            // إذا كان مسار السائق الحالي ممتلئاً جداً وزمنه يتجاوز 60 دقيقة
-            if ((int) $activeRoute->estimated_duration > 65) {
+            // إذا كان زمن مساره يتجاوز 60 دقيقة يعتبر غير ملائم زمنياً
+            if ((int) $activeRoute->estimated_duration > 60) {
                 return false;
             }
         }
@@ -294,6 +339,32 @@ class EmergencyBreakdownService
             $substituteDriver = Driver::with(['user', 'vehicles'])->findOrFail($substituteDriverId);
             $originalTrip = Trip::with(['driver.user', 'stops'])->findOrFail($dispatch->trip_id);
 
+            // منع أي سائق لديه رحلة في ذلك التوقيت منعاً باتاً من قبول المهمة
+            $todayStr = Carbon::today()->toDateString();
+            $tripDate = $originalTrip->trip_date ? Carbon::parse($originalTrip->trip_date)->toDateString() : $todayStr;
+            $shiftSlot = $originalTrip->shift_slot;
+
+            $hasTripAtTime = Trip::where('driver_id', $substituteDriverId)
+                ->where(function ($dq) use ($tripDate) {
+                    $dq->whereDate('trip_date', $tripDate)
+                       ->orWhereDate('scheduled_at', $tripDate);
+                })
+                ->whereNotIn('status', ['Cancelled', 'cancelled'])
+                ->when($shiftSlot, fn($q) => $q->where('shift_slot', $shiftSlot))
+                ->exists();
+
+            $hasActiveTrip = Trip::where('driver_id', $substituteDriverId)
+                ->whereIn('status', ['in_progress', 'InProgress', 'started'])
+                ->where(function ($dq) use ($tripDate) {
+                    $dq->whereDate('trip_date', $tripDate)
+                       ->orWhereDate('scheduled_at', $tripDate);
+                })
+                ->exists();
+
+            if ($hasTripAtTime || $hasActiveTrip) {
+                throw new Exception('لا يمكنك قبول هذه المهمة الطارئة لأن لديك رحلة أخرى في هذا التوقيت.', 422);
+            }
+
             // 1. تحديث حالة الطلب وحسمه لهذا السائق البديل
             $dispatch->update([
                 'status'               => TripBreakdownDispatch::STATUS_ACCEPTED,
@@ -320,6 +391,9 @@ class EmergencyBreakdownService
 
             // 5. إشعار السائق الأصلي بأن السائق البديل قبل المهمة
             $this->notifyOriginalDriverSubstituteAccepted($originalTrip, $substituteDriver);
+
+            // 6. إشعار مشرفي النظام (Admin) بنجاح تعيين السائق البديل
+            $this->notifyAdminsSubstituteAccepted($originalTrip, $dispatch, $substituteDriver);
 
             return [
                 'status'             => 'success',
@@ -867,6 +941,9 @@ class EmergencyBreakdownService
                 ]);
             }
         }
+
+        // 3. إشعار فوري لمشرفي النظام (Admin) بتعذر العثور على بديل وتحويل الاستلام للأهالي
+        $this->notifyAdminsUnresolved($trip, $dispatch, count($strandedChildIds));
     }
 
     /**
@@ -1149,5 +1226,72 @@ class EmergencyBreakdownService
                 'trip_id' => (int) $trip->id,
             ];
         });
+    }
+
+    /**
+     * إشعار مشرفي النظام ببلاغ تعطل جديد وبدء البث
+     */
+    protected function notifyAdminsBreakdown(Trip $trip, TripBreakdownDispatch $dispatch, int $strandedCount): void
+    {
+        $admins = User::where('role_id', 1)
+            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin']))
+            ->get();
+
+        if ($admins->isNotEmpty()) {
+            $driverName = $trip->driver?->user?->full_name ?? 'السائق';
+            $this->notificationService->sendToUsers($admins, NotificationFormatter::TYPE_ADMIN_EMERGENCY_BREAKDOWN, [
+                'title'                   => '🚨 حالة طوارئ: تعطل حافلة مدرسية',
+                'message'                 => "أبلغ الكابتن ({$driverName}) عن تعطل حافلته رقم #{$trip->id} وبها {$strandedCount} أطفال. يقوم النظام حالياً بالبحث عن بديل.",
+                'trip_id'                 => (string) $trip->id,
+                'entity_id'               => (string) $dispatch->id,
+                'dispatch_id'             => (string) $dispatch->id,
+                'stranded_children_count' => (string) $strandedCount,
+            ]);
+        }
+    }
+
+    /**
+     * إشعار مشرفي النظام بتعذر توفير بديل
+     */
+    protected function notifyAdminsUnresolved(Trip $trip, TripBreakdownDispatch $dispatch, int $strandedCount): void
+    {
+        $admins = User::where('role_id', 1)
+            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin']))
+            ->get();
+
+        if ($admins->isNotEmpty()) {
+            $driverName = $trip->driver?->user?->full_name ?? 'السائق';
+            $this->notificationService->sendToUsers($admins, NotificationFormatter::TYPE_ADMIN_EMERGENCY_UNRESOLVED, [
+                'title'                   => '⚠️ طوارئ حرجة: تعذر العثور على بديل',
+                'message'                 => "تعذر العثور على سائق بديل للحافلة رقم #{$trip->id} ({$driverName}) وبها {$strandedCount} أطفال. تم إشعار أولياء الأمور بالاستلام المباشر.",
+                'trip_id'                 => (string) $trip->id,
+                'entity_id'               => (string) $dispatch->id,
+                'dispatch_id'             => (string) $dispatch->id,
+                'stranded_children_count' => (string) $strandedCount,
+            ]);
+        }
+    }
+
+    /**
+     * إشعار مشرفي النظام بقبول سائق بديل للمهمة
+     */
+    protected function notifyAdminsSubstituteAccepted(Trip $trip, TripBreakdownDispatch $dispatch, Driver $substituteDriver): void
+    {
+        $admins = User::where('role_id', 1)
+            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin']))
+            ->get();
+
+        if ($admins->isNotEmpty()) {
+            $subName = $substituteDriver->user?->full_name ?? 'السائق البديل';
+            $this->notificationService->sendToUsers($admins, NotificationFormatter::TYPE_ADMIN_EMERGENCY_ACCEPTED, [
+                'title'                  => '✅ طوارئ: تم قبول مهمة الإنقاذ',
+                'message'                => "قبل الكابتن البديل ({$subName}) مهمة إنقاذ طلاب الحافلة المعطلة رقم #{$trip->id}.",
+                'trip_id'                => (string) $trip->id,
+                'entity_id'              => (string) $dispatch->id,
+                'dispatch_id'            => (string) $dispatch->id,
+                'substitute_driver_id'   => (string) $substituteDriver->id,
+                'substitute_driver_name' => $subName,
+            ]);
+        }
     }
 }

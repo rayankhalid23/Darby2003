@@ -59,10 +59,26 @@ class ParentRegistrationService
     {
         Log::info("Service: Attempting to register new parent: " . ($data['email'] ?? 'N/A'));
 
-        $result = $this->otpService->verify($data['email'], $data['otp'], 'REGISTER');
-        if (!$result['success']) {
-            Log::warning("Service: OTP verification failed for email: {$data['email']}. Message: {$result['message']}");
-            throw new Exception($result['message']);
+        $email = trim(mb_strtolower($data['email'] ?? ''));
+        $otp   = trim((string) ($data['otp'] ?? ''));
+
+        // فحص هل تم اعتماد الرمز مسبقاً عبر مسار verify-otp المنفصل
+        $cacheKey = 'parent_otp_verified:' . $email;
+        $isPreVerified = Cache::get($cacheKey) === $otp;
+
+        if (!$isPreVerified) {
+            $result = $this->otpService->verify($email, $otp, 'REGISTER', true);
+            if (!$result['success']) {
+                Log::warning("Service: OTP verification failed for email: {$email}. Message: {$result['message']}");
+                throw new Exception($result['message']);
+            }
+        } else {
+            // إتلاف الكود والتوثيق بعد الاستخدام في التسجيل
+            Cache::forget($cacheKey);
+            \App\Models\Shared\OtpCode::where('email', $email)
+                ->where('purpose', 'REGISTER')
+                ->where('is_used', 0)
+                ->update(['is_used' => 1]);
         }
 
         try {

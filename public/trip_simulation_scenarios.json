@@ -1,0 +1,216 @@
+{
+  "trip_id": 1414,
+  "trip_type": "Morning",
+  "shift_slot": "morning_go",
+  "trip_date": "2026-10-21",
+  "primary_driver": {
+    "driver_id": 2922,
+    "name": "كابتن محمود الأصلي",
+    "email": "driver.primary@darby.ly",
+    "phone": "0919990002",
+    "password": "Password123!"
+  },
+  "route_overview": {
+    "start_garage": {
+      "label": "نقطة انطلاق السائق (الكراج / المنزل)",
+      "lat": 32.885000,
+      "lng": 13.185000
+    },
+    "stops": [
+      {
+        "sequence_order": 1,
+        "stop_type": "home",
+        "child_id": 1,
+        "child_name": "محمد سالم",
+        "parent_phone": "0919990011",
+        "lat": 32.875000,
+        "lng": 13.175000,
+        "label": "منزل محمد سالم"
+      },
+      {
+        "sequence_order": 2,
+        "stop_type": "home",
+        "child_id": 2,
+        "child_name": "سارة سالم",
+        "parent_phone": "0919990011",
+        "lat": 32.876000,
+        "lng": 13.176000,
+        "label": "منزل سارة سالم"
+      },
+      {
+        "sequence_order": 3,
+        "stop_type": "home",
+        "child_id": 3,
+        "child_name": "ياسين منير",
+        "parent_phone": "0919990022",
+        "lat": 32.877000,
+        "lng": 13.177000,
+        "label": "منزل ياسين منير"
+      },
+      {
+        "sequence_order": 4,
+        "stop_type": "home",
+        "child_id": 4,
+        "child_name": "مريم منير",
+        "parent_phone": "0919990022",
+        "lat": 32.878000,
+        "lng": 13.178000,
+        "label": "منزل مريم منير"
+      },
+      {
+        "sequence_order": 5,
+        "stop_type": "school",
+        "school_id": 1,
+        "school_name": "مدرسة طرابلس المركزية",
+        "lat": 32.895000,
+        "lng": 13.195000,
+        "label": "مدرسة طرابلس المركزية"
+      },
+      {
+        "sequence_order": 6,
+        "stop_type": "school",
+        "school_id": 2,
+        "school_name": "مدرسة النور الأهلية",
+        "lat": 32.905000,
+        "lng": 13.205000,
+        "label": "مدرسة النور الأهلية"
+      }
+    ]
+  },
+  "scenarios": [
+    {
+      "id": "scenario_a_before_pickups",
+      "title": "السيناريو 1: تعطل الحافلة قبل أخذ أي طفل (0 أطفال بالحافلة)",
+      "description": "السائق بدأ الرحلة ولكن الحافلة تعطلت بالقرب من الكراج قبل الوصول للطفل الأول. جميع الأطفال الـ 4 ما زالوا ينتظرون في منازلهم.",
+      "onboard_children_count": 0,
+      "waiting_children_count": 4,
+      "breakdown_location": {
+        "lat": 32.884500,
+        "lng": 13.184500,
+        "description": "طريق الشط - بالقرب من نقطة الانطلاق"
+      },
+      "stop_states": [
+        { "stop_id": 1, "child_id": 1, "status": "pending" },
+        { "stop_id": 2, "child_id": 2, "status": "pending" },
+        { "stop_id": 3, "child_id": 3, "status": "pending" },
+        { "stop_id": 4, "child_id": 4, "status": "pending" }
+      ],
+      "post_breakdown_payload": {
+        "latitude": 32.884500,
+        "longitude": 13.184500,
+        "reason": "عطل مفاجئ في بطارية الحافلة قبل المحطة الأولى"
+      }
+    },
+    {
+      "id": "scenario_b_midway_pickups",
+      "title": "السيناريو 2: تعطل الحافلة بعد صعود طفلين (2 أطفال بالحافلة و 2 في الانتظار)",
+      "description": "صعد الطفل محمد سالم والطفلة سارة سالم للحافلة، وأثناء التوجه للمنزل الثالث تعطلت الحافلة. 2 أطفال عالقون داخل الحافلة و 2 ينتظرون بالمنزل.",
+      "onboard_children_count": 2,
+      "waiting_children_count": 2,
+      "breakdown_location": {
+        "lat": 32.876500,
+        "lng": 13.176500,
+        "description": "بين المحطة 2 والمحطة 3 في الحي السكني"
+      },
+      "stop_states": [
+        { "stop_id": 1, "child_id": 1, "status": "boarded" },
+        { "stop_id": 2, "child_id": 2, "status": "boarded" },
+        { "stop_id": 3, "child_id": 3, "status": "pending" },
+        { "stop_id": 4, "child_id": 4, "status": "pending" }
+      ],
+      "post_breakdown_payload": {
+        "latitude": 32.876500,
+        "longitude": 13.176500,
+        "reason": "ارتفاع حرارة المحرك وتوقف الحافلة بعد صعود طفلين"
+      }
+    },
+    {
+      "id": "scenario_c_all_children_onboard",
+      "title": "السيناريو 3: تعطل الحافلة بعد استلام جميع الأطفال وفي الطريق للمدرسة",
+      "description": "صعد جميع الأطفال الـ 4، وتعطلت الحافلة على الطريق الرئيسي المؤدي للمدارس. جميع الأطفال الـ 4 عالقون داخل الحافلة المعطلة مع السائق.",
+      "onboard_children_count": 4,
+      "waiting_children_count": 0,
+      "breakdown_location": {
+        "lat": 32.890000,
+        "lng": 13.190000,
+        "description": "الطريق الرئيسي باتجاه المدارس"
+      },
+      "stop_states": [
+        { "stop_id": 1, "child_id": 1, "status": "boarded" },
+        { "stop_id": 2, "child_id": 2, "status": "boarded" },
+        { "stop_id": 3, "child_id": 3, "status": "boarded" },
+        { "stop_id": 4, "child_id": 4, "status": "boarded" }
+      ],
+      "post_breakdown_payload": {
+        "latitude": 32.890000,
+        "longitude": 13.190000,
+        "reason": "عطل في ناقل الحركة (الجير) أثناء التوجه للمدرسة والحافلة ممتلئة بالطلاب"
+      }
+    }
+  ],
+  "drivers_test_accounts": [
+    {
+      "role": "السائق الأساسي صاحب الرحلة المعطلة",
+      "name": "كابتن محمود الأصلي",
+      "driver_id": 2922,
+      "email": "driver.primary@darby.ly",
+      "phone": "0919990002",
+      "password": "Password123!",
+      "expected_dispatch_status": "صاحب البلاغ (يرسل طلب الطوارئ)"
+    },
+    {
+      "role": "سائق بديل متفرغ وقريب ووثائقه سارية (الحالة المستهدفة)",
+      "name": "كابتن وسام المتفرغ",
+      "driver_id": 2961,
+      "email": "driver.case6.freenear@darby.ly",
+      "phone": "0919991006",
+      "password": "Password123!",
+      "expected_dispatch_status": "✅ يصله الطلب فوراً ويستطيع قبوله"
+    },
+    {
+      "role": "سائق بديل لديه رحلة مجدولة في نفس التوقيت",
+      "name": "كابتن كمال المشغول",
+      "driver_id": 2923,
+      "email": "driver.sub.busy@darby.ly",
+      "phone": "0919990004",
+      "password": "Password123!",
+      "expected_dispatch_status": "❌ ممنوع (لديه رحلة في نفس التوقيت)"
+    },
+    {
+      "role": "سائق بعيد جغرافياً (> 15 كم)",
+      "name": "كابتن طارق البعيد",
+      "driver_id": 2956,
+      "email": "driver.case1.far@darby.ly",
+      "phone": "0919991001",
+      "password": "Password123!",
+      "expected_dispatch_status": "❌ ممنوع (خارج النطاق الجغرافي)"
+    },
+    {
+      "role": "سائق متفرغ لكن وثائقه أو رخصته منتهية",
+      "name": "كابتن فرج منتهي الصلاحية",
+      "driver_id": 2957,
+      "email": "driver.case2.expireddocs@darby.ly",
+      "phone": "0919991002",
+      "password": "Password123!",
+      "expected_dispatch_status": "❌ ممنوع (وثائق منتهية الصلاحية)"
+    },
+    {
+      "role": "سائق سيارته ممتلئة بالكامل",
+      "name": "كابتن حمزة الممتلئ",
+      "driver_id": 2958,
+      "email": "driver.case3.fullcar@darby.ly",
+      "phone": "0919991003",
+      "password": "Password123!",
+      "expected_dispatch_status": "❌ ممنوع (لا توجد مقاعد شاغرة)"
+    },
+    {
+      "role": "سائق مساره طويل وسيتأخر على مواعيده",
+      "name": "كابتن بشير المتأخر",
+      "driver_id": 2959,
+      "email": "driver.case4.late@darby.ly",
+      "phone": "0919991004",
+      "password": "Password123!",
+      "expected_dispatch_status": "❌ ممنوع (مساره يتجاوز 60 دقيقة)"
+    }
+  ]
+}

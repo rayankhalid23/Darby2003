@@ -96,6 +96,11 @@ class PasswordController extends Controller
      */
     public function verifyOtp(Request $request)
     {
+        // مرونة مع مبرمج الفرونت: دعم استقبال الحقل باسم code أو otp
+        if (!$request->has('code') && $request->has('otp')) {
+            $request->merge(['code' => $request->input('otp')]);
+        }
+
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
             'code'  => 'required|digits:6',

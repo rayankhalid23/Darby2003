@@ -13,6 +13,8 @@ class OtpService
      */
     public function generate(string $email, string $purpose): array
     {
+        $email = trim(mb_strtolower($email));
+
         // 1. منع الطلب المتكرر قبل مرور 60 ثانية
         $lastOtp = OtpCode::where('email', $email)
             ->where('purpose', $purpose)
@@ -57,8 +59,11 @@ class OtpService
     /**
      * التحقق من كود الـ OTP
      */
-    public function verify(string $email, string $code, string $purpose): array
+    public function verify(string $email, string $code, string $purpose, bool $markAsUsed = true): array
     {
+        $email = trim(mb_strtolower($email));
+        $code  = trim((string) $code);
+
         // 1. جلب الرمز النشط حالياً
         $activeOtp = OtpCode::where('email', $email)
             ->where('purpose', $purpose)
@@ -70,8 +75,9 @@ class OtpService
             return ['success' => false, 'message' => 'لا يوجد رمز نشط، يرجى طلب رمز جديد.'];
         }
 
-        // 2. التحقق من انتهاء الصلاحية (5 دقائق)
-        if (Carbon::parse($activeOtp->expires_at)->isPast()) {
+        // 2. التحقق من انتهاء الصلاحية (مقارنة مضبوطة التوقيت)
+        $expiresAt = Carbon::parse($activeOtp->expires_at)->setTimezone(config('app.timezone'));
+        if ($expiresAt->isPast()) {
             $activeOtp->update(['is_used' => 1]);
             return ['success' => false, 'message' => 'الرمز منتهي الصلاحية، يرجى طلب رمز جديد.'];
         }
@@ -84,7 +90,9 @@ class OtpService
 
         // 4. مطابقة الكود مع الرمز النشط
         if (Hash::check($code, $activeOtp->code_hash)) {
-            $activeOtp->update(['is_used' => 1]);
+            if ($markAsUsed) {
+                $activeOtp->update(['is_used' => 1]);
+            }
             return ['success' => true, 'message' => 'تم التحقق بنجاح.'];
         }
 

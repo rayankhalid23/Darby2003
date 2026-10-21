@@ -55,6 +55,32 @@ Route::middleware(['auth:sanctum'])->group(function () {
         ->middleware('permission:trips.generate_daily')
         ->name('api.admin.trips.generate-daily');
 
+    // --- 🚨 إدارة ومتابعة حالات الطوارئ وتعطل الحافلات للوحة تحكم الأدمن ---
+    Route::prefix('trips/emergencies')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\Admin\AdminEmergencyController::class, 'index'])
+            ->middleware('permission:dashboard.view_radar')
+            ->name('api.admin.trips.emergencies.index');
+
+        Route::get('/{dispatchId}', [\App\Http\Controllers\Api\Admin\AdminEmergencyController::class, 'show'])
+            ->middleware('permission:dashboard.view_radar')
+            ->name('api.admin.trips.emergencies.show');
+
+        Route::post('/{dispatchId}/assign-substitute', [\App\Http\Controllers\Api\Admin\AdminEmergencyController::class, 'assignSubstitute'])
+            ->middleware('permission:dashboard.view_radar')
+            ->name('api.admin.trips.emergencies.assign-substitute');
+
+        Route::post('/{dispatchId}/resolve', [\App\Http\Controllers\Api\Admin\AdminEmergencyController::class, 'resolve'])
+            ->middleware('permission:dashboard.view_radar')
+            ->name('api.admin.trips.emergencies.resolve');
+    });
+
+    Route::prefix('emergencies')->group(function () {
+        Route::get('/', [\App\Http\Controllers\Api\Admin\AdminEmergencyController::class, 'index'])
+            ->middleware('permission:dashboard.view_radar');
+        Route::get('/{dispatchId}', [\App\Http\Controllers\Api\Admin\AdminEmergencyController::class, 'show'])
+            ->middleware('permission:dashboard.view_radar');
+    });
+
     // --- 🔔 إشعارات لوحة تحكم الأدمن ---
     Route::prefix('notifications')->group(function () {
         Route::get('/', [\App\Http\Controllers\Api\Admin\AdminNotificationController::class, 'index']);

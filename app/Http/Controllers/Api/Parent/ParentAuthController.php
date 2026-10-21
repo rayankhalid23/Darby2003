@@ -69,6 +69,49 @@ class ParentAuthController extends Controller
         }
     }
 
+    /**
+     * الخطوة 1-ب: التحقق المنفصل من كود الـ OTP لولي الأمر
+     */
+    public function verifyOtp(Request $request): JsonResponse
+    {
+        // مرونة مع مبرمج الفرونت: دعم استقبال الحقل باسم otp أو code
+        if (!$request->has('otp') && $request->has('code')) {
+            $request->merge(['otp' => $request->input('code')]);
+        }
+
+        $request->validate([
+            'email' => 'required|email',
+            'otp'   => 'required|digits:6',
+        ], [
+            'email.required' => 'البريد الإلكتروني مطلوب.',
+            'email.email'    => 'صيغة البريد الإلكتروني غير صحيحة.',
+            'otp.required'   => 'رمز التحقق مطلوب.',
+            'otp.digits'     => 'رمز التحقق يجب أن يتكون من 6 أرقام.',
+        ]);
+
+        $email = trim(mb_strtolower($request->email));
+        $otp   = trim((string) $request->otp);
+
+        $otpService = app(\App\Services\Shared\OtpService::class);
+        $result = $otpService->verify($email, $otp, 'REGISTER', false);
+
+        if (!$result['success']) {
+            return response()->json([
+                'status'     => false,
+                'error_code' => 'INVALID_OTP',
+                'message'    => $result['message'],
+            ], 400);
+        }
+
+        // حفظ اعتماد الرمز مؤقتاً لتسهيل خطوة استكمال البيانات التالية
+        \Illuminate\Support\Facades\Cache::put('parent_otp_verified:' . $email, $otp, now()->addMinutes(15));
+
+        return response()->json([
+            'status'  => true,
+            'message' => 'تم التحقق من رمز التأكيد بنجاح.',
+        ], 200);
+    }
+
     public function register(ParentRegisterRequest $request): JsonResponse
     {
         Log::info("Parent: Registration attempt started for: " . $request->email);

@@ -654,13 +654,36 @@ class DriverTripController extends Controller
                 $trip = $this->lifecycleService->startTrip($driverId, $tripType, $lat, $lng);
             }
 
+            $orderedStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('sequence_order', '>', 0)
+                ->orderBy('sequence_order')
+                ->with(['child', 'school'])
+                ->get();
+
             return response()->json([
                 'status'  => 'success',
-                'message' => 'تم بدء الرحلة.',
+                'message' => 'تم بدء الرحلة وتحديث مسار المحطات وفقاً لموقعك الحالي بنجاح.',
                 'data'    => [
                     'trip_id'    => (int) $trip->id,
                     'status'     => 'in_progress',
                     'started_at' => Carbon::now()->format('H:i'),
+                    'start_lat'  => $trip->start_lat,
+                    'start_lng'  => $trip->start_lng,
+                    'stops'      => $orderedStops->map(fn($s) => [
+                        'id'             => $s->id,
+                        'sequence_order' => $s->sequence_order,
+                        'stop_type'      => $s->stop_type,
+                        'child_id'       => $s->child_id,
+                        'child_name'     => $s->child?->full_name ?? $s->child?->name,
+                        'school_id'      => $s->school_id,
+                        'school_name'    => $s->school?->name,
+                        'label'          => $s->label,
+                        'lat'            => (float) $s->lat,
+                        'lng'            => (float) $s->lng,
+                        'eta'            => $s->eta,
+                        'eta_minutes'    => $s->eta_minutes,
+                        'status'         => $s->status,
+                    ]),
                 ]
             ], 200);
 
@@ -1640,7 +1663,7 @@ class DriverTripController extends Controller
             } elseif ($action === 'dropoff') {
                 // اتجاه الرحلة يحدد الوجهة النهائية: ذهاب → المدرسة، إياب → المنزل
                 $isGoTrip = \App\Models\Driver\DriverSeatSlot::isGoSlot($trip->shift_slot ?? '')
-                    || (!$trip->shift_slot && $trip->trip_type === 'Morning');
+                    || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
                 $dropoffStatus = $isGoTrip
                     ? \App\Models\Shared\TripStop::STATUS_DROPPED_OFF_SCHOOL
                     : \App\Models\Shared\TripStop::STATUS_DELIVERED_HOME;
@@ -1648,18 +1671,41 @@ class DriverTripController extends Controller
                 // 🔒 نفس حماية القفل والتزامن المطبقة على الصعود، بالإضافة لمنع النزول قبل الصعود
                 $conflict = false;
                 $notBoarded = false;
-                DB::transaction(function () use ($tripId, $childId, $sub, $eventTripType, $homeStop, $request, $dropoffStatus, &$conflict, &$notBoarded) {
+                DB::transaction(function () use ($tripId, $childId, $sub, $eventTripType, $homeStop, $request, $dropoffStatus, $isGoTrip, &$conflict, &$notBoarded) {
                     $lockedStop = $homeStop
                         ? \App\Models\Shared\TripStop::where('id', $homeStop->id)->lockForUpdate()->first()
                         : null;
 
-                    if ($lockedStop) {
-                        if ($lockedStop->status === \App\Models\Shared\TripStop::STATUS_PENDING) {
+                    if ($isGoTrip) {
+                        // في رحلة الذهاب: التحقق من الصعود إما عبر المحطة (STATUS_BOARDED) أو حدث صعود مسبق (picked_up)
+                        $hasPickedUp = ($lockedStop && $lockedStop->status === \App\Models\Shared\TripStop::STATUS_BOARDED)
+                            || TripEvent::where('trip_id', $tripId)->where('child_id', $childId)->where('action_type', 'picked_up')->exists();
+
+                        $alreadyDroppedOff = ($lockedStop && $lockedStop->status === $dropoffStatus)
+                            || TripEvent::where('trip_id', $tripId)->where('child_id', $childId)->where('action_type', 'dropped_off')->exists();
+
+                        if ($alreadyDroppedOff) {
+                            $conflict = true;
+                            return;
+                        }
+                        if (!$hasPickedUp) {
                             $notBoarded = true;
                             return;
                         }
-                        if ($lockedStop->status !== \App\Models\Shared\TripStop::STATUS_BOARDED) {
+                    } else {
+                        // في رحلة الإياب: الصعود يبدأ من المدرسة أو من الحافلة المعطلة (picked_up)، ومحطة المنزل هي محطة النزول (تبدأ كـ pending)
+                        $hasPickedUp = TripEvent::where('trip_id', $tripId)->where('child_id', $childId)->where('action_type', 'picked_up')->exists()
+                            || ($lockedStop && $lockedStop->status === \App\Models\Shared\TripStop::STATUS_BOARDED);
+
+                        $alreadyDroppedOff = ($lockedStop && $lockedStop->status === \App\Models\Shared\TripStop::STATUS_DELIVERED_HOME)
+                            || TripEvent::where('trip_id', $tripId)->where('child_id', $childId)->where('action_type', 'dropped_off')->exists();
+
+                        if ($alreadyDroppedOff) {
                             $conflict = true;
+                            return;
+                        }
+                        if (!$hasPickedUp) {
+                            $notBoarded = true;
                             return;
                         }
                     }
@@ -1677,6 +1723,27 @@ class DriverTripController extends Controller
                     ]);
 
                     $lockedStop?->update(['status' => $dropoffStatus]);
+
+                    // فحص إذا كان هناك محطة سيارة متوقفة (استلام طلاب) وكل أطفالها تم إنزالهم
+                    $transferStop = \App\Models\Shared\TripStop::where('trip_id', $tripId)
+                        ->where('label', 'like', '%السيارة المتوقفة%')
+                        ->whereIn('status', [\App\Models\Shared\TripStop::STATUS_BOARDED, \App\Models\Shared\TripStop::STATUS_PENDING])
+                        ->first();
+
+                    if ($transferStop) {
+                        $reasonData = json_decode($transferStop->reason ?? '{}', true);
+                        $tChildIds = $reasonData['boarded_child_ids'] ?? [];
+                        if (!empty($tChildIds)) {
+                            $droppedCount = TripEvent::where('trip_id', $tripId)
+                                ->whereIn('child_id', $tChildIds)
+                                ->where('action_type', 'dropped_off')
+                                ->distinct('child_id')
+                                ->count('child_id');
+                            if ($droppedCount >= count($tChildIds)) {
+                                $transferStop->update(['status' => $dropoffStatus]);
+                            }
+                        }
+                    }
                 });
 
                 if ($notBoarded) {

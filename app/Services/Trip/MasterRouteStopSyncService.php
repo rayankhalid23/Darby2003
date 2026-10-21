@@ -433,14 +433,41 @@ class MasterRouteStopSyncService
             return;
         }
 
+        // جلب موقع منزل السائق لترتيب المسار الأساسي انطلاقاً منه
+        $driverHome = null;
+        $driver = $route->driver;
+        if ($driver) {
+            $driverAddress = \App\Models\Driver\Address::where('user_id', $driver->user_id)
+                ->whereNull('deleted_at')
+                ->where(function ($q) {
+                    $q->where('is_default', true)
+                      ->orWhere('label', 'like', '%منزل%')
+                      ->orWhere('label', 'like', '%بيت%');
+                })
+                ->orderByRaw("is_default DESC, (label LIKE '%منزل%' OR label LIKE '%بيت%') DESC")
+                ->first()
+                ?? \App\Models\Driver\Address::where('user_id', $driver->user_id)->whereNull('deleted_at')->first();
+
+            if ($driverAddress && $driverAddress->lat && $driverAddress->lng) {
+                $driverHome = ['lat' => (float) $driverAddress->lat, 'lng' => (float) $driverAddress->lng];
+            } elseif ($driver->current_lat && $driver->current_lng) {
+                $driverHome = ['lat' => (float) $driver->current_lat, 'lng' => (float) $driver->current_lng];
+            }
+        }
+
         $isGo = DriverSeatSlot::isGoSlot($route->shift_slot ?? '');
-        $finalOrder = GeoEstimator::orderStopsForDirection($homePoints, $schoolPoints, $isGo);
+        $finalOrder = GeoEstimator::orderStopsForDirection($homePoints, $schoolPoints, $isGo, $driverHome);
 
         foreach ($finalOrder as $index => $point) {
             RouteStop::where('id', $point['id'])->update(['sequence_order' => $index + 1]);
         }
 
         $distanceKm = GeoEstimator::totalPathDistanceKm($finalOrder);
+
+        if ($driverHome && !empty($finalOrder) && $isGo) {
+            $leadInKm = GeoEstimator::haversineKm($driverHome['lat'], $driverHome['lng'], (float) $finalOrder[0]['lat'], (float) $finalOrder[0]['lng']);
+            $distanceKm += $leadInKm;
+        }
 
         $route->total_distance = round($distanceKm, 2);
         $route->estimated_duration = max(5, GeoEstimator::estimateMinutes($distanceKm));

@@ -71,31 +71,45 @@ class GeoEstimator
     }
 
     /**
-     * يرتب مجموعة محطات "منازل" و"مدارس" حسب اتجاه الوردية:
-     * ذهاب (go): منازل (بدءاً من الأبعد عن المدرسة) ثم مدرسة/مدارس أخيراً.
-     * إياب (return): مدرسة/مدارس أولاً ثم منازل بأقرب جار.
+     * يرتب مجموعة محطات "منازل" و"مدارس" حسب اتجاه الوردية ونقطة انطلاق السائق:
+     * - ذهاب (go): إذا توفر موقع السائق، يبدأ من أقرب منزل للسائق، ثم المنازل بأقرب جار، ثم المدارس.
+     *   إذا لم يتوفر موقع السائق، يبدأ من المنزل الأبعد عن المدرسة.
+     * - إياب (return): مدرسة/مدارس أولاً، ثم منازل بأقرب جار.
      * كل نقطة يجب أن تحتوي 'lat' و'lng' (وأي مفاتيح إضافية مثل 'id' تُحفظ كما هي).
      */
-    public static function orderStopsForDirection(array $homePoints, array $schoolPoints, bool $isGoDirection): array
+    public static function orderStopsForDirection(array $homePoints, array $schoolPoints, bool $isGoDirection, ?array $driverStartPoint = null): array
     {
         if (empty($homePoints) && empty($schoolPoints)) {
             return [];
         }
 
         if ($isGoDirection) {
-            $orderedHomes = self::orderHomesFarthestFirst($homePoints, $schoolPoints[0] ?? null);
-            $lastPoint = !empty($orderedHomes) ? end($orderedHomes) : null;
+            // إذا توفر موقع انطلاق السائق (المنزل عند بناء المسار، أو الموقع الحي عند بدء الرحلة)
+            if ($driverStartPoint && isset($driverStartPoint['lat'], $driverStartPoint['lng'])) {
+                $orderedHomes = self::orderByNearestNeighbor($homePoints, (float) $driverStartPoint['lat'], (float) $driverStartPoint['lng']);
+            } else {
+                $orderedHomes = self::orderHomesFarthestFirst($homePoints, $schoolPoints[0] ?? null);
+            }
+
+            $lastPoint = !empty($orderedHomes) ? end($orderedHomes) : ($driverStartPoint ?? null);
             $orderedSchools = $lastPoint
-                ? self::orderByNearestNeighbor($schoolPoints, $lastPoint['lat'], $lastPoint['lng'])
+                ? self::orderByNearestNeighbor($schoolPoints, (float) $lastPoint['lat'], (float) $lastPoint['lng'])
                 : $schoolPoints;
 
             return array_merge($orderedHomes, $orderedSchools);
         }
 
-        $anchor = $schoolPoints[0] ?? ($homePoints[0] ?? ['lat' => 0, 'lng' => 0]);
-        $orderedHomes = self::orderByNearestNeighbor($homePoints, $anchor['lat'], $anchor['lng']);
+        // رحلة الإياب:
+        if ($driverStartPoint && isset($driverStartPoint['lat'], $driverStartPoint['lng']) && !empty($schoolPoints)) {
+            $orderedSchools = self::orderByNearestNeighbor($schoolPoints, (float) $driverStartPoint['lat'], (float) $driverStartPoint['lng']);
+        } else {
+            $orderedSchools = $schoolPoints;
+        }
 
-        return array_merge($schoolPoints, $orderedHomes);
+        $lastSchool = !empty($orderedSchools) ? end($orderedSchools) : ($driverStartPoint ?? ($homePoints[0] ?? ['lat' => 0, 'lng' => 0]));
+        $orderedHomes = self::orderByNearestNeighbor($homePoints, (float) $lastSchool['lat'], (float) $lastSchool['lng']);
+
+        return array_merge($orderedSchools, $orderedHomes);
     }
 
     /**

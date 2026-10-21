@@ -161,7 +161,7 @@ class DashboardController extends Controller
      */
     public function activeTrips(): JsonResponse
     {
-        $activeTrips = Trip::where('status', 'in_progress')
+        $activeTrips = Trip::whereIn('status', ['in_progress', 'suspended_breakdown'])
             ->with([
                 'driver.user',
                 'driver.vehicles',
@@ -388,6 +388,19 @@ class DashboardController extends Controller
                 $mapX = round(max(5, min(95, (($lng - 13.0) / 0.5) * 90 + 5)), 1);
                 $mapY = round(max(10, min(85, ((33.2 - $lat) / 0.7) * 75 + 10)), 1);
 
+                $isBreakdown = ($trip->status === 'suspended_breakdown');
+                $dispatch = $isBreakdown
+                    ? \App\Models\Shared\TripBreakdownDispatch::with(['substituteDriver.user', 'substituteDriver.vehicles'])
+                        ->where('trip_id', $trip->id)
+                        ->latest('id')
+                        ->first()
+                    : null;
+
+                $statusLabel = 'في الطريق للاستلام';
+                if ($isBreakdown) {
+                    $statusLabel = '⚠️ عطل طارئ: ' . ($trip->suspension_reason ?? 'توقف الحافلة');
+                }
+
                 return [
                     'id'                      => $trip->id,
                     'trip_id'                 => $trip->id,
@@ -404,7 +417,23 @@ class DashboardController extends Controller
                     'absent_count'            => $absentCount,        // عدد الأطفال الغائبين
                     'destination'             => $destination,
                     'duration'                => $duration,
-                    'status'                  => 'في الطريق للاستلام',
+                    'status'                  => $statusLabel,
+                    'status_key'              => $trip->status,
+                    'is_emergency'            => $isBreakdown,
+                    'emergency_details'       => $isBreakdown ? [
+                        'dispatch_id'             => $dispatch?->id,
+                        'dispatch_status'         => $dispatch?->status ?? 'pending',
+                        'breakdown_reason'        => $trip->suspension_reason ?? $dispatch?->reason,
+                        'breakdown_lat'           => $dispatch?->breakdown_lat ?? (float) $lat,
+                        'breakdown_lng'           => $dispatch?->breakdown_lng ?? (float) $lng,
+                        'maps_url'                => "https://maps.google.com/?q=" . ($dispatch?->breakdown_lat ?? $lat) . "," . ($dispatch?->breakdown_lng ?? $lng),
+                        'substitute_driver'       => $dispatch?->substituteDriver ? [
+                            'id'           => $dispatch->substituteDriver->id,
+                            'name'         => $dispatch->substituteDriver->user?->full_name,
+                            'phone'        => $dispatch->substituteDriver->user?->phone_number,
+                            'plate_number' => $dispatch->substituteDriver->vehicles->first()?->plate_number,
+                        ] : null,
+                    ] : null,
                     'lat'                     => (float) $lat,
                     'lng'                     => (float) $lng,
                     'heading'                 => $heading,
@@ -431,7 +460,7 @@ class DashboardController extends Controller
                 'strategy'   => 'realtime_with_backend_fallback',
             ],
             'data'     => $activeTrips,
-            'is_demo'  => Trip::where('status', 'in_progress')->doesntExist(),
+            'is_demo'  => Trip::whereIn('status', ['in_progress', 'suspended_breakdown'])->doesntExist(),
         ]);
     }
 

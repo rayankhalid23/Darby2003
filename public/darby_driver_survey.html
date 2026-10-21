@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>استبيان سائقي النقل المدرسي - منصة دربي</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            padding: 20px 0;
+        }
+        .form-container {
+            max-width: 850px;
+            margin: auto;
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .header-banner {
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            padding: 35px 30px;
+        }
+        .section-card {
+            background: #fafbfc;
+            border: 1px solid #e1e8ed;
+            border-right: 5px solid #2a5298;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .question-box {
+            background: #ffffff;
+            border: 1px solid #edf2f7;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 18px;
+            transition: all 0.2s ease;
+        }
+        .question-box:hover {
+            border-color: #cbd5e1;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .question-title {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: #1e293b;
+            margin-bottom: 12px;
+        }
+        .badge-type {
+            font-size: 0.75rem;
+            background-color: #e2e8f0;
+            color: #475569;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-right: 8px;
+        }
+        .form-check-label {
+            cursor: pointer;
+            font-size: 0.95rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="form-container">
+        <!-- Header -->
+        <div class="header-banner text-center">
+            <h2 class="fw-bold mb-3">استبيان سائقي النقل المدرسي لتحديد متطلبات منصة «دربي»</h2>
+            <p class="mb-0 fs-6" style="opacity: 0.95; line-height: 1.8;">
+                السلام عليكم ورحمة الله وبركاته،<br>
+                نحن فريق مشروع التخرج «منصة دربي»، وهي منصة تهدف إلى تسهيل التواصل بين أولياء الأمور وسائقي النقل المدرسي، والمساعدة في تنظيم خدمات نقل الطلاب من وإلى المدارس.<br>
+                يهدف هذا الاستبيان إلى التعرّف على طبيعة عمل سائقي النقل المدرسي، والصعوبات التي تواجههم، واحتياجاتهم في تنظيم الرحلات والتعامل مع أولياء الأمور، للاستفادة من الإجابات في تحديد متطلبات منصة دربي وتطوير الحلول المناسبة.<br>
+                <strong>نشكركم على وقتكم ومشاركتكم، ونؤكد أن الإجابات ستُستخدم لأغراض الدراسة والبحث العلمي فقط.</strong>
+            </p>
+        </div>
+
+        <form class="p-4" id="darbySurvey" onsubmit="event.preventDefault(); alert('تم استلام إجابات الاستبيان بنجاح! شكراً لمشاركتك القيّمة.');">
+            
+            <!-- القسم الأول -->
+            <div class="section-card">
+                <h4 class="text-primary fw-bold mb-3">القسم الأول: طبيعة العمل</h4>
+                
+                <div class="question-box">
+                    <div class="question-title">1. هل سبق لك العمل في مجال نقل الأطفال إلى المدارس؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q1" id="q1_1" required>
+                        <label class="form-check-label" for="q1_1">نعم، أعمل حاليًا في هذا المجال.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q1" id="q1_2">
+                        <label class="form-check-label" for="q1_2">سبق لي العمل في هذا المجال، لكنني لا أعمل حاليًا.</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="q1" id="q1_3">
+                        <label class="form-check-label" for="q1_3">لا، لم يسبق لي العمل في هذا المجال.</label>
+                    </div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">2. هل تستخدم مركبتك الخاصة لنقل الطلاب إلى المدارس مقابل أجر؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q2" id="q2_1" required>
+                        <label class="form-check-label" for="q2_1">نعم، أستخدم مركبتي الخاصة.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q2" id="q2_2">
+                        <label class="form-check-label" for="q2_2">لا، أستخدم مركبة تابعة لجهة أخرى.</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="q2" id="q2_3">
+                        <label class="form-check-label" for="q2_3">لا أعمل حاليًا في النقل المدرسي.</label>
+                    </div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">3. كيف تحصل عادةً على أولياء أمور جدد يرغبون في الاستفادة من خدمة النقل التي تقدمها؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q3" id="q3_1" required>
+                        <label class="form-check-label" for="q3_1">عن طريق المعارف والتوصيات.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q3" id="q3_2">
+                        <label class="form-check-label" for="q3_2">من خلال مجموعات التواصل الاجتماعي.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q3" id="q3_3">
+                        <label class="form-check-label" for="q3_3">عن طريق التواصل المباشر مع أولياء الأمور.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q3" id="q3_4">
+                        <label class="form-check-label" for="q3_4">عن طريق المدارس.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="q3" id="q3_5">
+                        <label class="form-check-label" for="q3_5">أواجه صعوبة في الوصول إلى أولياء أمور جدد.</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="q3" id="q3_6">
+                        <label class="form-check-label" for="q3_6">طريقة أخرى، يرجى ذكرها.</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- القسم الثاني -->
+            <div class="section-card">
+                <h4 class="text-primary fw-bold mb-3">القسم الثاني: الوصول إلى أولياء الأمور وتنظيم الخدمة</h4>
+
+                <div class="question-box">
+                    <div class="question-title">4. ما الصعوبات التي تواجهك في الوصول إلى أولياء أمور جدد أو الحصول على طلبات نقل تناسبك؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="q4[]" id="q4_1">
+                        <label class="form-check-label" for="q4_1">صعوبة الوصول إلى أولياء أمور يبحثون عن سائق لنقل أبنائهم.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="q4[]" id="q4_2">
+                        <label class="form-check-label" for="q4_2">عدم معرفة أولياء الأمور الذين يحتاجون إلى النقل في المناطق التي أعمل بها.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="q4[]" id="q4_3">
+                        <label class="form-check-label" for="q4_3">وصول طلبات نقل من مناطق بعيدة عن مكان عملي.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="q4[]" id="q4_4">
+                        <label class="form-check-label" for="q4_4">عدم توافق مواعيد التوصيل المطلوبة مع أوقات عملي.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="q4[]" id="q4_5">
+                        <label class="form-check-label" for="q4_5">عدم توفر مقاعد كافية في مركبتي لقبول بعض الطلبات.</label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="q4[]" id="q4_6">
+                        <label class="form-check-label" for="q4_6">لا أواجه هذه الصعوبات.</label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="q4[]" id="q4_7">
+                        <label class="form-check-label" for="q4_7">أخرى، يرجى التوضيح.</label>
+                    </div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">5. ما مدى أهمية معرفة طلبات النقل الجديدة التي تناسب مناطق عملك ومواعيدك وعدد المقاعد المتاحة في مركبتك؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="d-flex flex-wrap gap-3 mt-2">
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q5" id="q5_1" required><label class="form-check-label" for="q5_1">مهمة جدًا</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q5" id="q5_2"><label class="form-check-label" for="q5_2">مهمة</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q5" id="q5_3"><label class="form-check-label" for="q5_3">متوسطة الأهمية</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q5" id="q5_4"><label class="form-check-label" for="q5_4">قليلة الأهمية</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q5" id="q5_5"><label class="form-check-label" for="q5_5">غير مهمة إطلاقًا</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q5" id="q5_6"><label class="form-check-label" for="q5_6">لا أستطيع التحديد</label></div>
+                    </div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">6. كيف تعرّف أولياء الأمور بخدمات النقل المدرسي التي تقدمها؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q6[]" id="q6_1"><label class="form-check-label" for="q6_1">عن طريق المعارف والتوصيات.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q6[]" id="q6_2"><label class="form-check-label" for="q6_2">من خلال مجموعات التواصل الاجتماعي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q6[]" id="q6_3"><label class="form-check-label" for="q6_3">عن طريق التواصل المباشر مع أولياء الأمور.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q6[]" id="q6_4"><label class="form-check-label" for="q6_4">من خلال المدارس.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q6[]" id="q6_5"><label class="form-check-label" for="q6_5">من خلال الإعلانات.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q6[]" id="q6_6"><label class="form-check-label" for="q6_6">لا أستخدم وسيلة محددة للتعريف بخدماتي.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q6[]" id="q6_7"><label class="form-check-label" for="q6_7">وسيلة أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">7. ما الأمور التي تراعيها عند تحديد إمكانية قبول طالب جديد لنقله إلى المدرسة؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_1"><label class="form-check-label" for="q7_1">مكان سكن الطالب.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_2"><label class="form-check-label" for="q7_2">موقع المدرسة التي يدرس بها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_3"><label class="form-check-label" for="q7_3">مواعيد الذهاب إلى المدرسة والعودة منها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_4"><label class="form-check-label" for="q7_4">قرب منزل الطالب من منازل الطلاب الآخرين الذين أوصلهم.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_5"><label class="form-check-label" for="q7_5">المسافة التي سأقطعها لنقل الطالب.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_6"><label class="form-check-label" for="q7_6">عدد المقاعد المتاحة في المركبة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_7"><label class="form-check-label" for="q7_7">قيمة الاشتراك المتفق عليها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_8"><label class="form-check-label" for="q7_8">نوع المركبة ومدى مناسبتها لاحتياجات النقل.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q7[]" id="q7_9"><label class="form-check-label" for="q7_9">أمور أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">8. كيف تنظم حاليًا مواعيد نقل الطلاب إلى المدارس وإعادتهم إلى منازلهم؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q8" id="q8_1" required><label class="form-check-label" for="q8_1">أعتمد على الذاكرة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q8" id="q8_2"><label class="form-check-label" for="q8_2">أستخدم دفترًا أو ملاحظات مكتوبة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q8" id="q8_3"><label class="form-check-label" for="q8_3">أستخدم الهاتف أو تطبيقات التواصل.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q8" id="q8_4"><label class="form-check-label" for="q8_4">أستخدم تطبيقات الخرائط.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q8" id="q8_5"><label class="form-check-label" for="q8_5">أستخدم جدولًا إلكترونيًا أو تطبيقًا آخر.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="q8" id="q8_6"><label class="form-check-label" for="q8_6">طريقة أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">9. ما المعلومات التي تحتاج إلى معرفتها عند تنظيم رحلات تنقل أكثر من طالب؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_1"><label class="form-check-label" for="q9_1">أماكن سكن الطلاب.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_2"><label class="form-check-label" for="q9_2">مواقع المدارس التي يدرس بها الطلاب.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_3"><label class="form-check-label" for="q9_3">مواعيد ذهاب الطلاب إلى المدارس والعودة منها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_4"><label class="form-check-label" for="q9_4">عدد المقاعد المتاحة في المركبة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_5"><label class="form-check-label" for="q9_5">أماكن استلام الطلاب وإنزالهم.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_6"><label class="form-check-label" for="q9_6">المسافة بين منازل الطلاب والمدارس.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_7"><label class="form-check-label" for="q9_7">الوقت المتوقع للوصول إلى كل مكان.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_8"><label class="form-check-label" for="q9_8">ترتيب الأماكن التي أمرّ بها لاستلام الطلاب وإنزالهم.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q9[]" id="q9_9"><label class="form-check-label" for="q9_9">معلومات أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">10. ما الصعوبات التي تواجهك عند نقل طلاب يدرسون في مدارس مختلفة أو يسكنون في مناطق مختلفة؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q10[]" id="q10_1"><label class="form-check-label" for="q10_1">صعوبة التنسيق بين أماكن سكن الطلاب والمدارس.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q10[]" id="q10_2"><label class="form-check-label" for="q10_2">تعارض مواعيد الذهاب إلى المدارس أو العودة منها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q10[]" id="q10_3"><label class="form-check-label" for="q10_3">صعوبة تحديد أفضل طريقة للوصول إلى الطلاب والمدارس.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q10[]" id="q10_4"><label class="form-check-label" for="q10_4">استغراق وقت طويل في التنقل بين المنازل والمدارس.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q10[]" id="q10_5"><label class="form-check-label" for="q10_5">صعوبة تنظيم الرحلة بما يتناسب مع عدد المقاعد المتاحة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q10[]" id="q10_6"><label class="form-check-label" for="q10_6">لا أواجه هذه الصعوبات.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q10[]" id="q10_7"><label class="form-check-label" for="q10_7">أخرى، يرجى التوضيح.</label></div>
+                </div>
+            </div>
+
+            <!-- القسم الثالث -->
+            <div class="section-card">
+                <h4 class="text-primary fw-bold mb-3">القسم الثالث: التواصل ومتابعة الرحلات</h4>
+
+                <div class="question-box">
+                    <div class="question-title">11. إلى أي مدى تواجه مشكلة في انتظار طالب لا يحضر في الموعد المحدد دون أن يبلغك ولي أمره مسبقًا؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="d-flex flex-wrap gap-3 mt-2">
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q11" id="q11_1" required><label class="form-check-label" for="q11_1">دائمًا</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q11" id="q11_2"><label class="form-check-label" for="q11_2">غالبًا</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q11" id="q11_3"><label class="form-check-label" for="q11_3">أحيانًا</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q11" id="q11_4"><label class="form-check-label" for="q11_4">نادرًا</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q11" id="q11_5"><label class="form-check-label" for="q11_5">لا أواجه هذه المشكلة</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q11" id="q11_6"><label class="form-check-label" for="q11_6">لا ينطبق عليّ</label></div>
+                    </div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">12. كيف تتعامل عادةً مع تغيير موعد نقل الطالب أو مكان استلامه أو إنزاله بعد الاتفاق مع ولي أمره؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q12" id="q12_1" required><label class="form-check-label" for="q12_1">الاتصال الهاتفي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q12" id="q12_2"><label class="form-check-label" for="q12_2">رسائل واتساب أو تطبيقات المراسلة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q12" id="q12_3"><label class="form-check-label" for="q12_3">إعادة تنظيم مواعيد الرحلة بنفسي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q12" id="q12_4"><label class="form-check-label" for="q12_4">الاتفاق المباشر مع ولي الأمر.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="q12" id="q12_5"><label class="form-check-label" for="q12_5">طريقة أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">13. ما الصعوبات التي تواجهك عند إبلاغ أولياء الأمور بتغييرات مواعيد النقل أو إخبارهم بمكان وجود المركبة وحالة الرحلة؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q13[]" id="q13_1"><label class="form-check-label" for="q13_1">صعوبة التواصل مع ولي الأمر في الوقت المناسب.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q13[]" id="q13_2"><label class="form-check-label" for="q13_2">كثرة الاتصالات والرسائل.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q13[]" id="q13_3"><label class="form-check-label" for="q13_3">عدم وصول أخبار التغيير إلى جميع أولياء الأمور المعنيين.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q13[]" id="q13_4"><label class="form-check-label" for="q13_4">صعوبة إخبار ولي الأمر بمكان المركبة أو بمدى تقدم الرحلة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q13[]" id="q13_5"><label class="form-check-label" for="q13_5">لا أواجه هذه الصعوبات.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q13[]" id="q13_6"><label class="form-check-label" for="q13_6">أخرى، يرجى التوضيح.</label></div>
+                </div>
+            </div>
+
+            <!-- القسم الرابع -->
+            <div class="section-card">
+                <h4 class="text-primary fw-bold mb-3">القسم الرابع: الاشتراكات والمستحقات المالية</h4>
+
+                <div class="question-box">
+                    <div class="question-title">14. كيف تحصل عادةً على رسوم نقل الطلاب؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q14" id="q14_1" required><label class="form-check-label" for="q14_1">الدفع النقدي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q14" id="q14_2"><label class="form-check-label" for="q14_2">التحويل المصرفي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q14" id="q14_3"><label class="form-check-label" for="q14_3">الدفع الإلكتروني.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q14" id="q14_4"><label class="form-check-label" for="q14_4">حسب الاتفاق مع ولي الأمر.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="q14" id="q14_5"><label class="form-check-label" for="q14_5">طريقة أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">15. إلى أي مدى تواجه صعوبة في تحصيل رسوم الاشتراك أو متابعة أولياء الأمور المتأخرين في الدفع؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="d-flex flex-wrap gap-3 mt-2">
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q15" id="q15_1" required><label class="form-check-label" for="q15_1">صعوبة كبيرة جدًا</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q15" id="q15_2"><label class="form-check-label" for="q15_2">صعوبة كبيرة</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q15" id="q15_3"><label class="form-check-label" for="q15_3">صعوبة متوسطة</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q15" id="q15_4"><label class="form-check-label" for="q15_4">صعوبة بسيطة</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q15" id="q15_5"><label class="form-check-label" for="q15_5">لا أواجه صعوبة</label></div>
+                        <div class="form-check"><input class="form-check-input" type="radio" name="q15" id="q15_6"><label class="form-check-label" for="q15_6">لا ينطبق عليّ</label></div>
+                    </div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">16. كيف تتابع حاليًا مواعيد دفع الاشتراكات والمبالغ التي استلمتها والمبالغ التي لم تُدفع بعد؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q16" id="q16_1" required><label class="form-check-label" for="q16_1">أتذكر المواعيد والمبالغ بنفسي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q16" id="q16_2"><label class="form-check-label" for="q16_2">أستخدم دفترًا أو سجلًا مكتوبًا.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q16" id="q16_3"><label class="form-check-label" for="q16_3">أستخدم الهاتف أو جدولًا إلكترونيًا.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q16" id="q16_4"><label class="form-check-label" for="q16_4">أستخدم وسيلة أخرى.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="q16" id="q16_5"><label class="form-check-label" for="q16_5">لا أتابع هذه الأمور بطريقة منظمة.</label></div>
+                </div>
+            </div>
+
+            <!-- القسم الخامس -->
+            <div class="section-card">
+                <h4 class="text-primary fw-bold mb-3">القسم الخامس: الثقة والتعامل مع أولياء الأمور</h4>
+
+                <div class="question-box">
+                    <div class="question-title">17. بصفتك سائقًا للنقل المدرسي، ما الأمور التي تعتقد أنها تساعدك على كسب ثقة ولي الأمر قبل الاتفاق معك على نقل أبنائه؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q17[]" id="q17_1"><label class="form-check-label" for="q17_1">أن يتعرّف ولي الأمر على بياناتي الشخصية.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q17[]" id="q17_2"><label class="form-check-label" for="q17_2">أن يتمكّن ولي الأمر من الاطلاع على رخصة قيادتي والمستندات المطلوبة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q17[]" id="q17_3"><label class="form-check-label" for="q17_3">أن يتعرّف ولي الأمر على معلومات مركبتي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q17[]" id="q17_4"><label class="form-check-label" for="q17_4">أن يعرف ولي الأمر المناطق التي أعمل بها ومواعيد النقل المتاحة لديّ.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q17[]" id="q17_5"><label class="form-check-label" for="q17_5">أن تكون قيمة الاشتراك وشروط الخدمة واضحة لولي الأمر.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q17[]" id="q17_6"><label class="form-check-label" for="q17_6">أن تتوفر وسيلة واضحة وسهلة للتواصل بيني وبين ولي الأمر.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q17[]" id="q17_7"><label class="form-check-label" for="q17_7">أمور أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">18. بصفتك سائقًا للنقل المدرسي، ما المعلومات التي تحرص على توضيحها لولي الأمر قبل الاتفاق معك على نقل أبنائه؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q18[]" id="q18_1"><label class="form-check-label" for="q18_1">بياناتي الشخصية وخبرتي في نقل الطلاب.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q18[]" id="q18_2"><label class="form-check-label" for="q18_2">نوع مركبتي ومعلوماتها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q18[]" id="q18_3"><label class="form-check-label" for="q18_3">المناطق والمدارس التي يمكنني نقل الطلاب إليها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q18[]" id="q18_4"><label class="form-check-label" for="q18_4">مواعيد ذهاب الطلاب إلى المدارس والعودة منها.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q18[]" id="q18_5"><label class="form-check-label" for="q18_5">قيمة الاشتراك وطريقة الدفع.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q18[]" id="q18_6"><label class="form-check-label" for="q18_6">شروط خدمة النقل والاتفاق بيني وبين ولي الأمر.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q18[]" id="q18_7"><label class="form-check-label" for="q18_7">معلومات أخرى، يرجى ذكرها.</label></div>
+                </div>
+
+                <div class="question-box">
+                    <div class="question-title">19. ما الإجراءات التي تتبعها للتأكد من جاهزية السائق والمركبة قبل بدء العمل في النقل المدرسي؟ <span class="badge-type">اختيار متعدد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q19[]" id="q19_1"><label class="form-check-label" for="q19_1">التأكد من هوية السائق ورخصة القيادة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q19[]" id="q19_2"><label class="form-check-label" for="q19_2">التأكد من صلاحية مستندات المركبة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q19[]" id="q19_3"><label class="form-check-label" for="q19_3">فحص الحالة الفنية للمركبة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q19[]" id="q19_4"><label class="form-check-label" for="q19_4">التأكد من استيفاء متطلبات العمل في النقل المدرسي.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q19[]" id="q19_5"><label class="form-check-label" for="q19_5">الاعتماد على المعرفة السابقة بالسائق والمركبة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="q19[]" id="q19_6"><label class="form-check-label" for="q19_6">لا أتبع إجراءات محددة.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="checkbox" name="q19[]" id="q19_7"><label class="form-check-label" for="q19_7">إجراءات أخرى، يرجى ذكرها.</label></div>
+                </div>
+            </div>
+
+            <!-- القسم السادس والسابع -->
+            <div class="section-card">
+                <h4 class="text-primary fw-bold mb-3">القسم السادس: استخدام الحلول التقنية</h4>
+
+                <div class="question-box">
+                    <div class="question-title">20. ما مدى تقبّلك لاستخدام منصة إلكترونية تساعدك على التعريف بخدمات النقل التي تقدمها، واستقبال طلبات أولياء الأمور، وتنظيم مواعيد الرحلات والاشتراكات؟ <span class="badge-type">اختيار واحد</span></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q20" id="q20_1" required><label class="form-check-label" for="q20_1">أتقبل استخدامها بسهولة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q20" id="q20_2"><label class="form-check-label" for="q20_2">أتقبل استخدامها إذا كانت سهلة وواضحة.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q20" id="q20_3"><label class="form-check-label" for="q20_3">أحتاج إلى معرفة المزيد عنها قبل اتخاذ القرار.</label></div>
+                    <div class="form-check mb-2"><input class="form-check-input" type="radio" name="q20" id="q20_4"><label class="form-check-label" for="q20_4">لا أفضل استخدام المنصات الإلكترونية.</label></div>
+                    <div class="form-check"><input class="form-check-input" type="radio" name="q20" id="q20_5"><label class="form-check-label" for="q20_5">لا أستطيع التحديد.</label></div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <h4 class="text-primary fw-bold mb-3">القسم السابع: السؤال المفتوح</h4>
+
+                <div class="question-box">
+                    <div class="question-title">21. من واقع تجربتك في مجال النقل المدرسي، ما أكثر مشكلة تواجهك في عملك؟ وما الحل الذي تقترحه لمعالجتها؟ <span class="badge-type">إجابة نصية</span></div>
+                    <textarea class="form-control" rows="4" placeholder="اكتب إجابتك بحرية، واذكر أي تحديات أو مقترحات تود إضافتها..."></textarea>
+                </div>
+            </div>
+
+            <div class="text-center mt-4">
+                <button type="submit" class="btn btn-primary btn-lg px-5 fw-bold shadow">إرسال الإجابات</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>

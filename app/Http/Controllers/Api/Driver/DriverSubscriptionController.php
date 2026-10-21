@@ -147,6 +147,13 @@ class DriverSubscriptionController extends Controller
             return response()->json(['success' => false, 'message' => 'هذا الطلب غير موجه لك ولا يمكنك التحكم به.'], 403);
         }
 
+        if ($subscriptionRequest->status !== SubscriptionRequest::STATUS_PENDING) {
+            return response()->json([
+                'success' => false,
+                'message' => 'لا يمكن اتخاذ قرار بشأن هذا الطلب لأنه لم يعد قيد الانتظار (حالة الطلب الحالية: ' . $this->subscriptionService->getSubscriptionStatusLabel($subscriptionRequest->status) . ').'
+            ], 422);
+        }
+
         try {
             $updatedRequest = $this->subscriptionService->updateStatus(
                 $subscriptionRequest,

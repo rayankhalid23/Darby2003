@@ -735,6 +735,10 @@ class SubscriptionRequestService
             $subscriptionRequest->loadMissing(['parent.user', 'children', 'school', 'driver.user']);
             $parent = $subscriptionRequest->parent;
 
+            if ($subscriptionRequest->status !== SubscriptionRequest::STATUS_PENDING) {
+                throw new Exception("لا يمكن اتخاذ قرار بشأن هذا الطلب لأنه ليس في حالة قيد الانتظار (الحالة الحالية: {$subscriptionRequest->status}).", 422);
+            }
+
             if ($status === SubscriptionRequest::STATUS_ACCEPTED) {
                 return $this->handleAcceptance($subscriptionRequest, $parent);
             }
@@ -821,14 +825,8 @@ class SubscriptionRequestService
             'responded_at' => now(),
         ]);
 
-        // 3. إلغاء الطلبات الأخرى المعلقة لنفس العميل ونفس التوقيت
-        SubscriptionRequest::where('parent_id', $req->parent_id)
-            ->where('status', SubscriptionRequest::STATUS_PENDING)
-            ->where('id', '!=', $req->id)
-            ->whereHas('children', function ($q) use ($timing) {
-                $q->where('request_children.timing', $timing);
-            })
-            ->update(['status' => SubscriptionRequest::STATUS_CANCELLED]);
+        // 3. إلغاء الطلبات الأخرى المعلقة لنفس ولي الأمر إذا كانت لنفس الأطفال وتتعارض معهم في التوقيت والتواريخ
+        $this->cancelConflictingPendingRequests($req, $timing);
 
         // 4. تحديد الـ slot الأساسي (الفترة/الاتجاه) بناءً على تفضيلات السائق الثابتة
         $slots = \App\Models\Driver\DriverSeatSlot::resolveSlots($timing, $direction);
@@ -946,6 +944,91 @@ class SubscriptionRequestService
         }
 
         return $req->refresh()->load(['children', 'driver.user', 'parent.user']);
+    }
+
+    /**
+     * إلغاء الطلبات الأخرى المعلقة لنفس ولي الأمر إذا كانت لنفس الأطفال
+     * وتتطابق أو تتداخل معهم في الفترة الزمنية وتواريخ الاشتراك.
+     */
+    protected function cancelConflictingPendingRequests(SubscriptionRequest $acceptedReq, string $defaultTiming): void
+    {
+        $normalizeTiming = function (?string $t): string {
+            if (!$t) {
+                return 'BOTH';
+            }
+            $lower = strtolower(trim($t));
+            return match ($lower) {
+                'morning'              => 'MORNING',
+                'evening', 'afternoon' => 'EVENING',
+                'both'                 => 'BOTH',
+                default                => strtoupper($lower),
+            };
+        };
+
+        // 1. تجميع معرفات الأطفال وفتراتهم من الطلب المقبول
+        $acceptedChildrenTimings = [];
+        foreach ($acceptedReq->children as $child) {
+            $childTiming = $child->pivot?->timing
+                ?? \App\Models\Driver\DriverSeatSlot::timingFromPreferredSlot($child->preferred_time_slot)
+                ?? $defaultTiming;
+            $acceptedChildrenTimings[$child->id] = $normalizeTiming($childTiming);
+        }
+
+        $acceptedChildIds = array_keys($acceptedChildrenTimings);
+        if (empty($acceptedChildIds)) {
+            return;
+        }
+
+        $reqStartDate = $acceptedReq->start_date ? Carbon::parse($acceptedReq->start_date)->startOfDay() : null;
+        $reqEndDate   = $acceptedReq->end_date ? Carbon::parse($acceptedReq->end_date)->startOfDay() : $reqStartDate;
+
+        // 2. جلب الطلبات المعلقة الأخرى لنفس ولي الأمر التي تشترك في طفل واحد على الأقل
+        $pendingRequests = SubscriptionRequest::where('parent_id', $acceptedReq->parent_id)
+            ->where('status', SubscriptionRequest::STATUS_PENDING)
+            ->where('id', '!=', $acceptedReq->id)
+            ->whereHas('children', function ($q) use ($acceptedChildIds) {
+                $q->whereIn('request_children.child_id', $acceptedChildIds);
+            })
+            ->with(['children', 'driver.user', 'parent.user'])
+            ->get();
+
+        foreach ($pendingRequests as $pendingReq) {
+            $pStart = $pendingReq->start_date ? Carbon::parse($pendingReq->start_date)->startOfDay() : null;
+            $pEnd   = $pendingReq->end_date ? Carbon::parse($pendingReq->end_date)->startOfDay() : $pStart;
+
+            // أ. فحص تداخل التواريخ (Date Overlap)
+            if ($reqStartDate && $reqEndDate && $pStart && $pEnd) {
+                if ($reqEndDate->lt($pStart) || $reqStartDate->gt($pEnd)) {
+                    // الفترتان لا تتقاطعان زمنياً، لا يتم إلغاء هذا الطلب
+                    continue;
+                }
+            }
+
+            // ب. فحص تعارض التوقيت/الفترة للأطفال المشتركين
+            $hasTimingConflict = false;
+            foreach ($pendingReq->children as $pChild) {
+                if (!isset($acceptedChildrenTimings[$pChild->id])) {
+                    continue;
+                }
+
+                $acceptedTiming = $acceptedChildrenTimings[$pChild->id];
+                $pendingTiming  = $normalizeTiming(
+                    $pChild->pivot?->timing
+                    ?? \App\Models\Driver\DriverSeatSlot::timingFromPreferredSlot($pChild->preferred_time_slot)
+                    ?? $defaultTiming
+                );
+
+                if ($acceptedTiming === 'BOTH' || $pendingTiming === 'BOTH' || $acceptedTiming === $pendingTiming) {
+                    $hasTimingConflict = true;
+                    break;
+                }
+            }
+
+            if ($hasTimingConflict) {
+                $reason = 'تم إلغاء الطلب تلقائياً لقبول اشتراك الطفل من قبل سائق آخر لنفس الفترة الزمنية.';
+                $this->autoCancelRequest($pendingReq, $reason, 'subscription_request_cancelled_duplicate');
+            }
+        }
     }
 
     // ============================================================
@@ -1620,7 +1703,10 @@ class SubscriptionRequestService
 
     private function autoCancelRequest(SubscriptionRequest $req, string $reason, string $notificationType): void
     {
-        $req->update(['status' => SubscriptionRequest::STATUS_CANCELLED]);
+        $req->update([
+            'status'           => SubscriptionRequest::STATUS_CANCELLED,
+            'rejection_reason' => $reason,
+        ]);
 
         // استرجاع المبالغ المحجوزة إن وُجدت
         $this->refundHeldFundsOnCancellation($req->id, 'system');

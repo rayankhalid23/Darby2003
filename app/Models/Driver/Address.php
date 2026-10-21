@@ -2,7 +2,8 @@
 
 namespace App\Models\Driver;
 
-use App\Models\Driver; // أو مسار موديل السائق الحالي عندك
+use App\Models\User;
+use App\Models\Shared\Zone;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,26 +12,36 @@ class Address extends Model
 {
     use HasFactory, SoftDeletes;
 
-    // 🚀 إجبار الموديل على القراءة من الجدول المنفصل الجديد
-    protected $table = 'driver_addresses';
+    protected $table = 'addresses';
 
     protected $fillable = [
-        'driver_id',
+        'user_id',
+        'zone_id',
         'label',
         'lat',
         'lng',
+        'is_default',
     ];
 
     protected $casts = [
-        'lat' => 'float',
-        'lng' => 'float',
+        'lat'        => 'float',
+        'lng'        => 'float',
+        'is_default' => 'boolean',
     ];
 
     /**
-     * علاقة عكسية: العنوان ينتمي إلى سائق واحد
+     * علاقة العنوان بالمستخدم (سواء كان سائقاً أو ولي أمر)
      */
-    public function driver()
+    public function user()
     {
-        return $this->belongsTo(Driver::class);
+        return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * علاقة العنوان بالمنطقة الجغرافية
+     */
+    public function zone()
+    {
+        return $this->belongsTo(Zone::class, 'zone_id');
     }
 }

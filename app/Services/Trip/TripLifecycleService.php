@@ -128,11 +128,52 @@ class TripLifecycleService
     }
 
     /**
+     * إعادة ترتيب محطات الرحلة الحالية ديناميكياً وفقاً لموقع السائق اللحظي.
+     * تبدأ الرحلة من أقرب محطة لمكان السائق الحالي (سواء كان في منزله أو في أي موقع آخر).
+     */
+    public function resequenceTripStopsFromCurrentLocation(Trip $trip, float $driverLat, float $driverLng): void
+    {
+        $stops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+            ->where('sequence_order', '>', 0)
+            ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
+            ->get();
+
+        if ($stops->isEmpty()) {
+            return;
+        }
+
+        $homePoints = $stops->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+            ->map(fn($s) => ['id' => $s->id, 'lat' => (float) $s->lat, 'lng' => (float) $s->lng])
+            ->values()->all();
+
+        $schoolPoints = $stops->where('stop_type', \App\Models\Shared\TripStop::TYPE_SCHOOL)
+            ->map(fn($s) => ['id' => $s->id, 'lat' => (float) $s->lat, 'lng' => (float) $s->lng])
+            ->values()->all();
+
+        if (empty($homePoints) && empty($schoolPoints)) {
+            return;
+        }
+
+        $isGo = \App\Models\Driver\DriverSeatSlot::isGoSlot($trip->shift_slot ?? '') 
+            || strtolower((string) $trip->trip_type) === 'morning';
+
+        $driverPoint = ['lat' => $driverLat, 'lng' => $driverLng];
+        $finalOrder = \App\Support\GeoEstimator::orderStopsForDirection($homePoints, $schoolPoints, $isGo, $driverPoint);
+
+        foreach ($finalOrder as $index => $point) {
+            \App\Models\Shared\TripStop::where('id', $point['id'])->update(['sequence_order' => $index + 1]);
+        }
+    }
+
+    /**
      * يحسب الوصلة الأولى (Lead-In) من موقع السائق الحي إلى أول محطة، ثم يتابع حساب
      * الـ ETA التراكمي لبقية محطات trip_stops بالترتيب، ويحفظها على كل محطة.
      */
     public function computeLiveEtas(Trip $trip, float $driverLat, float $driverLng): void
     {
+        // إعادة ترتيب المحطات أولاً لتكون أقرب محطة لموقع السائق الحالي هي الأولى
+        $this->resequenceTripStopsFromCurrentLocation($trip, $driverLat, $driverLng);
+
         $stops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
             ->where('sequence_order', '>', 0)
             ->orderBy('sequence_order')

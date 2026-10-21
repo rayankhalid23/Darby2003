@@ -37,6 +37,9 @@ class NotificationFormatter
     public const TYPE_EMERGENCY_BREAKDOWN_PARENT_PICKUP      = 'emergency_breakdown_parent_pickup';
     public const TYPE_EMERGENCY_DRIVER_CALL_PARENTS         = 'emergency_driver_call_parents';
     public const TYPE_EMERGENCY_REQUEST_CANCELLED_OTHER      = 'emergency_request_cancelled_other';
+    public const TYPE_ADMIN_EMERGENCY_BREAKDOWN              = 'admin_emergency_breakdown';
+    public const TYPE_ADMIN_EMERGENCY_UNRESOLVED             = 'admin_emergency_unresolved';
+    public const TYPE_ADMIN_EMERGENCY_ACCEPTED               = 'admin_emergency_accepted';
 
     // --- العقود والاشتراكات ---
     public const TYPE_CONTRACT_CREATED          = 'contract_created';
@@ -379,6 +382,34 @@ class NotificationFormatter
                 $entityType = 'trip_breakdown_dispatch';
                 $entityId = $data['dispatch_id'] ?? $entityId ?? '';
                 $action = 'open';
+                break;
+
+            case self::TYPE_ADMIN_EMERGENCY_BREAKDOWN:
+                $title = $customTitle ?? '🚨 حالة طوارئ: تعطل حافلة مدرسية';
+                $message = $customMessage ?? "أبلغ سائق عن تعطل حافلته وبها أطفال. جارٍ البحث وبث طلب الاستبدال.";
+                $screen = 'ADMIN_EMERGENCY_RADAR';
+                $entityType = 'trip_breakdown_dispatch';
+                $entityId = $data['dispatch_id'] ?? $entityId ?? '';
+                $action = 'open_emergency_dispatch';
+                break;
+
+            case self::TYPE_ADMIN_EMERGENCY_UNRESOLVED:
+                $title = $customTitle ?? '⚠️ طوارئ حرجة: تعذر العثور على سائق بديل';
+                $message = $customMessage ?? "تعذر توفير سائق بديل للحافلة المتعطلة. تم إشعار أولياء الأمور بالاستلام المباشر.";
+                $screen = 'ADMIN_EMERGENCY_RADAR';
+                $entityType = 'trip_breakdown_dispatch';
+                $entityId = $data['dispatch_id'] ?? $entityId ?? '';
+                $action = 'open_emergency_dispatch';
+                break;
+
+            case self::TYPE_ADMIN_EMERGENCY_ACCEPTED:
+                $title = $customTitle ?? '✅ طوارئ: تم قبول مهمة الإنقاذ';
+                $subDriverName = $data['substitute_driver_name'] ?? 'سائق بديل';
+                $message = $customMessage ?? "وافق السائق البديل ({$subDriverName}) على استلام طلاب الحافلة المعطلة.";
+                $screen = 'ADMIN_EMERGENCY_RADAR';
+                $entityType = 'trip_breakdown_dispatch';
+                $entityId = $data['dispatch_id'] ?? $entityId ?? '';
+                $action = 'open_emergency_dispatch';
                 break;
 
             // =========================================================

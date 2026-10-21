@@ -442,4 +442,329 @@ class DriverSubscriptionAcceptanceTest extends TestCase
 
         $response->assertStatus(401);
     }
+
+    // =========================================================
+    // مساعد: إنشاء سائق ثانٍ مع مركبته للاختبارات متعددة السائقين
+    // =========================================================
+    private function createSecondDriver(): array
+    {
+        $secondDriverUser = User::create([
+            'full_name'    => 'السائق الثاني',
+            'email'        => 'driver2.' . uniqid() . '@darby.test',
+            'phone_number' => '093' . rand(1000000, 9999999),
+            'password_hash'=> bcrypt('password123'),
+            'role_id'      => 2,
+            'is_active'    => 1,
+        ]);
+
+        $secondDriver = Driver::create([
+            'user_id'        => $secondDriverUser->id,
+            'national_id'    => 'NAT' . rand(100000, 999999),
+            'license_number' => 'LIC' . rand(100000, 999999),
+            'license_expiry' => now()->addYears(2)->format('Y-m-d'),
+            'status'         => 'Approved',
+            'current_lat'    => 32.8872,
+            'current_lng'    => 13.1932,
+        ]);
+
+        DB::table('vehicles')->insert([
+            'driver_id'       => $secondDriver->id,
+            'brand'           => 'تويوتا',
+            'model'           => 'هايس',
+            'year'            => 2022,
+            'color'           => 'فضي',
+            'plate_number'    => 'TEST-' . rand(1000, 9999),
+            'capacity_manual' => 10,
+            'status'          => 'Active',
+            'deleted_at'      => null,
+            'created_at'      => now(),
+            'updated_at'      => now(),
+        ]);
+
+        return [$secondDriverUser, $secondDriver];
+    }
+
+    // =========================================================
+    // اختبار 9: قبول سائق لطلب يلغي تلقائياً الطلبات المعلقة لنفس الطفل والتوقيت لسائقين آخرين
+    // =========================================================
+    public function test_accepting_request_auto_cancels_conflicting_pending_requests_for_same_child_to_other_drivers(): void
+    {
+        [$secondDriverUser, $secondDriver] = $this->createSecondDriver();
+
+        // إنشاء طلب مكرر لنفس الطفل ونفس التوقيت موجه للسائق الثاني
+        $duplicateReq = SubscriptionRequest::create([
+            'parent_id'                   => $this->parent->id,
+            'driver_id'                   => $secondDriver->id,
+            'total_price'                 => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'status'                      => SubscriptionRequest::STATUS_PENDING,
+            'children_count'              => 1,
+            'subscription_type'           => 'multi_day',
+            'trip_direction'              => 'both',
+            'start_date'                  => $this->subscriptionRequest->start_date,
+            'end_date'                    => $this->subscriptionRequest->end_date,
+            'working_days_count'          => 22,
+            'home_label'                  => 'منزل ولي الأمر',
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+        ]);
+
+        DB::table('request_children')->insert([
+            'request_id'                  => $duplicateReq->id,
+            'child_id'                    => $this->child->id,
+            'school_id'                   => $this->school->id,
+            'timing'                      => 'MORNING',
+            'school_label'                => 'مدرسة الاختبار',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'distance_km'                 => 4.0,
+            'price_per_child'             => 200.00,
+            'trip_price'                  => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'driver_net_price'            => 184.00,
+            'created_at'                  => now(),
+            'updated_at'                  => now(),
+        ]);
+
+        // السائق الأول يقبل طلبه
+        $response = $this->actingAs($this->driverUser)
+            ->putJson("/api/driver/{$this->subscriptionRequest->id}/status", [
+                'status' => 'accepted',
+            ]);
+
+        $response->assertStatus(200);
+
+        // التحقق من قبول طلب السائق الأول
+        $this->assertDatabaseHas('requests', [
+            'id'     => $this->subscriptionRequest->id,
+            'status' => 'accepted',
+        ]);
+
+        // التحقق من الإلغاء التلقائي لطلب السائق الثاني مع تسجيل السبب
+        $this->assertDatabaseHas('requests', [
+            'id'     => $duplicateReq->id,
+            'status' => 'cancelled',
+        ]);
+
+        $freshDuplicate = SubscriptionRequest::find($duplicateReq->id);
+        $this->assertStringContainsString('تم إلغاء الطلب تلقائياً', $freshDuplicate->rejection_reason);
+    }
+
+    // =========================================================
+    // اختبار 10: السائق لا يمكنه قبول طلب ملغي وتظهر له رسالة خطأ 422 واضحة
+    // =========================================================
+    public function test_driver_cannot_accept_already_cancelled_request(): void
+    {
+        [$secondDriverUser, $secondDriver] = $this->createSecondDriver();
+
+        // إنشاء طلب موجه للسائق الثاني وتعيينه ملغياً
+        $cancelledReq = SubscriptionRequest::create([
+            'parent_id'                   => $this->parent->id,
+            'driver_id'                   => $secondDriver->id,
+            'total_price'                 => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'status'                      => SubscriptionRequest::STATUS_CANCELLED,
+            'children_count'              => 1,
+            'subscription_type'           => 'multi_day',
+            'trip_direction'              => 'both',
+            'start_date'                  => $this->subscriptionRequest->start_date,
+            'end_date'                    => $this->subscriptionRequest->end_date,
+            'working_days_count'          => 22,
+        ]);
+
+        $response = $this->actingAs($secondDriverUser)
+            ->putJson("/api/driver/{$cancelledReq->id}/status", [
+                'status' => 'accepted',
+            ]);
+
+        $response->assertStatus(422);
+        $this->assertFalse($response->json('success'));
+        $this->assertStringContainsString('لم يعد قيد الانتظار', $response->json('message'));
+    }
+
+    // =========================================================
+    // اختبار 11: قبول طلب لطفل معين لا يلغي طلبات الأطفال الآخرين لنفس ولي الأمر
+    // =========================================================
+    public function test_accepting_request_does_not_cancel_requests_for_different_child(): void
+    {
+        [$secondDriverUser, $secondDriver] = $this->createSecondDriver();
+
+        // إنشاء طفل ثانٍ مختلف لولي الأمر
+        $secondChild = Child::create([
+            'parent_id'           => $this->parent->id,
+            'full_name'           => 'طفل آخر مستقل',
+            'birth_date'          => '2019-03-15',
+            'gender'              => 'female',
+            'grade'               => 2,
+            'notification_radius' => 500,
+        ]);
+
+        // إنشاء طلب للطفل الثاني موجه للسائق الثاني في نفس التوقيت الصباحي
+        $secondChildReq = SubscriptionRequest::create([
+            'parent_id'                   => $this->parent->id,
+            'driver_id'                   => $secondDriver->id,
+            'total_price'                 => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'status'                      => SubscriptionRequest::STATUS_PENDING,
+            'children_count'              => 1,
+            'subscription_type'           => 'multi_day',
+            'trip_direction'              => 'both',
+            'start_date'                  => $this->subscriptionRequest->start_date,
+            'end_date'                    => $this->subscriptionRequest->end_date,
+            'working_days_count'          => 22,
+            'home_label'                  => 'منزل ولي الأمر',
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+        ]);
+
+        DB::table('request_children')->insert([
+            'request_id'                  => $secondChildReq->id,
+            'child_id'                    => $secondChild->id,
+            'school_id'                   => $this->school->id,
+            'timing'                      => 'MORNING',
+            'school_label'                => 'مدرسة الاختبار',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'distance_km'                 => 4.0,
+            'price_per_child'             => 200.00,
+            'trip_price'                  => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'driver_net_price'            => 184.00,
+            'created_at'                  => now(),
+            'updated_at'                  => now(),
+        ]);
+
+        // قبول السائق الأول لطلب الطفل الأول
+        $response = $this->actingAs($this->driverUser)
+            ->putJson("/api/driver/{$this->subscriptionRequest->id}/status", [
+                'status' => 'accepted',
+            ]);
+
+        $response->assertStatus(200);
+
+        // التحقق أن طلب الطفل الثاني للسائق الثاني ظل معلقاً (Pending) ولم يُلغَ
+        $this->assertDatabaseHas('requests', [
+            'id'     => $secondChildReq->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    // =========================================================
+    // اختبار 12: عدم إلغاء الطلبات لنفس الطفل إذا كانت في فترات تواريخ غير متداخلة
+    // =========================================================
+    public function test_accepting_request_does_not_cancel_requests_with_non_overlapping_dates(): void
+    {
+        [$secondDriverUser, $secondDriver] = $this->createSecondDriver();
+
+        // إنشاء طلب لنفس الطفل موجه للسائق الثاني لكن بعد 3 أشهر (لا يوجد تداخل زمني)
+        $futureReq = SubscriptionRequest::create([
+            'parent_id'                   => $this->parent->id,
+            'driver_id'                   => $secondDriver->id,
+            'total_price'                 => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'status'                      => SubscriptionRequest::STATUS_PENDING,
+            'children_count'              => 1,
+            'subscription_type'           => 'multi_day',
+            'trip_direction'              => 'both',
+            'start_date'                  => now()->addMonths(4)->format('Y-m-d'),
+            'end_date'                    => now()->addMonths(5)->format('Y-m-d'),
+            'working_days_count'          => 22,
+            'home_label'                  => 'منزل ولي الأمر',
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+        ]);
+
+        DB::table('request_children')->insert([
+            'request_id'                  => $futureReq->id,
+            'child_id'                    => $this->child->id,
+            'school_id'                   => $this->school->id,
+            'timing'                      => 'MORNING',
+            'school_label'                => 'مدرسة الاختبار',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'distance_km'                 => 4.0,
+            'price_per_child'             => 200.00,
+            'trip_price'                  => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'driver_net_price'            => 184.00,
+            'created_at'                  => now(),
+            'updated_at'                  => now(),
+        ]);
+
+        // السائق الأول يقبل طلبه الحالي
+        $this->actingAs($this->driverUser)
+            ->putJson("/api/driver/{$this->subscriptionRequest->id}/status", [
+                'status' => 'accepted',
+            ])->assertStatus(200);
+
+        // طلب الفترة المستقبلية غير المتداخلة يظل معلقاً Pending
+        $this->assertDatabaseHas('requests', [
+            'id'     => $futureReq->id,
+            'status' => 'pending',
+        ]);
+    }
+
+    // =========================================================
+    // اختبار 13: عدم إلغاء طلبات نفس الطفل إذا كانت لفترات توقيت غير متعارضة (صباحي مقابل مسائي)
+    // =========================================================
+    public function test_accepting_request_does_not_cancel_requests_with_different_non_conflicting_timings(): void
+    {
+        [$secondDriverUser, $secondDriver] = $this->createSecondDriver();
+
+        // إنشاء طلب لنفس الطفل موجه للسائق الثاني ولكن للفترة المسائية EVENING
+        $eveningReq = SubscriptionRequest::create([
+            'parent_id'                   => $this->parent->id,
+            'driver_id'                   => $secondDriver->id,
+            'total_price'                 => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'status'                      => SubscriptionRequest::STATUS_PENDING,
+            'children_count'              => 1,
+            'subscription_type'           => 'multi_day',
+            'trip_direction'              => 'one_way_evening',
+            'start_date'                  => $this->subscriptionRequest->start_date,
+            'end_date'                    => $this->subscriptionRequest->end_date,
+            'working_days_count'          => 22,
+            'home_label'                  => 'منزل ولي الأمر',
+            'home_lat'                    => 32.8800,
+            'home_lng'                    => 13.1900,
+        ]);
+
+        DB::table('request_children')->insert([
+            'request_id'                  => $eveningReq->id,
+            'child_id'                    => $this->child->id,
+            'school_id'                   => $this->school->id,
+            'timing'                      => 'EVENING',
+            'school_label'                => 'مدرسة الاختبار',
+            'school_lat'                  => 32.9000,
+            'school_lng'                  => 13.2000,
+            'distance_km'                 => 4.0,
+            'price_per_child'             => 200.00,
+            'trip_price'                  => 200.00,
+            'discount_amount'             => 0.00,
+            'total_amount_after_discount' => 200.00,
+            'driver_net_price'            => 184.00,
+            'created_at'                  => now(),
+            'updated_at'                  => now(),
+        ]);
+
+        // السائق الأول يقبل طلبه الصباحي
+        $this->actingAs($this->driverUser)
+            ->putJson("/api/driver/{$this->subscriptionRequest->id}/status", [
+                'status' => 'accepted',
+            ])->assertStatus(200);
+
+        // طلب المسائي يظل معلقاً Pending لأن الفترتين لا تتعارضان
+        $this->assertDatabaseHas('requests', [
+            'id'     => $eveningReq->id,
+            'status' => 'pending',
+        ]);
+    }
 }

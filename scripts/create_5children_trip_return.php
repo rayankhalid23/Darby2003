@@ -38,7 +38,23 @@ DB::table('requests')->where('id', 158)->update([
     'end_date'   => '2030-12-31',
 ]);
 
-// 2. مزامنة محطات المسار الرئيسي للإياب (Route 12)
+// 2. تحديث وتثبيت بيانات الأطفال الخمسة بدقة
+$childrenData = [
+    ['id' => 45, 'name' => 'عمر خالد إبراهيم الككلي', 'school_id' => 2, 'h_lat' => 32.875500, 'h_lng' => 13.193500],
+    ['id' => 46, 'name' => 'لينا خالد إبراهيم الككلي', 'school_id' => 1, 'h_lat' => 32.875500, 'h_lng' => 13.193500],
+    ['id' => 1,  'name' => 'يوسف محمد علي الترهوني', 'school_id' => 2, 'h_lat' => 32.878000, 'h_lng' => 13.196500],
+    ['id' => 3,  'name' => 'أحمد محمد علي الترهوني', 'school_id' => 3, 'h_lat' => 32.881500, 'h_lng' => 13.193000],
+    ['id' => 4,  'name' => 'طارق خالد الفيتوري',       'school_id' => 4, 'h_lat' => 32.885000, 'h_lng' => 13.198500],
+];
+
+foreach ($childrenData as $cd) {
+    Child::where('id', $cd['id'])->update([
+        'full_name' => $cd['name'],
+        'school_id' => $cd['school_id'],
+    ]);
+}
+
+// 3. مزامنة محطات المسار الرئيسي للإياب (Route 12)
 $subs = ActiveSubscription::where('subscription_request_id', 158)->get();
 RouteStop::where('route_id', $routeId)->delete();
 

@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\Trip\ParentTripController;
 
 // 1. مسارات المصادقة العامة والتحقق (بدون توكن)
 Route::post('/send-otp', [ParentAuthController::class, 'sendOtp'])->middleware('throttle:otp');
+Route::post('/verify-otp', [ParentAuthController::class, 'verifyOtp'])->middleware('throttle:otp');
 Route::post('/register', [ParentAuthController::class, 'register'])->middleware('throttle:otp');
 
 /*

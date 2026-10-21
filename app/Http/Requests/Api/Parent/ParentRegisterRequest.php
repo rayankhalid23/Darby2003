@@ -13,6 +13,16 @@ class ParentRegisterRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation()
+    {
+        if (!$this->has('otp') && $this->has('code')) {
+            $this->merge(['otp' => $this->input('code')]);
+        }
+        if ($this->has('email')) {
+            $this->merge(['email' => trim(mb_strtolower((string) $this->input('email')))]);
+        }
+    }
+
     public function rules(): array
     {
         return [

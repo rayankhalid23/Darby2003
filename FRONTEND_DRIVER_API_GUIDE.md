@@ -589,8 +589,8 @@ Content-Type: application/json
   Accept: application/json
   ```
 * **Query Parameters (اختيارية):**
-  * `month` *(integer, 1-12)*: رقم الشهر المراد حساب أرباحه (افتراضياً: الشهر الحالي).
-  * `year` *(integer, YYYY)*: السنة المراد حساب أرباحها (افتراضياً: السنة الحالية).
+  * `month` *(integer, 1-12)*: رقم الشهر المراد حساب إحصائياته المالية والتشغيلية (افتراضياً: الشهر الحالي).
+  * `year` *(integer, YYYY)*: السنة المراد حساب إحصائياتها (افتراضياً: السنة الحالية).
 
 * **Success Response (200 OK):**
 ```json
@@ -599,6 +599,10 @@ Content-Type: application/json
   "success": true,
   "message": "تم جلب إحصائيات السائق ولوحة التحكم بنجاح.",
   "data": {
+    "period": {
+      "month": 10,
+      "year": 2026
+    },
     "financial_stats": {
       "net_earnings": {
         "total": 4500.00,
@@ -617,6 +621,8 @@ Content-Type: application/json
     },
     "subscription_and_passenger_stats": {
       "active_students_count": 12,
+      "emergency_rescue_students_count": 0,
+      "total_current_passengers_count": 12,
       "vehicle_capacity": {
         "vehicle_model": "تويوتا كوستر Coaster",
         "plate_number": "5-112233",
@@ -625,24 +631,63 @@ Content-Type: application/json
         "available_seats": 2,
         "occupancy_rate": 85.71
       },
+      "subscriptions": {
+        "pending_requests_count": 3,
+        "active_subscriptions_count": 12,
+        "completed_subscriptions_count": 28,
+        "cancelled_subscriptions_count": 2,
+        "total_subscriptions_count": 42
+      },
       "history": {
+        "pending_requests_count": 3,
+        "active_subscriptions_count": 12,
         "completed_subscriptions_count": 28,
         "cancelled_subscriptions_count": 2,
         "total_historical_subscriptions": 42
       }
     },
     "trip_operations_stats": {
+      "period": {
+        "month": 10,
+        "year": 2026
+      },
+      "summary_cards": {
+        "completed_trips_count": 240,
+        "absent_trips_count": 3,
+        "vehicle_breakdowns_count": 1,
+        "substitute_trips_count": 5
+      },
       "completed_trips": {
         "total": 240,
+        "all_time_total": 480,
         "morning_trips": 120,
         "evening_trips": 120,
         "today_completed": 2
       },
+      "today_trips_overview": {
+        "total_scheduled": 2,
+        "completed": 2,
+        "in_progress": 0,
+        "pending": 0
+      },
       "punctuality_rate": 96.50,
       "absences_and_breakdowns": {
-        "absence_days_count": 3,
+        "absent_trips_count": 3,
+        "absence_days_count": 2,
         "vehicle_breakdowns_count": 1,
-        "total_downtime_days": 4
+        "substitute_trips_count": 5,
+        "total_downtime_days": 3,
+        "all_time": {
+          "absent_trips_count": 6,
+          "absence_days_count": 4,
+          "vehicle_breakdowns_count": 2,
+          "substitute_trips_count": 8
+        }
+      },
+      "substitute_trips": {
+        "as_substitute_trips_count": 5,
+        "completed_substitute_trips_count": 4,
+        "all_time_substitute_trips_count": 8
       }
     },
     "quick_widgets": {
@@ -688,15 +733,22 @@ Content-Type: application/json
 ```
 
 * **شرح الحقول (Field Descriptions):**
-  * `financial_stats.net_earnings`: إجمالي الأرباح الصافية بعد خصم نسبة المنصة (12%)، مع تفصيل الشهر الحالي والشهر السابق ونسبة التغير واتجاه النمو (`up` / `down` / `neutral`).
+  * `period`: الشهر والسنة الفعّالان في احتساب الإحصائيات.
+  * `summary_cards`: بطاقات الإحصاءات الأربعة الأساسية للشهر المحدد:
+    * `completed_trips_count`: إجمالي كل الرحلات المكتملة للسائق في هذا الشهر.
+    * `absent_trips_count`: عدد الرحلات التي غاب فيها السائق في هذا الشهر.
+    * `vehicle_breakdowns_count`: عدد الرحلات التي حدث فيها عطل لمركبة السائق في هذا الشهر.
+    * `substitute_trips_count`: عدد الرحلات التي استلمها السائق كـ سائق بديل في هذا الشهر.
+  * `financial_stats.net_earnings`: إجمالي الأرباح الصافية بعد خصم نسبة المنصة، مع تفصيل الشهر الحالي والشهر السابق ونسبة التغير واتجاه النمو (`up` / `down` / `neutral`).
   * `financial_stats.expected_active_earnings`: مجموع قيمة الاشتراكات الفعّالة والجارية حالياً التي يستحقها السائق بنهاية فترة الاشتراك.
   * `financial_stats.pending_and_due`: الرصيد المتاح حالياً في محفظة السائق، والمبالغ المعلقة في الضمان بانتظار الإفراج، وأي مستحقات نقدية للمنصة.
   * `subscription_and_passenger_stats.active_students_count`: إجمالي عدد الأطفال الذين يتولى توصيلهم حالياً.
   * `subscription_and_passenger_stats.vehicle_capacity`: السعة الكلية للمركبة، المقاعد المشغولة، المقاعد المتبقية المتاحة لقبول طلبات جديدة، ونسبة الإشغال.
-  * `subscription_and_passenger_stats.history`: إحصائيات تاريخية تشمل الاشتراكات المكتملة، والاشتراكات الملغاة، وإجمالي النشاط.
-  * `trip_operations_stats.completed_trips`: إجمالي الرحلات المنجزة بنجاح وتفصيلها (صباحي / مسائي / منجز اليوم).
-  * `trip_operations_stats.punctuality_rate`: معدل الالتزام بالمواعيد المحددة لبدء وإتمام الرحلات كنسبة مئوية.
-  * `trip_operations_stats.absences_and_breakdowns`: عدد أيام الإجازة/الغياب المسجلة للسائق وعدد بلاغات الأعطال.
+  * `subscription_and_passenger_stats.subscriptions` و `history`: إحصائيات الاشتراكات الشاملة وتشمل الاشتراكات النشطة (`active_subscriptions_count`)، المكتملة (`completed_subscriptions_count`)، الملغاة (`cancelled_subscriptions_count`)، وإجمالي الاشتراكات (`total_subscriptions_count`).
+  * `trip_operations_stats.completed_trips`: تفصيل الرحلات المكتملة (للشهر المختار ولجميع الأوقات `all_time_total` وتفصيل الصباحي والمسائي ورحلات اليوم).
+  * `trip_operations_stats.punctuality_rate`: معدل الالتزام بالمواعيد المحددة لبدء وإتمام الرحلات كنسبة مئوية للشهر المعني.
+  * `trip_operations_stats.absences_and_breakdowns`: عدد رحلات وأيام الغياب، وأعطال المركبة، ورحلات السائق البديل للشهر المعني وتراكمياً `all_time`.
+  * `trip_operations_stats.substitute_trips`: إحصائيات المهام والرحلات البديلة التي تولاها السائق.
   * `quick_widgets.expiring_soon_subscriptions`: ويدجت يعرض عدد وقائمة الاشتراكات التي ستنتهي خلال 5 أيام قادمة لتنبيه السائق.
   * `quick_widgets.documents_status`: مؤشر لوني لحالة رخصة القيادة ووثيقة التأمين (`green` = سارية، `yellow` = تنتهي قريباً، `red` = منتهية الصلاحية) مع حساب الأيام المتبقية.
 
