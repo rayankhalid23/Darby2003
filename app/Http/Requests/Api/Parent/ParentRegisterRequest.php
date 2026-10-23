@@ -21,6 +21,12 @@ class ParentRegisterRequest extends FormRequest
         if ($this->has('email')) {
             $this->merge(['email' => trim(mb_strtolower((string) $this->input('email')))]);
         }
+        if ($this->hasFile('avatar_url') && !$this->hasFile('avatar')) {
+            $this->files->set('avatar', $this->file('avatar_url'));
+        }
+        if ($this->hasFile('photo') && !$this->hasFile('avatar')) {
+            $this->files->set('avatar', $this->file('photo'));
+        }
     }
 
     public function rules(): array

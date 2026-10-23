@@ -36,6 +36,16 @@ class AdminDriverController extends Controller
     {
         try {
             try { $filters = $request->validated(); } catch (\Throwable $e) { $filters = $request->all(); }
+            
+            // في حال تم طلب مسارات الطلبات المعلقة المباشرة /drivers/pending أو /drivers/requests
+            if (empty($filters['status'])) {
+                if ($request->routeIs('*.pending.direct') || $request->segment(count($request->segments())) === 'pending') {
+                    $filters['status'] = 'Pending';
+                } elseif ($request->routeIs('*.requests.direct') || $request->segment(count($request->segments())) === 'requests') {
+                    $filters['status'] = 'Pending';
+                }
+            }
+
             $drivers = $this->adminDriverService->getDriversList($filters ?? []);
 
             $drivers->load('user');
@@ -87,13 +97,43 @@ class AdminDriverController extends Controller
             $adminId = auth()->user()->admin->id ?? auth()->id();
             $data = $request->validated();
 
-            // رفع الصورة الشخصية للسائق إن أُرسلت
-            if ($request->hasFile('avatar')) {
-                $path = $request->file('avatar')->store('drivers/avatars', 'public');
+            // رفع الصورة الشخصية للسائق إن أُرسلت (مع دعم جميع مسميات الحقول والـ Base64)
+            $avatarFields = ['avatar', 'avatar_url', 'photo', 'driver_photo', 'personal_photo', 'image', 'profile_image'];
+            $avatarFile = null;
+            foreach ($avatarFields as $field) {
+                $candidate = $request->file($field) ?? (($data[$field] ?? null) instanceof \Illuminate\Http\UploadedFile ? $data[$field] : null);
+                if ($candidate instanceof \Illuminate\Http\UploadedFile && $candidate->isValid()) {
+                    $avatarFile = $candidate;
+                    break;
+                }
+            }
+
+            if ($avatarFile) {
+                $path = $avatarFile->store('drivers/avatars', 'public');
                 $data['avatar_path'] = 'storage/' . $path;
                 $uploadedPaths[] = $path;
-            } elseif (!empty($data['avatar_url']) && is_string($data['avatar_url']) && !str_starts_with($data['avatar_url'], 'data:')) {
-                $data['avatar_path'] = $data['avatar_url'];
+            } else {
+                foreach ($avatarFields as $field) {
+                    $rawVal = $request->input($field);
+                    if (!is_string($rawVal) || trim($rawVal) === '') {
+                        continue;
+                    }
+                    $rawVal = trim($rawVal);
+                    if (preg_match('/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/s', $rawVal, $matches)) {
+                        $ext = strtolower($matches[1]) === 'jpeg' ? 'jpg' : strtolower($matches[1]);
+                        $binary = base64_decode($matches[2], true);
+                        if ($binary !== false && strlen($binary) > 0) {
+                            $path = 'drivers/avatars/' . \Illuminate\Support\Str::uuid() . '.' . $ext;
+                            Storage::disk('public')->put($path, $binary);
+                            $data['avatar_path'] = 'storage/' . $path;
+                            $uploadedPaths[] = $path;
+                            break;
+                        }
+                    } elseif ($field === 'avatar_url' && !str_starts_with($rawVal, 'data:')) {
+                        $data['avatar_path'] = $rawVal;
+                        break;
+                    }
+                }
             }
 
             // رفع صورة المركبة الجديدة إن أُرسلت

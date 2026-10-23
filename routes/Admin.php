@@ -124,6 +124,15 @@ Route::middleware(['auth:sanctum'])->group(function () {
             ->middleware('permission:drivers.view')
             ->name('api.admin.drivers.index');
         
+        // مسارات بديلة مباشرة لجلب طلبات السائقين الجدد المعلقة
+        Route::get('/pending', [AdminDriverController::class, 'index'])
+            ->middleware('permission:drivers.view')
+            ->name('api.admin.drivers.pending.direct');
+
+        Route::get('/requests', [AdminDriverController::class, 'index'])
+            ->middleware('permission:drivers.view')
+            ->name('api.admin.drivers.requests.direct');
+        
         // 4. مسار جلب كافة طلبات تعديل البيانات والمركبات المعلقة للآدمن
         Route::get('/pending-changes', [AdminDriverController::class, 'pendingChanges'])
             ->middleware('permission:drivers.review_changes,drivers.view')
@@ -131,43 +140,52 @@ Route::middleware(['auth:sanctum'])->group(function () {
         
         // 5. مسار عرض تفصيلي مقارن لطلب تعديل محدد
         Route::get('/pending-changes/{id}', [AdminDriverController::class, 'showPendingChange'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.review_changes,drivers.view')
             ->name('api.admin.drivers.pending.show');
         
         // 6. مسار معالجة قرار الموافقة والتطبيق الفوري أو الرفض المسبب لتعديلات السائق
         Route::post('/pending-changes/{id}/review', [AdminDriverController::class, 'reviewProfileChange'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.review_changes')
             ->name('api.admin.drivers.pending.review');
 
         // 2. مسار جلب تفاصيل ووثائق وإحصائيات سائق معين بعمق لمراجعته
         Route::get('/{id}', [AdminDriverController::class, 'show'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.view')
             ->name('api.admin.drivers.show');
         
         // 2-ب. مسار تعديل بيانات السائق مباشرة من قبل المشرف / الأدمن
         Route::put('/{id}', [AdminDriverController::class, 'update'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.edit_data')
             ->name('api.admin.drivers.update');
         Route::post('/{id}', [AdminDriverController::class, 'update'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.edit_data');
 
         // 3. مسار اتخاذ قرار المراجعة لإنشاء الحساب (قبول أو رفض مسبب)
         Route::post('/{id}/review', [AdminDriverController::class, 'review'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.review_initial')
             ->name('api.admin.drivers.review');
 
         // 7. إعادة تأهيل السائق (Reset AI): يصفّر نافذة 30 يوم ويرجع is_trusted=true
         Route::post('/{driverId}/ai-reset', [DriverAiPolicyController::class, 'resetDriver'])
+            ->whereNumber('driverId')
             ->middleware('permission:drivers.suspend')
             ->name('api.admin.drivers.ai-reset');
 
         // 8. إيقاف حساب السائق (تجميد الدخول + الحالة التشغيلية)
         Route::post('/{id}/suspend', [AdminDriverController::class, 'suspend'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.suspend')
             ->name('api.admin.drivers.suspend');
 
         // 9. إعادة تفعيل حساب السائق الموقوف
         Route::post('/{id}/activate', [AdminDriverController::class, 'activate'])
+            ->whereNumber('id')
             ->middleware('permission:drivers.suspend')
             ->name('api.admin.drivers.activate');
     });
@@ -431,7 +449,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::get('/', [\App\Http\Controllers\Api\Admin\PaymentMethodController::class, 'index']);
         Route::post('/', [\App\Http\Controllers\Api\Admin\PaymentMethodController::class, 'store']);
         Route::get('/{id}', [\App\Http\Controllers\Api\Admin\PaymentMethodController::class, 'show']);
-        Route::put('/{id}', [\App\Http\Controllers\Api\Admin\PaymentMethodController::class, 'update']);
+        Route::match(['PUT', 'POST'], '/{id}', [\App\Http\Controllers\Api\Admin\PaymentMethodController::class, 'update']);
         Route::patch('/{id}/toggle-status', [\App\Http\Controllers\Api\Admin\PaymentMethodController::class, 'toggleStatus']);
         Route::delete('/{id}', [\App\Http\Controllers\Api\Admin\PaymentMethodController::class, 'destroy']);
     });

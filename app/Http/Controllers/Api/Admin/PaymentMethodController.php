@@ -30,16 +30,17 @@ class PaymentMethodController extends Controller
     private function transform(PaymentMethod $method): array
     {
         return [
-            'id'         => $method->id,
-            'name_ar'    => $method->name_ar,
-            'code'       => $method->code,
-            'icon_url'   => $method->icon_url,
-            'min_amount' => (float) $method->min_amount,
-            'max_amount' => (float) $method->max_amount,
-            'is_active'  => (bool) $method->is_active,
-            'sort_order' => $method->sort_order,
-            'created_at' => $method->created_at,
-            'updated_at' => $method->updated_at,
+            'id'              => $method->id,
+            'name_ar'         => $method->name_ar,
+            'code'            => $method->code,
+            'target_audience' => $method->target_audience,
+            'icon_url'        => $method->icon_url,
+            'min_amount'      => (float) $method->min_amount,
+            'max_amount'      => (float) $method->max_amount,
+            'is_active'       => (bool) $method->is_active,
+            'sort_order'      => $method->sort_order,
+            'created_at'      => $method->created_at,
+            'updated_at'      => $method->updated_at,
         ];
     }
 
@@ -79,21 +80,36 @@ class PaymentMethodController extends Controller
         $validated = $request->validate([
             'name_ar'         => 'required|string|max:100',
             'code'            => 'required|string|max:50|unique:payment_methods,code',
+            'target_audience' => 'nullable|string|in:parent,driver,both',
             'min_amount'      => 'nullable|numeric|min:0.5',
             'max_amount'      => 'nullable|numeric|gt:min_amount',
             'is_active'       => 'nullable|boolean',
             'sort_order'      => 'nullable|integer',
-            'icon'            => 'nullable|image|mimes:jpeg,png,jpg,webp,svg|max:2048',
+            'icon'            => 'nullable',
+            'icon_url'        => 'nullable',
+            'image'           => 'nullable',
         ]);
 
         $validated['processing_type']  = 'instant_simulation';
-        $validated['target_audience']  = 'parent';
+        $validated['target_audience']  = $request->input('target_audience', 'both');
 
-        if ($request->hasFile('icon')) {
-            $path = $request->file('icon')->store('payment_methods/icons', 'public');
-            $validated['icon_url'] = asset('storage/' . $path);
+        // استخراج ملف الأيقونة بمرونة من أي حقل محتمل
+        $iconFile = $request->file('icon')
+            ?? $request->file('icon_url')
+            ?? $request->file('image')
+            ?? $request->file('photo')
+            ?? $request->file('file');
+
+        if ($iconFile && $iconFile->isValid()) {
+            $path = $iconFile->store('payment_methods/icons', 'public');
+            $validated['icon_url'] = 'storage/' . $path;
+        } elseif ($request->filled('icon_url') && is_string($request->input('icon_url'))) {
+            $validated['icon_url'] = trim($request->input('icon_url'));
+        } elseif ($request->filled('icon') && is_string($request->input('icon'))) {
+            $validated['icon_url'] = trim($request->input('icon'));
         }
-        unset($validated['icon']);
+
+        unset($validated['icon'], $validated['image'], $validated['photo'], $validated['file']);
 
         $method = $this->service->create($validated);
 
@@ -119,18 +135,16 @@ class PaymentMethodController extends Controller
         $validated = $request->validate([
             'name_ar'         => 'sometimes|required|string|max:100',
             'code'            => 'sometimes|required|string|max:50|unique:payment_methods,code,' . $id,
+            'target_audience' => 'sometimes|nullable|string|in:parent,driver,both',
             'min_amount'      => 'nullable|numeric|min:0.5',
             'max_amount'      => 'nullable|numeric',
             'is_active'       => 'nullable|boolean',
             'sort_order'      => 'nullable|integer',
-            'icon'            => 'nullable|image|mimes:jpeg,png,jpg,webp,svg|max:2048',
+            'icon'            => 'nullable',
+            'icon_url'        => 'nullable',
+            'image'           => 'nullable',
         ]);
 
-        // ⚠️ عكس store()، هذه الحقول اختيارية هنا (سياسة "تعديل جزئي")، فلا يمكن
-        // فرض gt:min_amount على حقل قد لا يُرسل أصلاً. نتحقق يدوياً من القيمتين
-        // الفعليتين (المُرسلة أو القديمة من قاعدة البيانات) لمنع حفظ وسيلة دفع
-        // بحد أدنى أكبر من حدها الأقصى — كانت تصبح غير قابلة للاستخدام إطلاقاً
-        // لأن أي مبلغ سيفشل بأحد الشرطين دائماً.
         $existing = $this->service->getById($id);
         $effectiveMin = $validated['min_amount'] ?? $existing->min_amount;
         $effectiveMax = $validated['max_amount'] ?? $existing->max_amount;
@@ -143,19 +157,29 @@ class PaymentMethodController extends Controller
             ], 422);
         }
 
-        if ($request->hasFile('icon')) {
-            // نحذف الملف القديم فقط لو كان مخزَّناً محلياً على قرص public (مسار
-            // يبدأ بـ storage/) — تفادياً لمحاولة حذف رابط خارجي جاهز كان موجوداً
-            // من مرحلة سابقة.
-            if ($existing->icon_url && str_contains($existing->icon_url, '/storage/payment_methods/icons/')) {
-                $oldPath = 'payment_methods/icons/' . basename($existing->icon_url);
+        // استخراج ملف الأيقونة بمرونة من أي حقل محتمل
+        $iconFile = $request->file('icon')
+            ?? $request->file('icon_url')
+            ?? $request->file('image')
+            ?? $request->file('photo')
+            ?? $request->file('file');
+
+        if ($iconFile && $iconFile->isValid()) {
+            // نحذف الملف القديم فقط لو كان مخزَّناً محلياً على قرص public
+            if ($existing->getRawOriginal('icon_url') && str_contains($existing->getRawOriginal('icon_url'), 'payment_methods/icons/')) {
+                $oldPath = 'payment_methods/icons/' . basename($existing->getRawOriginal('icon_url'));
                 Storage::disk('public')->delete($oldPath);
             }
 
-            $path = $request->file('icon')->store('payment_methods/icons', 'public');
-            $validated['icon_url'] = asset('storage/' . $path);
+            $path = $iconFile->store('payment_methods/icons', 'public');
+            $validated['icon_url'] = 'storage/' . $path;
+        } elseif ($request->filled('icon_url') && is_string($request->input('icon_url'))) {
+            $validated['icon_url'] = trim($request->input('icon_url'));
+        } elseif ($request->filled('icon') && is_string($request->input('icon'))) {
+            $validated['icon_url'] = trim($request->input('icon'));
         }
-        unset($validated['icon']);
+
+        unset($validated['icon'], $validated['image'], $validated['photo'], $validated['file']);
 
         $method = $this->service->update($id, $validated);
 

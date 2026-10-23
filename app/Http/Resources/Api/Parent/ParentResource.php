@@ -35,10 +35,21 @@ class ParentResource extends JsonResource
 
         // --- استخلاص رابط الصورة وحل مشكلة النصوص الفارغة بشكل هندسي ---
         $rawAvatar = null;
-        if ($user && !empty(trim($user->avatar_url))) {
-            $rawAvatar = $user->avatar_url;
-        } elseif ($parentProfile && !empty(trim($parentProfile->avatar_url))) {
-            $rawAvatar = $parentProfile->avatar_url;
+        if ($user && !empty(trim($user->avatar_url ?? ''))) {
+            $rawAvatar = trim($user->avatar_url);
+        } elseif ($parentProfile && !empty(trim($parentProfile->avatar_url ?? ''))) {
+            $rawAvatar = trim($parentProfile->avatar_url);
+        }
+
+        $avatarUrl = null;
+        if ($rawAvatar) {
+            if (str_starts_with($rawAvatar, 'http://') || str_starts_with($rawAvatar, 'https://')) {
+                $avatarUrl = $rawAvatar;
+            } elseif (str_starts_with($rawAvatar, 'uploads/')) {
+                $avatarUrl = asset($rawAvatar);
+            } else {
+                $avatarUrl = \App\Http\Controllers\Api\Shared\MediaController::urlFor($rawAvatar) ?: asset($rawAvatar);
+            }
         }
 
         // 3. بناء المصفوفة مع وضع قيم بديلة (Fallbacks) ذكية لكل حقل لتفادي أي خطأ
@@ -55,7 +66,7 @@ class ParentResource extends JsonResource
             'is_trusted'           => (bool) ($user?->is_trusted ?? $parentProfile?->is_trusted ?? true),
             
             // الحل الجذري لعرض رابط الصورة الصحيح أو null للفرونت إند لمنع التشوه
-            'avatar_url'           => $rawAvatar ? asset($rawAvatar) : null,
+            'avatar_url'           => $avatarUrl,
 
             // التنبيه الخاص بتعديل البريد الإلكتروني المعلق
             'email_change_pending' => (bool) ($user?->email_change_pending ?? $parentProfile?->email_change_pending ?? $this->email_change_pending ?? false),

@@ -13,21 +13,52 @@ class RegisterAccountRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+
+        if ($this->has('email') && is_string($this->input('email'))) {
+            $merge['email'] = trim(mb_strtolower($this->input('email')));
+        }
+
+        if ($this->has('gender') && is_string($this->input('gender'))) {
+            $merge['gender'] = trim(mb_strtolower($this->input('gender')));
+        }
+
+        if ($this->filled('phone_number') && is_string($this->input('phone_number'))) {
+            $arabicDigits = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
+            $englishDigits = ['0','1','2','3','4','5','6','7','8','9'];
+            $phone = str_replace($arabicDigits, $englishDigits, trim($this->input('phone_number')));
+            $merge['phone_number'] = preg_replace('/[^0-9]/', '', $phone) ?? $phone;
+        }
+
+        if (!empty($merge)) {
+            $this->merge($merge);
+        }
+    }
+
     public function rules(): array
     {
-        return [
+        $rules = [
             'full_name'    => 'required|string|min:10|max:100',
             'email'        => 'required|email|unique:users,email',
             'phone_number' => 'required|digits:10|unique:users,phone_number|regex:/^09[0-9]{8}$/',
             'gender'       => 'required|in:male,female', // الحقل الجديد
             'password'     => ['required', 'string', 'min:6', 'regex:/^(?=.*[a-zA-Z])(?=.*\d).+$/'],
-            'avatar_url'   => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
 
             'alternative_phone' => 'nullable|string|min:7',
             'device_name'       => 'nullable|string',
             'platform'          => 'nullable|string',
             'fcm_token'         => 'nullable|string',
         ];
+
+        foreach (['avatar', 'avatar_url', 'photo', 'driver_photo', 'personal_photo', 'image', 'profile_image'] as $field) {
+            $rules[$field] = $this->hasFile($field)
+                ? 'nullable|file|mimes:jpeg,png,jpg,webp,heic,heif|max:10240'
+                : 'nullable|string';
+        }
+
+        return $rules;
     }
 
     public function messages(): array

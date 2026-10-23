@@ -38,10 +38,7 @@ class ParentProfileUpdateTest extends TestCase
             'phone_verified_at' => now(),
         ]);
 
-        $this->parentProfile = ParentModel::create([
-            'user_id'    => $this->parentUser->id,
-            'is_trusted' => 0,
-        ]);
+        $this->parentProfile = ParentModel::find($this->parentUser->id);
     }
 
     /**
@@ -145,6 +142,7 @@ class ParentProfileUpdateTest extends TestCase
      */
     public function test_update_profile_with_avatar_upload(): void
     {
+        Storage::fake('public');
         $avatarFile = UploadedFile::fake()->image('parent_new_photo.jpg', 400, 400);
 
         $response = $this->actingAs($this->parentUser, 'sanctum')->postJson('/api/parent/profile/update', [
@@ -156,6 +154,26 @@ class ParentProfileUpdateTest extends TestCase
 
         $this->parentUser->refresh();
         $this->assertNotNull($this->parentUser->avatar_url);
+        $this->assertStringContainsString('parents/avatars', $this->parentUser->avatar_url);
+
+        $storedPath = str_replace('storage/', '', $this->parentUser->avatar_url);
+        Storage::disk('public')->assertExists($storedPath);
+
+        // التحقق من أن رابط الـ avatar_url المرجع يمكن الوصول له عبر MediaController
+        $mediaResponse = $this->get('/api/media/' . $storedPath);
+        $mediaResponse->assertStatus(200);
+
+        // رفع صورة أخرى والتأكد من حذف الصورة السابقة
+        $newAvatarFile = UploadedFile::fake()->image('parent_second_photo.png', 400, 400);
+        $resSecond = $this->actingAs($this->parentUser, 'sanctum')->postJson('/api/parent/profile/update', [
+            'avatar' => $newAvatarFile,
+        ]);
+        $resSecond->assertStatus(200);
+
+        Storage::disk('public')->assertMissing($storedPath);
+        $this->parentUser->refresh();
+        $newStoredPath = str_replace('storage/', '', $this->parentUser->avatar_url);
+        Storage::disk('public')->assertExists($newStoredPath);
     }
 
     /**
@@ -189,8 +207,8 @@ class ParentProfileUpdateTest extends TestCase
             ->assertJsonPath('success', true)
             ->assertJsonPath('data.profile.is_trusted', true);
 
-        $this->assertDatabaseHas('parents', [
-            'user_id'    => $this->parentUser->id,
+        $this->assertDatabaseHas('users', [
+            'id'         => $this->parentUser->id,
             'is_trusted' => 1,
         ]);
     }

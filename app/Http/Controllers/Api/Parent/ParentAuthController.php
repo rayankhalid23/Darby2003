@@ -14,6 +14,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Exception;
 
 class ParentAuthController extends Controller
@@ -119,12 +120,11 @@ class ParentAuthController extends Controller
         try {
             $data = $request->validated();
 
-if ($request->hasFile('avatar')) {
-    $file = $request->file('avatar');
-    $filename = 'parent_avatar_' . time() . '.' . $file->getClientOriginalExtension();
-    $file->move(public_path('uploads/parents/avatars'), $filename);
-    $data['avatar_url'] = 'uploads/parents/avatars/' . $filename;
-}
+            if ($request->hasFile('avatar')) {
+                $file = $request->file('avatar');
+                $path = $file->store('parents/avatars', 'public');
+                $data['avatar_url'] = 'storage/' . $path;
+            }
 
 $user = $this->registrationService->registerParent($data);
             $token = $user->createToken('parent_token')->plainTextToken;
@@ -171,13 +171,8 @@ $user = $this->registrationService->registerParent($data);
 
             if ($request->hasFile('avatar')) {
                 $file = $request->file('avatar');
-                $uploadDir = public_path('uploads/parents/avatars');
-                if (!file_exists($uploadDir)) {
-                    @mkdir($uploadDir, 0755, true);
-                }
-                $filename = 'parent_avatar_' . time() . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                $file->move($uploadDir, $filename);
-                $data['avatar_url'] = 'uploads/parents/avatars/' . $filename;
+                $path = $file->store('parents/avatars', 'public');
+                $data['avatar_url'] = 'storage/' . $path;
             }
 
             $user = $this->registrationService->updateParentProfile($request->user()->id, $data);

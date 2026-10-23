@@ -45,7 +45,7 @@ class DriverResource extends JsonResource
                 'email'                => $user?->email ?? '', 
                 'new_email_temporary'  => $user?->new_email_temporary ?? null,
                 'email_change_pending' => (bool) ($user?->email_change_pending ?? false),
-                'avatar_url'           => $user?->avatar_url ? asset($user->avatar_url) : null,
+                'avatar_url'           => \App\Http\Controllers\Api\Shared\MediaController::urlFor($user?->avatar_url),
                 'is_active'            => (bool) ($user?->is_active ?? false),
 
                 // التوكن يظهر ديناميكياً فقط عند تسجيل الدخول أو التسجيل

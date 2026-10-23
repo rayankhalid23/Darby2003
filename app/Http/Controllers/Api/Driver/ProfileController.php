@@ -35,15 +35,44 @@ class ProfileController extends Controller
             $user = auth()->user();
             $validatedData = $request->validated();
 
-            if ($request->hasFile('avatar')) {
+            $avatarFields = ['avatar', 'avatar_url', 'photo', 'driver_photo', 'personal_photo', 'image', 'profile_image'];
+            $avatarFile = null;
+            foreach ($avatarFields as $field) {
+                $candidate = $request->file($field) ?? (($validatedData[$field] ?? null) instanceof \Illuminate\Http\UploadedFile ? $validatedData[$field] : null);
+                if ($candidate instanceof \Illuminate\Http\UploadedFile && $candidate->isValid()) {
+                    $avatarFile = $candidate;
+                    break;
+                }
+            }
+
+            if ($avatarFile) {
                 if ($user->avatar_url) {
                     $oldPath = str_replace('storage/', '', $user->avatar_url);
                     Storage::disk('public')->delete($oldPath);
                 }
 
-                $avatarPath = $request->file('avatar')->store('drivers/avatars', 'public');
-                $validatedData['avatar_url'] = 'storage/' . $avatarPath; 
+                $avatarPath = $avatarFile->store('drivers/avatars', 'public');
+                $validatedData['avatar_url'] = 'storage/' . $avatarPath;
                 $uploadedPaths[] = $avatarPath;
+            } else {
+                foreach ($avatarFields as $field) {
+                    $rawVal = $request->input($field);
+                    if (is_string($rawVal) && preg_match('/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/s', trim($rawVal), $matches)) {
+                        $ext = strtolower($matches[1]) === 'jpeg' ? 'jpg' : strtolower($matches[1]);
+                        $binary = base64_decode($matches[2], true);
+                        if ($binary !== false && strlen($binary) > 0) {
+                            if ($user->avatar_url) {
+                                $oldPath = str_replace('storage/', '', $user->avatar_url);
+                                Storage::disk('public')->delete($oldPath);
+                            }
+                            $avatarPath = 'drivers/avatars/' . \Illuminate\Support\Str::uuid() . '.' . $ext;
+                            Storage::disk('public')->put($avatarPath, $binary);
+                            $validatedData['avatar_url'] = 'storage/' . $avatarPath;
+                            $uploadedPaths[] = $avatarPath;
+                            break;
+                        }
+                    }
+                }
             }
 
             $result = $this->profileService->updateDriverProfile($user->id, $validatedData);
@@ -59,14 +88,16 @@ class ProfileController extends Controller
                 'new_email' => $result['pending_email'] ?? null,
             ] : null;
 
+            $profileArray = (new DriverResource($result['driver']))->resolve($request);
+
             return response()->json([
                 'status'  => true,
                 'success' => true,
                 'message' => $message,
-                'data'    => [
-                    'profile'            => new DriverResource($result['driver']),
+                'data'    => array_merge($profileArray, [
+                    'profile'            => $profileArray,
                     'email_verification' => $emailVerificationData,
-                ]
+                ])
             ], 200);
 
         } catch (Exception $e) {

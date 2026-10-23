@@ -29,6 +29,9 @@ class MediaController extends Controller
         'children/photos',
         'children_photos',
         'avatars',
+        'parents/avatars',
+        'uploads/parents/avatars',
+        'payment_methods/icons',
     ];
 
     // pdf مطلوب: وثائق السائق الرسمية (تأمين، فحص فني...) تقبل الآن PDF أيضاً
@@ -154,29 +157,31 @@ class MediaController extends Controller
             return null;
         }
 
-        // إذا كان الرابط كاملاً، استخراج المسار النسبي إن كان يشير إلى storage على نفس الدومين
+        // 1. إذا كان الرابط كاملاً، استخراج المسار فقط
         if (str_starts_with($storedPath, 'http://') || str_starts_with($storedPath, 'https://')) {
-            $parsedPath = parse_url($storedPath, PHP_URL_PATH);
-            if ($parsedPath && str_contains($parsedPath, 'storage/')) {
-                $storedPath = preg_replace('#^.*?storage/#', '', $parsedPath);
-            } elseif ($parsedPath && str_contains($parsedPath, 'api/media/')) {
-                return $storedPath;
-            } else {
-                return $storedPath;
+            $parsed = parse_url($storedPath, PHP_URL_PATH);
+            if (!empty($parsed)) {
+                $storedPath = $parsed;
             }
         }
 
-        $relative = ltrim(preg_replace('#^storage/#', '', trim($storedPath)), '/');
+        // 2. إزالة أي بادئات متكررة أو زائدة: slashes, storage/, api/media/
+        $clean = trim($storedPath);
+        $clean = ltrim($clean, '/');
+        while (preg_match('#^(api/media/|storage/)#i', $clean)) {
+            $clean = preg_replace('#^(api/media/|storage/)#i', '', $clean);
+            $clean = ltrim($clean, '/');
+        }
 
-        $segments = explode('/', $relative);
+        $segments = explode('/', $clean);
         $filename = array_pop($segments);
         $directory = implode('/', $segments);
 
         if (!in_array($directory, self::ALLOWED_DIRECTORIES, true)) {
             // مسار غير متوقع خارج القائمة البيضاء — نرجع رابط asset
-            return asset('storage/' . $relative);
+            return asset('storage/' . $clean);
         }
 
-        return url('api/media/' . $relative);
+        return url('api/media/' . $clean);
     }
 }

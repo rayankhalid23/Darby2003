@@ -17,6 +17,16 @@ class UpdateParentProfileRequest extends FormRequest
         return auth()->check();
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->hasFile('avatar_url') && !$this->hasFile('avatar')) {
+            $this->files->set('avatar', $this->file('avatar_url'));
+        }
+        if ($this->hasFile('photo') && !$this->hasFile('avatar')) {
+            $this->files->set('avatar', $this->file('photo'));
+        }
+    }
+
     /**
      * قواعد التحقق الخاصة بتعديل بيانات ولي الأمر (تعديل جزئي 100%)
      */

@@ -203,6 +203,55 @@ class DriverTripController extends Controller
     }
 
     /**
+     * جلب الرحلة والتحقق من صلاحية وصول السائق إليها (السائق الأصلي أو السائق البديل المعتمد لحالة الطوارئ).
+     * يُرجع كائن الرحلة أو يملأ $errorResponse برسالة خطأ واضحة واحترافية.
+     */
+    private function findDriverTrip(int|string|null $tripId, ?int $driverId, ?JsonResponse &$errorResponse = null): ?Trip
+    {
+        if (empty($tripId)) {
+            $errorResponse = response()->json([
+                'status'     => 'error',
+                'error_code' => 'TRIP_ID_REQUIRED',
+                'message'    => 'معرّف الرحلة (tripId) مطلوب للوصول إلى تفاصيلها أو محطاتها.',
+            ], 422);
+            return null;
+        }
+
+        $trip = Trip::find($tripId);
+        if (!$trip) {
+            $errorResponse = response()->json([
+                'status'     => 'error',
+                'error_code' => 'TRIP_NOT_FOUND',
+                'message'    => "الرحلة رقم ({$tripId}) غير موجودة في النظام. قد تكون محذوفة أو تم إعادة توليدها برقم رحلة جديد.",
+            ], 404);
+            return null;
+        }
+
+        if ($driverId && (int) $trip->driver_id === (int) $driverId) {
+            return $trip;
+        }
+
+        // فحص هل السائق مسجل كسائق بديل معتمد لحالة طوارئ هذه الرحلة
+        if ($driverId) {
+            $isSubstitute = \App\Models\Shared\TripBreakdownDispatch::where('trip_id', $trip->id)
+                ->where('substitute_driver_id', $driverId)
+                ->where('status', \App\Models\Shared\TripBreakdownDispatch::STATUS_ACCEPTED)
+                ->exists();
+
+            if ($isSubstitute) {
+                return $trip;
+            }
+        }
+
+        $errorResponse = response()->json([
+            'status'     => 'error',
+            'error_code' => 'TRIP_FORBIDDEN',
+            'message'    => "الرحلة رقم ({$tripId}) غير مسندة للسائق الحالي (معرف السائق: {$driverId}).",
+        ], 403);
+        return null;
+    }
+
+    /**
      * 2️⃣ GET /api/driver/trips/{tripId}
      * تفاصيل الرحلة
      */
@@ -212,9 +261,18 @@ class DriverTripController extends Controller
             $user = Auth::user();
             $driver = $user?->driver;
 
-            $trip = Trip::where('id', $tripId)
-                ->where('driver_id', $driver->id)
-                ->firstOrFail();
+            if (!$driver) {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'DRIVER_NOT_FOUND',
+                    'message'    => 'بيانات السائق غير مقترنة بالحساب.',
+                ], 403);
+            }
+
+            $trip = $this->findDriverTrip($tripId, $driver->id, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
 
             $route = RouteModel::where('id', $trip->route_id)->first();
             $subs = ActiveSubscription::forDriver($driver->id)
@@ -424,6 +482,26 @@ class DriverTripController extends Controller
                 $isGo = in_array($trip->trip_type, ['Morning', 'ذهاب']) 
                     || in_array($trip->shift_slot, ['morning_go', 'afternoon_go']);
 
+                $childEvents = $events->where('child_id', $sub->child_id);
+                $pickupEvent = $childEvents->first(fn($e) => in_array($e->action_type, ['picked_up', 'pickup', 'boarded']));
+                $dropoffEvent = $childEvents->first(fn($e) => in_array($e->action_type, ['dropped_off', 'dropoff', 'delivered_home', 'dropped_off_school']));
+
+                $subReq = isset($sub->subscriptionRequest) ? $sub->subscriptionRequest : null;
+                $scheduledPickup = $sub->pickup_time 
+                    ?? $childObj?->pickup_time 
+                    ?? $subReq?->pickup_time 
+                    ?? '07:00:00';
+                $scheduledDropoff = $sub->dropoff_time 
+                    ?? $childObj?->dropoff_time 
+                    ?? $subReq?->dropoff_time 
+                    ?? '14:00:00';
+
+                $actualPickup = $pickupEvent?->scanned_at ? Carbon::parse($pickupEvent->scanned_at)->format('H:i') : null;
+                $actualDropoff = $dropoffEvent?->scanned_at ? Carbon::parse($dropoffEvent->scanned_at)->format('H:i') : null;
+
+                $pickupTime = $actualPickup ?? ($scheduledPickup ? Carbon::parse($scheduledPickup)->format('H:i') : null);
+                $dropoffTime = $actualDropoff ?? ($scheduledDropoff ? Carbon::parse($scheduledDropoff)->format('H:i') : null);
+
                 return [
                     'trip_child_id'            => (int) $sub->id,
                     'child_id'                 => (int) $sub->child_id,
@@ -443,6 +521,12 @@ class DriverTripController extends Controller
                     'dropoff_address'          => $isGo ? $schoolLocation['name'] : $homeLocation['title'],
                     'destination'              => $isGo ? $schoolLocation['name'] : $homeLocation['title'],
                     'destination_type'         => $isGo ? 'school' : 'home',
+                    'pickup_time'              => $pickupTime,
+                    'dropoff_time'             => $dropoffTime,
+                    'scheduled_pickup_time'    => $scheduledPickup ? Carbon::parse($scheduledPickup)->format('H:i') : null,
+                    'scheduled_dropoff_time'   => $scheduledDropoff ? Carbon::parse($scheduledDropoff)->format('H:i') : null,
+                    'actual_pickup_time'       => $actualPickup,
+                    'actual_dropoff_time'      => $actualDropoff,
                     'status'                   => $statusFields['status'],
                     'pickup_status'            => $statusFields['pickup_status'],
                     'dropoff_status'           => $statusFields['dropoff_status'],
@@ -568,7 +652,10 @@ class DriverTripController extends Controller
             $targetTripId = $tripId ?? $request->trip_id;
 
             if ($targetTripId) {
-                $trip = Trip::where('id', $targetTripId)->where('driver_id', $driverId)->firstOrFail();
+                $trip = $this->findDriverTrip($targetTripId, $driverId, $errorResponse);
+                if (!$trip) {
+                    return $errorResponse;
+                }
 
                 // ⚠️ فحص الغياب كان موجوداً في المسار القديم (بدون tripId) فقط، بينما التطبيق
                 // يستخدم هذا المسار — فكان السائق الغائب رسمياً يبدأ رحلته بشكل طبيعي.
@@ -603,6 +690,12 @@ class DriverTripController extends Controller
                 }
 
                 if (strtolower((string) $trip->status) === 'in_progress') {
+                    $orderedStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                        ->where('sequence_order', '>', 0)
+                        ->orderBy('sequence_order')
+                        ->with(['child.school', 'school'])
+                        ->get();
+
                     return response()->json([
                         'status'  => 'success',
                         'message' => 'الرحلة جارية بالفعل.',
@@ -612,6 +705,65 @@ class DriverTripController extends Controller
                             'started_at' => $trip->actual_start_time
                                 ? Carbon::parse($trip->actual_start_time)->format('H:i')
                                 : Carbon::now()->format('H:i'),
+                            'start_lat'  => $trip->start_lat,
+                            'start_lng'  => $trip->start_lng,
+                            'stops'      => $orderedStops->map(function ($s) use ($orderedStops, $trip) {
+                                $schoolObj = $s->school ?? $s->child?->school;
+                                $schoolId = $s->school_id ? (int) $s->school_id : ($s->child?->school_id ? (int) $s->child->school_id : null);
+                                $schoolName = $schoolObj?->name;
+
+                                $childId = $s->child_id ? (int) $s->child_id : null;
+                                $childName = $s->child?->full_name ?? $s->child?->name;
+                                $schoolChildrenList = collect();
+
+                                if ($s->stop_type === \App\Models\Shared\TripStop::TYPE_SCHOOL && !$childId && $schoolId) {
+                                    $schoolChildren = $orderedStops->filter(function ($os) use ($schoolId) {
+                                        return $os->child && (int)($os->school_id ?? $os->child->school_id) === (int)$schoolId;
+                                    })->pluck('child')->unique('id')->values();
+
+                                    if ($schoolChildren->isEmpty()) {
+                                        $childIds = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                                            ->whereNotNull('child_id')
+                                            ->where(function ($q) use ($schoolId) {
+                                                $q->where('school_id', $schoolId)
+                                                  ->orWhereHas('child', fn($cq) => $cq->where('school_id', $schoolId));
+                                            })
+                                            ->pluck('child_id');
+                                        $schoolChildren = \App\Models\Parent\Child::whereIn('id', $childIds)->get();
+                                    }
+
+                                    if ($schoolChildren->isNotEmpty()) {
+                                        $childId = (int) $schoolChildren->first()->id;
+                                        $childName = $schoolChildren->map(fn($c) => $c->full_name ?? $c->name)->implode('، ');
+                                        $schoolChildrenList = $schoolChildren->map(fn($c) => [
+                                            'id'   => (int) $c->id,
+                                            'name' => $c->full_name ?? $c->name,
+                                        ]);
+                                    }
+                                } elseif ($s->child) {
+                                    $schoolChildrenList = collect([[
+                                        'id'   => (int) $s->child->id,
+                                        'name' => $s->child->full_name ?? $s->child->name,
+                                    ]]);
+                                }
+
+                                return [
+                                    'id'             => $s->id,
+                                    'sequence_order' => $s->sequence_order,
+                                    'stop_type'      => $s->stop_type,
+                                    'child_id'       => $childId,
+                                    'child_name'     => $childName,
+                                    'school_id'      => $schoolId,
+                                    'school_name'    => $schoolName,
+                                    'label'          => $s->label,
+                                    'lat'            => (float) $s->lat,
+                                    'lng'            => (float) $s->lng,
+                                    'eta'            => $s->eta,
+                                    'eta_minutes'    => $s->eta_minutes,
+                                    'status'         => $s->status,
+                                    'children'       => $schoolChildrenList->values()->all(),
+                                ];
+                            }),
                         ],
                     ], 200);
                 }
@@ -657,7 +809,7 @@ class DriverTripController extends Controller
             $orderedStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
                 ->where('sequence_order', '>', 0)
                 ->orderBy('sequence_order')
-                ->with(['child', 'school'])
+                ->with(['child.school', 'school'])
                 ->get();
 
             return response()->json([
@@ -669,21 +821,63 @@ class DriverTripController extends Controller
                     'started_at' => Carbon::now()->format('H:i'),
                     'start_lat'  => $trip->start_lat,
                     'start_lng'  => $trip->start_lng,
-                    'stops'      => $orderedStops->map(fn($s) => [
-                        'id'             => $s->id,
-                        'sequence_order' => $s->sequence_order,
-                        'stop_type'      => $s->stop_type,
-                        'child_id'       => $s->child_id,
-                        'child_name'     => $s->child?->full_name ?? $s->child?->name,
-                        'school_id'      => $s->school_id,
-                        'school_name'    => $s->school?->name,
-                        'label'          => $s->label,
-                        'lat'            => (float) $s->lat,
-                        'lng'            => (float) $s->lng,
-                        'eta'            => $s->eta,
-                        'eta_minutes'    => $s->eta_minutes,
-                        'status'         => $s->status,
-                    ]),
+                    'stops'      => $orderedStops->map(function ($s) use ($orderedStops, $trip) {
+                        $schoolObj = $s->school ?? $s->child?->school;
+                        $schoolId = $s->school_id ? (int) $s->school_id : ($s->child?->school_id ? (int) $s->child->school_id : null);
+                        $schoolName = $schoolObj?->name;
+
+                        $childId = $s->child_id ? (int) $s->child_id : null;
+                        $childName = $s->child?->full_name ?? $s->child?->name;
+                        $schoolChildrenList = collect();
+
+                        if ($s->stop_type === \App\Models\Shared\TripStop::TYPE_SCHOOL && !$childId && $schoolId) {
+                            $schoolChildren = $orderedStops->filter(function ($os) use ($schoolId) {
+                                return $os->child && (int)($os->school_id ?? $os->child->school_id) === (int)$schoolId;
+                            })->pluck('child')->unique('id')->values();
+
+                            if ($schoolChildren->isEmpty()) {
+                                $childIds = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                                    ->whereNotNull('child_id')
+                                    ->where(function ($q) use ($schoolId) {
+                                        $q->where('school_id', $schoolId)
+                                          ->orWhereHas('child', fn($cq) => $cq->where('school_id', $schoolId));
+                                    })
+                                    ->pluck('child_id');
+                                $schoolChildren = \App\Models\Parent\Child::whereIn('id', $childIds)->get();
+                            }
+
+                            if ($schoolChildren->isNotEmpty()) {
+                                $childId = (int) $schoolChildren->first()->id;
+                                $childName = $schoolChildren->map(fn($c) => $c->full_name ?? $c->name)->implode('، ');
+                                $schoolChildrenList = $schoolChildren->map(fn($c) => [
+                                    'id'   => (int) $c->id,
+                                    'name' => $c->full_name ?? $c->name,
+                                ]);
+                            }
+                        } elseif ($s->child) {
+                            $schoolChildrenList = collect([[
+                                'id'   => (int) $s->child->id,
+                                'name' => $s->child->full_name ?? $s->child->name,
+                            ]]);
+                        }
+
+                        return [
+                            'id'             => $s->id,
+                            'sequence_order' => $s->sequence_order,
+                            'stop_type'      => $s->stop_type,
+                            'child_id'       => $childId,
+                            'child_name'     => $childName,
+                            'school_id'      => $schoolId,
+                            'school_name'    => $schoolName,
+                            'label'          => $s->label,
+                            'lat'            => (float) $s->lat,
+                            'lng'            => (float) $s->lng,
+                            'eta'            => $s->eta,
+                            'eta_minutes'    => $s->eta_minutes,
+                            'status'         => $s->status,
+                            'children'       => $schoolChildrenList->values()->all(),
+                        ];
+                    }),
                 ]
             ], 200);
 
@@ -807,6 +1001,8 @@ class DriverTripController extends Controller
                     'pickup_status'   => $currentStatusFields['pickup_status'] ?? 'pending',
                     'dropoff_status'  => $currentStatusFields['dropoff_status'] ?? 'pending',
                     'eta'             => $currentStatusFields['eta'] ?? null,
+                    'pickup_time'     => ($currentSub->pickup_time ?? $currentSub->child?->pickup_time) ? Carbon::parse($currentSub->pickup_time ?? $currentSub->child?->pickup_time)->format('h:i A') : null,
+                    'dropoff_time'    => ($currentSub->dropoff_time ?? $currentSub->child?->dropoff_time) ? Carbon::parse($currentSub->dropoff_time ?? $currentSub->child?->dropoff_time)->format('h:i A') : null,
                 ];
             } elseif ($currentStop && $currentStop->child_id === null) {
                 $currentChildData = [
@@ -821,6 +1017,8 @@ class DriverTripController extends Controller
                     'pickup_status'   => $currentStatusFields['pickup_status'] ?? 'pending',
                     'dropoff_status'  => $currentStatusFields['dropoff_status'] ?? 'pending',
                     'eta'             => $currentStatusFields['eta'] ?? null,
+                    'pickup_time'     => ($currentSub->pickup_time ?? $currentSub->child?->pickup_time) ? Carbon::parse($currentSub->pickup_time ?? $currentSub->child?->pickup_time)->format('h:i A') : null,
+                    'dropoff_time'    => ($currentSub->dropoff_time ?? $currentSub->child?->dropoff_time) ? Carbon::parse($currentSub->dropoff_time ?? $currentSub->child?->dropoff_time)->format('h:i A') : null,
                 ];
             }
 
@@ -880,6 +1078,143 @@ class DriverTripController extends Controller
     }
 
     /**
+     * POST /api/driver/trips/{tripId}/simulate-movement
+     * محاكاة ذكية لحركة الحافلة وتحديث إحداثيات الـ GPS بدقة عالية نحو المحطة التالية أو إلى إحداثيات محددة.
+     * 
+     * المدخلات الاختيارية في الـ Request Body:
+     * - position: 'arrived' (الافتراضي: وضع الحافلة عند المحطة الحالية مباشرة <= 50m لتشغيل إشعار الوصول)
+     *             'approaching' (وضع الحافلة على بُعد ~180m لتشغيل إشعار اقتراب الحافلة لولي الأمر)
+     *             'breakdown' (وضع الحافلة في نقطة تعطل نموذجية بين المحطات)
+     *             'halfway' (وضع الحافلة في منتصف المسافة بين موقع السائق والمحطة المستهدفة)
+     * - stop_id: معرّف محطة معينة لاستهدافها (اختياري، إن لم يُحدد يتم استهداف المحطة المعلقة التالية تلقائياً)
+     * - latitude / lat: إحداثيات خط العرض يدوياً (اختياري)
+     * - longitude / lng: إحداثيات خط الطول يدوياً (اختياري)
+     * - speed: سرعة الحافلة بالكيلومتر/ساعة (افتراضياً: 35)
+     */
+    public function simulateMovement(Request $request, $tripId): JsonResponse
+    {
+        try {
+            $user = Auth::user();
+            $driverId = $user?->driver?->id;
+
+            $trip = $this->findDriverTrip($tripId, $driverId, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
+
+            if (strtolower((string) $trip->status) !== 'in_progress') {
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_NOT_IN_PROGRESS',
+                    'message'    => "لا يمكن محاكاة حركة السائق؛ حالة الرحلة الحالية هي [{$trip->status}]. يرجى بدء الرحلة أولاً عبر: POST /api/driver/trips/{$trip->id}/start",
+                ], 422);
+            }
+
+            // 1. تحديد المحطة المستهدفة
+            $targetStop = null;
+            if ($request->filled('stop_id')) {
+                $targetStop = \App\Models\Shared\TripStop::where('trip_id', $trip->id)->find($request->stop_id);
+            }
+
+            if (!$targetStop) {
+                // البحث عن أول محطة غير مكتملة (pending أو boarded) مرتبة حسب sequence_order
+                $targetStop = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                    ->where('sequence_order', '>', 0)
+                    ->whereIn('status', [
+                        \App\Models\Shared\TripStop::STATUS_PENDING,
+                        \App\Models\Shared\TripStop::STATUS_BOARDED,
+                    ])
+                    ->orderBy('sequence_order')
+                    ->first();
+            }
+
+            $currentDriverLat = (float) ($trip->driver?->current_lat ?? $trip->start_lat ?? 32.887200);
+            $currentDriverLng = (float) ($trip->driver?->current_lng ?? $trip->start_lng ?? 13.155400);
+
+            $targetLat = $targetStop ? (float) $targetStop->lat : $currentDriverLat;
+            $targetLng = $targetStop ? (float) $targetStop->lng : $currentDriverLng;
+
+            $positionType = strtolower((string) ($request->input('position', 'arrived')));
+            $speed = (float) ($request->input('speed', 35.0));
+
+            // حساب الإحداثيات الجديدة بناءً على وضع المحاكاة
+            if ($request->has('latitude') || $request->has('lat')) {
+                $newLat = (float) ($request->latitude ?? $request->lat);
+                $newLng = (float) ($request->longitude ?? $request->lng);
+            } elseif ($positionType === 'approaching') {
+                // وضع الحافلة على بُعد ~180 متراً من المحطة لتشغيل إشعار "الحافلة تقترب" لولي الأمر
+                $newLat = $targetLat + 0.0014;
+                $newLng = $targetLng + 0.0008;
+            } elseif ($positionType === 'breakdown') {
+                // وضع الحافلة في نقطة تعطل نموذجية في الطريق (بين الموقع الحالي ومحطة الوصول)
+                $newLat = ($currentDriverLat + $targetLat) / 2;
+                $newLng = ($currentDriverLng + $targetLng) / 2;
+                $speed = 0.0;
+            } elseif ($positionType === 'halfway') {
+                $newLat = ($currentDriverLat + $targetLat) / 2;
+                $newLng = ($currentDriverLng + $targetLng) / 2;
+            } else {
+                // arrived (الافتراضي): وضع الحافلة ملاصقة للمحطة بمسافة ~15 متراً لتشغيل إشعار "وصل السائق"
+                $newLat = $targetLat + 0.0001;
+                $newLng = $targetLng + 0.0001;
+            }
+
+            // حساب زاوية الاتجاه التقريبية (Heading)
+            $dLng = $newLng - $currentDriverLng;
+            $dLat = $newLat - $currentDriverLat;
+            $heading = fmod((rad2deg(atan2($dLng, $dLat)) + 360), 360);
+
+            // تحديث موقع السائق الحقيقي عبر TripTrackingService (يكتب للـ DB والكاش وفيرستور ويطلق الإشعارات)
+            $trackingResult = $this->trackingService->updateDriverLocation($trip->id, $newLat, $newLng, $speed, $heading);
+
+            $distKm = $this->calculateHaversineDistance($newLat, $newLng, $targetLat, $targetLng);
+            $distMeters = round($distKm * 1000, 1);
+
+            $nextActionHelp = [];
+            if ($targetStop) {
+                if ($targetStop->stop_type === \App\Models\Shared\TripStop::TYPE_HOME) {
+                    $nextActionHelp[] = "لتأكيد صعود الطفل ({$targetStop->child?->full_name}): POST /api/driver/trips/{$trip->id}/pickup (مع child_id: {$targetStop->child_id})";
+                    $nextActionHelp[] = "أو لتسجيل غياب الطفل: POST /api/driver/trips/{$trip->id}/absent (مع child_id: {$targetStop->child_id})";
+                } elseif ($targetStop->stop_type === \App\Models\Shared\TripStop::TYPE_SCHOOL) {
+                    $nextActionHelp[] = "لتأكيد نزول الطلاب في المدرسة: POST /api/driver/trips/{$trip->id}/dropoff";
+                }
+            }
+            $nextActionHelp[] = "للإبلاغ عن عطل طارئ للحافلة في هذا الموقع: POST /api/driver/trips/{$trip->id}/report-breakdown (مع breakdown_lat: {$newLat}, breakdown_lng: {$newLng}, breakdown_reason: '...')";
+            $nextActionHelp[] = "لإنهاء الرحلة عند اكتمال جميع المحطات: POST /api/driver/trips/{$trip->id}/complete";
+
+            return response()->json([
+                'status'           => 'success',
+                'message'          => 'تمت محاكاة تحديث إحداثيات الرحلة بنجاح وإطلاق التنبيهات وإشعارات الاقتراب/الوصول المناسبة.',
+                'trip_id'          => (int) $trip->id,
+                'trip_status'      => $trip->status,
+                'current_position' => [
+                    'latitude'       => $newLat,
+                    'longitude'      => $newLng,
+                    'speed'          => $speed,
+                    'heading'        => round($heading, 1),
+                    'simulation_mode'=> $positionType,
+                ],
+                'target_stop'      => $targetStop ? [
+                    'id'              => (int) $targetStop->id,
+                    'sequence_order'  => (int) $targetStop->sequence_order,
+                    'stop_type'       => $targetStop->stop_type,
+                    'label'           => $targetStop->label,
+                    'child_id'        => $targetStop->child_id,
+                    'child_name'      => $targetStop->child?->full_name ?? $targetStop->child?->name,
+                    'school_id'       => $targetStop->school_id,
+                    'distance_meters' => $distMeters,
+                    'status'          => $targetStop->status,
+                ] : null,
+                'alerts_triggered' => $trackingResult['proximity'] ?? [],
+                'recommended_next_actions' => $nextActionHelp,
+            ], 200);
+
+        } catch (Throwable $e) {
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * GET /api/v1/driver/trips/{tripId}/stops
      * القائمة الكاملة والمرتبة لمحطات الرحلة اليومية (trip_stops) بحالتها الدقيقة و ETA المحسوبة عند البدء
      */
@@ -887,9 +1222,12 @@ class DriverTripController extends Controller
     {
         try {
             $user = Auth::user();
-            $driverId = $user->driver->id;
+            $driverId = $user?->driver?->id;
 
-            $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
+            $trip = $this->findDriverTrip($tripId, $driverId, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
 
             $isGoDirection = in_array($trip->trip_type, ['Morning', 'ذهاب']) 
                 || in_array($trip->shift_slot, ['morning_go', 'afternoon_go']);
@@ -932,14 +1270,18 @@ class DriverTripController extends Controller
                         }
                     }
 
-                    $childParentUser = $stop->child?->parent;
+                    $schoolId = $stop->school_id ? (int) $stop->school_id : ($stop->child?->school_id ? (int) $stop->child->school_id : null);
+                    $schoolName = $stop->school?->name ?? $stop->child?->school?->name;
 
                     // في حال كانت المحطة مدرسة، جلب قائمة الأطفال الذين سينزلون فيها
                     $droppingOffChildren = [];
-                    if ($stop->stop_type === \App\Models\Shared\TripStop::TYPE_SCHOOL && $stop->school_id) {
+                    if ($stop->stop_type === \App\Models\Shared\TripStop::TYPE_SCHOOL && $schoolId) {
                         $droppingOffChildren = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
-                            ->where('school_id', $stop->school_id)
                             ->whereNotNull('child_id')
+                            ->where(function ($q) use ($schoolId) {
+                                $q->where('school_id', $schoolId)
+                                  ->orWhereHas('child', fn($cq) => $cq->where('school_id', $schoolId));
+                            })
                             ->with(['child.parent', 'child.school'])
                             ->get()
                             ->map(function ($s) {
@@ -960,15 +1302,28 @@ class DriverTripController extends Controller
                             ->all();
                     }
 
+                    $childId = $stop->child_id ? (int) $stop->child_id : null;
+                    $childName = $stop->child?->full_name ?? $stop->child?->name;
+
+                    if ($stop->stop_type === \App\Models\Shared\TripStop::TYPE_SCHOOL && !$childId && !empty($droppingOffChildren)) {
+                        $childId = $droppingOffChildren[0]['child_id'];
+                        $childName = implode('، ', array_column($droppingOffChildren, 'name'));
+                    }
+
+                    $childParentUser = $stop->child?->parent;
+                    if (!$childParentUser && !empty($droppingOffChildren)) {
+                        $childParentUser = \App\Models\Parent\Child::with('parent')->find($droppingOffChildren[0]['child_id'])?->parent;
+                    }
+
                     return [
                         'id'                         => (int) $stop->id,
                         'stop_type'                  => $stop->stop_type,
                         'sequence_order'             => (int) $stop->sequence_order,
                         'status'                     => $stop->status,
-                        'child_id'                   => $stop->child_id ? (int) $stop->child_id : null,
-                        'child_name'                 => $stop->child?->full_name ?? $stop->child?->name,
-                        'school_id'                  => $stop->school_id ? (int) $stop->school_id : ($stop->child?->school_id ? (int) $stop->child->school_id : null),
-                        'school_name'                => $stop->school?->name ?? $stop->child?->school?->name,
+                        'child_id'                   => $childId,
+                        'child_name'                 => $childName,
+                        'school_id'                  => $schoolId,
+                        'school_name'                => $schoolName,
                         'label'                      => $stop->label,
                         'latitude'                   => (float) $stop->lat,
                         'longitude'                  => (float) $stop->lng,
@@ -978,6 +1333,8 @@ class DriverTripController extends Controller
                         'parent_alternative_phone'   => $childParentUser?->alternative_phone,
                         'eta'                        => $stop->eta ? substr((string) $stop->eta, 0, 5) : null,
                         'eta_minutes'                => $stop->eta_minutes !== null ? (int) $stop->eta_minutes : null,
+                        'pickup_time'                => $stop->child?->pickup_time ? Carbon::parse($stop->child->pickup_time)->format('h:i A') : null,
+                        'dropoff_time'               => $stop->child?->dropoff_time ? Carbon::parse($stop->child->dropoff_time)->format('h:i A') : null,
                         'is_breakdown_transfer'      => $isTransferStop,
                         'can_bulk_confirm'           => $isTransferStop && $stop->status === \App\Models\Shared\TripStop::STATUS_PENDING,
                         'transferred_children_count' => count($transferredChildren),
@@ -1010,9 +1367,12 @@ class DriverTripController extends Controller
     {
         try {
             $user = Auth::user();
-            $driverId = $user->driver->id;
+            $driverId = $user?->driver?->id;
 
-            $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
+            $trip = $this->findDriverTrip($tripId, $driverId, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
 
             if (strtolower((string) $trip->status) !== 'in_progress') {
                 return response()->json([
@@ -1237,9 +1597,12 @@ class DriverTripController extends Controller
     {
         try {
             $user = Auth::user();
-            $driverId = $user->driver->id;
+            $driverId = $user?->driver?->id;
 
-            $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
+            $trip = $this->findDriverTrip($tripId, $driverId, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
 
             if ($trip->status !== 'in_progress') {
                 return response()->json([
@@ -1371,9 +1734,12 @@ class DriverTripController extends Controller
     {
         try {
             $user = Auth::user();
-            $driverId = $user->driver->id;
+            $driverId = $user?->driver?->id;
 
-            $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
+            $trip = $this->findDriverTrip($tripId, $driverId, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
 
             if ($trip->status !== 'suspended_breakdown') {
                 return response()->json([
@@ -1441,13 +1807,14 @@ class DriverTripController extends Controller
                 ], 403);
             }
 
-            $subId = $tripChildId ?? $request->trip_child_id ?? $request->child_id ?? $request->id;
+            $passedChildId = $request->child_id ? (int) $request->child_id : null;
+            $passedSubId = $tripChildId ?? $request->trip_child_id ?? $request->id;
 
-            if (empty($subId)) {
+            if (empty($passedChildId) && empty($passedSubId)) {
                 return response()->json([
                     'status'     => 'error',
                     'error_code' => 'TRIP_CHILD_REQUIRED',
-                    'message'    => 'يجب تحديد الطفل (trip_child_id أو child_id) لتنفيذ هذا الإجراء.',
+                    'message'    => 'يجب تحديد الطفل (child_id أو trip_child_id) لتنفيذ هذا الإجراء.',
                 ], 422);
             }
 
@@ -1465,7 +1832,7 @@ class DriverTripController extends Controller
                 ], 409);
             }
 
-            $action = strtolower($request->action ?? $request->route()->getActionMethod());
+            $action = strtolower((string) ($request->action ?? $request->route()?->getActionMethod() ?? ''));
 
             // ⚠️ يجب فحص الأسماء الأكثر تحديداً أولاً (dropoff_failed يحتوي جزئياً على "dropoff")
             if (str_contains($action, 'dropoff_failed')) $action = 'dropoff_failed';
@@ -1475,36 +1842,46 @@ class DriverTripController extends Controller
             elseif (str_contains($action, 'absent')) $action = 'absent';
             elseif (str_contains($action, 'skip')) $action = 'skip';
 
-            // 🔒 التحقق من ملكية الاشتراك للسائق الحالي لمنع التلاعب باشتراكات سائقين آخرين (IDOR)
-            $sub = ActiveSubscription::where('id', $subId)->forDriver($driverId)->first();
-            if (!$sub) {
-                $sub = ActiveSubscription::forChild((int) $subId)->forDriver($driverId)->first();
+            // 🔒 جلب اشتراك الطفل بدقة مع تمييز واضح بين child_id و subscription_id لمنع تطابق معرف الطفل مع معرف اشتراك طفل آخر
+            $sub = null;
+
+            if ($passedChildId) {
+                // إذا تم تمرير child_id، نبحث عن اشتراك هذا الطفل الخاص بهذه الرحلة أو مسارها أولاً
+                $sub = ActiveSubscription::forChild($passedChildId)
+                    ->where(function ($q) use ($trip, $driverId) {
+                        $q->where('route_id', $trip->route_id)
+                          ->orWhereHas('route', fn($rq) => $rq->where('driver_id', $driverId)->orWhere('driver_id', $trip->driver_id))
+                          ->orWhereHas('subscriptionRequest', fn($sq) => $sq->where('driver_id', $driverId)->orWhere('driver_id', $trip->driver_id));
+                    })
+                    ->first();
+
+                // في حال كان سائقاً بديلاً لحالة طوارئ، نبحث في مسار الرحلة الأصلية المتعطلة
+                if (!$sub) {
+                    $dispatch = \App\Models\Shared\TripBreakdownDispatch::where('substitute_trip_id', $trip->id)->first();
+                    if ($dispatch) {
+                        $sub = ActiveSubscription::forChild($passedChildId)
+                            ->where('route_id', $dispatch->trip?->route_id)
+                            ->first();
+                    }
+                }
+
+                if (!$sub) {
+                    $sub = ActiveSubscription::forChild($passedChildId)->latest('id')->first();
+                }
+            } elseif ($passedSubId) {
+                $sub = ActiveSubscription::where('id', $passedSubId)
+                    ->where(function ($q) use ($trip, $driverId) {
+                        $q->where('route_id', $trip->route_id)
+                          ->orWhereHas('route', fn($rq) => $rq->where('driver_id', $driverId)->orWhere('driver_id', $trip->driver_id))
+                          ->orWhereHas('subscriptionRequest', fn($sq) => $sq->where('driver_id', $driverId)->orWhere('driver_id', $trip->driver_id));
+                    })
+                    ->first()
+                    ?? ActiveSubscription::find($passedSubId)
+                    ?? ActiveSubscription::forChild((int) $passedSubId)->first();
             }
 
-            // في حال كان السائق بديلاً في حالة طوارئ، أو الطفل مدرج في محطات رحلة السائق الحالي
-            if (!$sub) {
-                $subCandidate = ActiveSubscription::find($subId);
-                $isSubstituteChild = false;
-                if ($subCandidate) {
-                    $isSubstituteChild = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
-                        ->where('child_id', $subCandidate->child_id)
-                        ->exists();
-                }
-                if (!$isSubstituteChild) {
-                    $isSubstituteChild = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
-                        ->where('child_id', $subId)
-                        ->exists()
-                        || \App\Models\Shared\TripBreakdownDispatch::where('substitute_trip_id', $trip->id)
-                            ->where(function ($q) use ($subId) {
-                                $q->whereJsonContains('stranded_children_ids', (int) $subId)
-                                  ->orWhereJsonContains('stranded_children_ids', (string) $subId);
-                            })
-                            ->exists();
-                }
-
-                if ($isSubstituteChild) {
-                    $sub = $subCandidate ?? ActiveSubscription::forChild((int) $subId)->first();
-                }
+            if (!$sub && $passedChildId) {
+                $sub = ActiveSubscription::forChild($passedChildId)->first();
             }
 
             if (!$sub) {
@@ -1515,7 +1892,7 @@ class DriverTripController extends Controller
                 ], 404);
             }
 
-            $childId = $sub->child_id;
+            $childId = $passedChildId ?? $sub->child_id;
 
             // trip_events.trip_type/location_lat/location_lng أعمدة إلزامية (NOT NULL) في قاعدة البيانات
             $eventTripType = ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب') ? 'ذهاب' : 'عودة';
@@ -1544,28 +1921,46 @@ class DriverTripController extends Controller
                 $isGoTrip = \App\Models\Driver\DriverSeatSlot::isGoSlot($trip->shift_slot ?? '')
                     || (!$trip->shift_slot && ($trip->trip_type === 'Morning' || $trip->trip_type === 'ذهاب'));
 
+                $child = $sub->child ?? ($childId ? \App\Models\Parent\Child::with('school')->find($childId) : null);
+                $childSchoolId = $child?->school_id ?? $sub->school_id;
+
+                // البحث عن محطة مدرسة الطفل في trip_stops لهذه الرحلة (مصدر الحقيقة لإحداثيات نزول هذا الطفل)
+                $schoolStop = null;
+                if ($childSchoolId) {
+                    $schoolStop = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                        ->where('stop_type', \App\Models\Shared\TripStop::TYPE_SCHOOL)
+                        ->where('school_id', $childSchoolId)
+                        ->first();
+                }
+
+                if (!$schoolStop) {
+                    $schoolStop = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                        ->where('stop_type', \App\Models\Shared\TripStop::TYPE_SCHOOL)
+                        ->first();
+                }
+
                 // ⚠️ في رحلة الإياب يصعد الطفل للحافلة من المدرسة لا من المنزل؛ فحص الصعود هنا
                 // كان يقارن دائماً بموقع المنزل بغض النظر عن اتجاه الرحلة، فيرفض أي تأكيد صعود
                 // فعلي عند المدرسة بخطأ OUT_OF_RANGE. يجب أن يتبع نفس منطق dropoff بالضبط.
                 if ($action === 'pickup') {
                     if ($isGoTrip) {
-                        $targetLat = $homeStop?->lat ?? $sub->pickup_lat ?? $sub->child?->latitude ?? $sub->child?->address?->lat;
-                        $targetLng = $homeStop?->lng ?? $sub->pickup_lng ?? $sub->child?->longitude ?? $sub->child?->address?->lng;
+                        $targetLat = $homeStop?->lat ?? $sub->pickup_lat ?? $child?->latitude ?? $child?->address?->lat;
+                        $targetLng = $homeStop?->lng ?? $sub->pickup_lng ?? $child?->longitude ?? $child?->address?->lng;
                         $stopType = \App\Models\Shared\TripStop::TYPE_HOME;
                     } else {
-                        $targetLat = $sub->dropoff_lat ?? $sub->school?->lat ?? $sub->child?->school?->lat;
-                        $targetLng = $sub->dropoff_lng ?? $sub->school?->lng ?? $sub->child?->school?->lng;
+                        $targetLat = $schoolStop?->lat ?? $sub->dropoff_lat ?? $child?->school?->lat;
+                        $targetLng = $schoolStop?->lng ?? $sub->dropoff_lng ?? $child?->school?->lng;
                         $stopType = \App\Models\Shared\TripStop::TYPE_SCHOOL;
                     }
                 } else {
                     // dropoff
                     if ($isGoTrip) {
-                        $targetLat = $sub->dropoff_lat ?? $sub->school?->lat ?? $sub->child?->school?->lat;
-                        $targetLng = $sub->dropoff_lng ?? $sub->school?->lng ?? $sub->child?->school?->lng;
+                        $targetLat = $schoolStop?->lat ?? $sub->dropoff_lat ?? $child?->school?->lat;
+                        $targetLng = $schoolStop?->lng ?? $sub->dropoff_lng ?? $child?->school?->lng;
                         $stopType = \App\Models\Shared\TripStop::TYPE_SCHOOL;
                     } else {
-                        $targetLat = $homeStop?->lat ?? $sub->pickup_lat ?? $sub->child?->latitude ?? $sub->child?->address?->lat;
-                        $targetLng = $homeStop?->lng ?? $sub->pickup_lng ?? $sub->child?->longitude ?? $sub->child?->address?->lng;
+                        $targetLat = $homeStop?->lat ?? $sub->pickup_lat ?? $child?->latitude ?? $child?->address?->lat;
+                        $targetLng = $homeStop?->lng ?? $sub->pickup_lng ?? $child?->longitude ?? $child?->address?->lng;
                         $stopType = \App\Models\Shared\TripStop::TYPE_HOME;
                     }
                 }
@@ -1671,7 +2066,7 @@ class DriverTripController extends Controller
                 // 🔒 نفس حماية القفل والتزامن المطبقة على الصعود، بالإضافة لمنع النزول قبل الصعود
                 $conflict = false;
                 $notBoarded = false;
-                DB::transaction(function () use ($tripId, $childId, $sub, $eventTripType, $homeStop, $request, $dropoffStatus, $isGoTrip, &$conflict, &$notBoarded) {
+                DB::transaction(function () use ($tripId, $childId, $sub, $eventTripType, $homeStop, $schoolStop, $request, $dropoffStatus, $isGoTrip, &$conflict, &$notBoarded) {
                     $lockedStop = $homeStop
                         ? \App\Models\Shared\TripStop::where('id', $homeStop->id)->lockForUpdate()->first()
                         : null;
@@ -1723,6 +2118,19 @@ class DriverTripController extends Controller
                     ]);
 
                     $lockedStop?->update(['status' => $dropoffStatus]);
+
+                    // في رحلة الذهاب: تحديث حالة محطة المدرسة إذا تم إنزال جميع أطفال هذه المدرسة في الرحلة
+                    if ($isGoTrip && $schoolStop) {
+                        $remainingForSchool = \App\Models\Shared\TripStop::where('trip_id', $tripId)
+                            ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                            ->whereIn('status', [\App\Models\Shared\TripStop::STATUS_PENDING, \App\Models\Shared\TripStop::STATUS_BOARDED])
+                            ->whereHas('child', fn($q) => $q->where('school_id', $schoolStop->school_id))
+                            ->exists();
+
+                        if (!$remainingForSchool) {
+                            $schoolStop->update(['status' => $dropoffStatus]);
+                        }
+                    }
 
                     // فحص إذا كان هناك محطة سيارة متوقفة (استلام طلاب) وكل أطفالها تم إنزالهم
                     $transferStop = \App\Models\Shared\TripStop::where('trip_id', $tripId)
@@ -1954,27 +2362,37 @@ class DriverTripController extends Controller
                 }
             } else {
                 // 🏫 مرحلة 2 (الذهاب): اكتمل صعود جميع الأطفال من المنازل! ننتقل لإنزال المدارس.
-                // نجلب المدارس التي يتبع لها الأطفال الموجودون حالياً بالمركبة (boarded)
+                // نجلب المدارس التي يتبع لها الأطفال الموجودون حالياً بالمركبة (boarded) ولم ينزلوا بعد
+                $droppedChildIds = TripEvent::where('trip_id', $trip->id)
+                    ->where('action_type', 'dropped_off')
+                    ->pluck('child_id')
+                    ->all();
+
                 $boardedChildIds = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
                     ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
                     ->where('status', \App\Models\Shared\TripStop::STATUS_BOARDED)
                     ->pluck('child_id')
                     ->merge(TripEvent::where('trip_id', $trip->id)->where('action_type', 'picked_up')->pluck('child_id'))
+                    ->reject(fn($cid) => in_array($cid, $droppedChildIds))
                     ->filter()
                     ->unique();
 
-                $targetSchoolIds = \App\Models\Parent\Child::whereIn('id', $boardedChildIds)
-                    ->pluck('school_id')
-                    ->filter()
-                    ->unique();
+                $targetSchoolIds = $boardedChildIds->isNotEmpty()
+                    ? \App\Models\Parent\Child::whereIn('id', $boardedChildIds)
+                        ->pluck('school_id')
+                        ->filter()
+                        ->unique()
+                    : collect();
 
-                $schoolStops = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
-                    ->where('stop_type', \App\Models\Shared\TripStop::TYPE_SCHOOL)
-                    ->where('sequence_order', '>', 0)
-                    ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
-                    ->when($targetSchoolIds->isNotEmpty(), fn($q) => $q->whereIn('school_id', $targetSchoolIds))
-                    ->orderBy('sequence_order', 'asc')
-                    ->get();
+                $schoolStops = $targetSchoolIds->isNotEmpty()
+                    ? \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                        ->where('stop_type', \App\Models\Shared\TripStop::TYPE_SCHOOL)
+                        ->where('sequence_order', '>', 0)
+                        ->where('status', \App\Models\Shared\TripStop::STATUS_PENDING)
+                        ->whereIn('school_id', $targetSchoolIds)
+                        ->orderBy('sequence_order', 'asc')
+                        ->get()
+                    : collect();
 
                 if ($schoolStops->isNotEmpty()) {
                     if ($currentSequenceOrder !== null) {
@@ -2028,10 +2446,30 @@ class DriverTripController extends Controller
             $isSchool = $nextStop->stop_type === \App\Models\Shared\TripStop::TYPE_SCHOOL;
             $child = $nextStop->child_id ? \App\Models\Parent\Child::with(['school', 'address'])->find($nextStop->child_id) : null;
             $school = $nextStop->school_id ? \App\Models\Parent\School::find($nextStop->school_id) : ($child?->school);
-            $sub = $nextStop->child_id
-                ? (ActiveSubscription::forDriver($trip->driver_id)->forChild($nextStop->child_id)->first()
-                    ?? ActiveSubscription::forChild($nextStop->child_id)->first())
+            $schoolChildren = collect();
+
+            if ($isSchool && !$child && $school) {
+                $tripChildIds = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                    ->whereNotNull('child_id')
+                    ->where(function ($q) use ($school) {
+                        $q->where('school_id', $school->id)
+                          ->orWhereHas('child', fn($cq) => $cq->where('school_id', $school->id));
+                    })
+                    ->pluck('child_id');
+                $schoolChildren = \App\Models\Parent\Child::with(['school', 'address'])->whereIn('id', $tripChildIds)->get();
+                if ($schoolChildren->isNotEmpty()) {
+                    $child = $schoolChildren->first();
+                }
+            }
+
+            $sub = $child?->id
+                ? (ActiveSubscription::forDriver($trip->driver_id)->forChild($child->id)->first()
+                    ?? ActiveSubscription::forChild($child->id)->first())
                 : null;
+
+            $childName = $isSchool && $schoolChildren->count() > 1
+                ? $schoolChildren->map(fn($c) => $c->full_name ?? $c->name)->implode('، ')
+                : ($child?->full_name ?? $child?->name ?? null);
 
             $name = $isSchool
                 ? ($school?->name ?? $nextStop->label ?? 'المدرسة')
@@ -2047,9 +2485,9 @@ class DriverTripController extends Controller
                 'sequence_order' => (int) $nextStop->sequence_order,
                 'name'           => $name,
                 'title'          => $name,
-                'child_id'       => $nextStop->child_id ? (int) $nextStop->child_id : null,
+                'child_id'       => $child?->id ? (int) $child->id : null,
                 'trip_child_id'  => $sub ? (int) $sub->id : null,
-                'child_name'     => $child?->full_name ?? $child?->name ?? null,
+                'child_name'     => $childName,
                 'school_id'      => $nextStop->school_id ? (int) $nextStop->school_id : ($school?->id ? (int) $school->id : null),
                 'school_name'    => $school?->name ?? null,
                 'latitude'       => (float) $nextStop->lat,
@@ -2060,6 +2498,11 @@ class DriverTripController extends Controller
                 'status'         => $nextStop->status,
                 'eta'            => $nextStop->eta ? substr((string) $nextStop->eta, 0, 5) : null,
             ];
+        }
+
+        // إذا كانت الرحلة مبنية على سجلات trip_stops ولم يتبقَّ أي محطة معلقة، فجميع المحطات اكتملت
+        if (\App\Models\Shared\TripStop::where('trip_id', $trip->id)->where('sequence_order', '>', 0)->exists()) {
+            return null;
         }
 
         // fallback في حال كانت الرحلة بدون سجلات trip_stops مسبقة
@@ -2149,16 +2592,19 @@ class DriverTripController extends Controller
     // Wrappers للـ Routes الفردية
     public function pickup(Request $request, $tripId): JsonResponse
     {
+        $request->merge(['action' => 'pickup']);
         return $this->updateChildTripStatus($request, $tripId);
     }
 
     public function dropoff(Request $request, $tripId): JsonResponse
     {
+        $request->merge(['action' => 'dropoff']);
         return $this->updateChildTripStatus($request, $tripId);
     }
 
     public function absent(Request $request, $tripId): JsonResponse
     {
+        $request->merge(['action' => 'absent']);
         return $this->updateChildTripStatus($request, $tripId);
     }
 
@@ -2176,15 +2622,36 @@ class DriverTripController extends Controller
     {
         try {
             $user = Auth::user();
-            $driverId = $user->driver->id;
+            $driverId = $user?->driver?->id;
 
-            $trip = Trip::where('id', $tripId)->where('driver_id', $driverId)->firstOrFail();
+            $trip = $this->findDriverTrip($tripId, $driverId, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
+
+            if ($trip->status === 'suspended_breakdown') {
+                $dispatch = \App\Models\Shared\TripBreakdownDispatch::where('trip_id', $trip->id)->first();
+                $subId = $dispatch?->substitute_trip_id;
+                return response()->json([
+                    'status'     => 'error',
+                    'error_code' => 'TRIP_SUSPENDED_BREAKDOWN',
+                    'message'    => "هذه الرحلة ملغاة/متوقفة بسبب عطل طارئ وتم تسليم الأطفال للسائق البديل في الرحلة رقم (#{$subId}). يرجى إنهاء رحلة السائق البديل بدلاً من الرحلة المعطلة.",
+                    'substitute_trip_id' => $subId,
+                ], 409);
+            }
 
             // 🛡️ صمام أمان الأطفال: يرمي TripLifecycleException (422) إذا وُجد طفل بحالة boarded/pending
             $result = $this->lifecycleService->completeTrip($trip->id);
 
             $events = TripEvent::where('trip_id', $trip->id)->get();
-            $totalSubs = ActiveSubscription::where('route_id', $trip->route_id)->count();
+            $tripHomeChildrenCount = \App\Models\Shared\TripStop::where('trip_id', $trip->id)
+                ->where('stop_type', \App\Models\Shared\TripStop::TYPE_HOME)
+                ->whereNotNull('child_id')
+                ->distinct('child_id')
+                ->count('child_id');
+            $totalSubs = $tripHomeChildrenCount > 0
+                ? $tripHomeChildrenCount
+                : ActiveSubscription::where('route_id', $trip->route_id)->where('status', '!=', 'cancelled')->count();
 
             $pickedUp = $events->where('action_type', 'picked_up')->count();
             $droppedOff = $events->where('action_type', 'dropped_off')->count();
@@ -2260,6 +2727,11 @@ class DriverTripController extends Controller
         }
 
         return round($distanceKm, 2);
+    }
+
+    private function calculateHaversineDistance(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        return \App\Support\GeoEstimator::haversineKm($lat1, $lng1, $lat2, $lng2);
     }
 
     /**
@@ -2372,12 +2844,14 @@ class DriverTripController extends Controller
     {
         try {
             $user = Auth::user();
-            $driverId = $user->driver->id;
+            $driverId = $user?->driver?->id;
 
-            $trip = Trip::where('id', $tripId)
-                ->where('driver_id', $driverId)
-                ->with(['route', 'breakdownDispatches.substituteDriver.user'])
-                ->firstOrFail();
+            $trip = $this->findDriverTrip($tripId, $driverId, $errorResponse);
+            if (!$trip) {
+                return $errorResponse;
+            }
+
+            $trip->loadMissing(['route', 'breakdownDispatches.substituteDriver.user']);
 
             $events = TripEvent::where('trip_id', $trip->id)
                 ->with(['child', 'subscription.school'])
@@ -2431,13 +2905,16 @@ class DriverTripController extends Controller
                 $pickupAddress = $sub?->pickup_label ?? $stop?->label ?? 'الحي السكني';
                 $dropoffAddress = $schoolName;
 
+                $scheduledPickup = $sub?->pickup_time ?? $childObj?->pickup_time ?? '07:00:00';
+                $scheduledDropoff = $sub?->dropoff_time ?? $childObj?->dropoff_time ?? '14:00:00';
+
                 $pickupTime = $pickupEvent?->scanned_at 
                     ? Carbon::parse($pickupEvent->scanned_at)->format('H:i') 
-                    : null;
+                    : ($scheduledPickup ? Carbon::parse($scheduledPickup)->format('H:i') : null);
 
                 $dropoffTime = $dropoffEvent?->scanned_at 
                     ? Carbon::parse($dropoffEvent->scanned_at)->format('H:i') 
-                    : null;
+                    : ($scheduledDropoff ? Carbon::parse($scheduledDropoff)->format('H:i') : null);
 
                 $status = 'completed';
                 if ($dropoffEvent) {

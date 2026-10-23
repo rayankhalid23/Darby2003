@@ -46,6 +46,8 @@ class SubscriptionRequestService
         $sharedHomeAddressId    = $data['home_address_id']   ?? null;
         // الفترة اختيارية على مستوى الطلب؛ غيابها يعني «افترض تفضيل كل طفل المسجَّل».
         $sharedTiming           = $data['timing']            ?? null;
+        $sharedPickupTime       = $data['pickup_time']       ?? null;
+        $sharedDropoffTime      = $data['dropoff_time']      ?? null;
 
         // التحقق من عدم وجود تعارض مع اشتراكات نشطة سارية للأطفال
         // نُمرر الحقول المشتركة داخل كل طفل مؤقتاً لاستخدامها في دالة التحقق
@@ -62,7 +64,8 @@ class SubscriptionRequestService
         $subscriptionRequest = DB::transaction(function () use (
             $data, $user,
             $sharedSubscriptionType, $sharedTripDirection,
-            $sharedStartDate, $sharedEndDate, $sharedHomeAddress, $sharedHomeAddressId, $sharedTiming
+            $sharedStartDate, $sharedEndDate, $sharedHomeAddress, $sharedHomeAddressId, $sharedTiming,
+            $sharedPickupTime, $sharedDropoffTime
         ) {
             $parentId = null;
 
@@ -123,6 +126,22 @@ class SubscriptionRequestService
             foreach ($data['children'] as $child) {
                 $childId    = (int) $child['child_id'];
                 $childModel = $childModels->get($childId);
+
+                // تحديث وقت الاستلام والتسليم للطفل في قاعدة البيانات إذا تم تمريره صراحة
+                $cPickup  = $child['pickup_time']  ?? $sharedPickupTime;
+                $cDropoff = $child['dropoff_time'] ?? $sharedDropoffTime;
+                if ($childModel && ($cPickup || $cDropoff)) {
+                    $childUpdates = [];
+                    if ($cPickup && $childModel->pickup_time !== $cPickup) {
+                        $childUpdates['pickup_time'] = $cPickup;
+                    }
+                    if ($cDropoff && $childModel->dropoff_time !== $cDropoff) {
+                        $childUpdates['dropoff_time'] = $cDropoff;
+                    }
+                    if (!empty($childUpdates)) {
+                        $childModel->update($childUpdates);
+                    }
+                }
 
                 // ─── فترة هذا الطفل ────────────────────────────────────────
                 // ⚠️ كانت مثبَّتة على 'BOTH' لكل طلب، فكان طفلٌ يركب صباحاً فقط
@@ -205,6 +224,29 @@ class SubscriptionRequestService
                 $this->validateAndDeductWalletBalance($parentModel, $totalOrderAmountAfterDiscount);
             }
 
+            // تحديد وتأكيد وقت الاستلام والتسليم لحفظهما في جدول requests
+            $firstProvidedPickup = null;
+            $firstProvidedDropoff = null;
+            foreach ($data['children'] as $cItem) {
+                if (!empty($cItem['pickup_time']) && !$firstProvidedPickup) {
+                    $firstProvidedPickup = $cItem['pickup_time'];
+                }
+                if (!empty($cItem['dropoff_time']) && !$firstProvidedDropoff) {
+                    $firstProvidedDropoff = $cItem['dropoff_time'];
+                }
+            }
+
+            $firstChildModel = $childModels->first();
+            $resolvedPickupTime = $sharedPickupTime 
+                ?? $firstProvidedPickup 
+                ?? $firstChildModel?->pickup_time 
+                ?? '07:00:00';
+
+            $resolvedDropoffTime = $sharedDropoffTime 
+                ?? $firstProvidedDropoff 
+                ?? $firstChildModel?->dropoff_time 
+                ?? '14:00:00';
+
             // 2. إنشاء الطلب الرئيسي مع الحقول المشتركة
             $subscriptionRequest = SubscriptionRequest::create([
                 'parent_id'                   => $parentId,
@@ -224,6 +266,8 @@ class SubscriptionRequestService
                 'home_lat'                    => isset($sharedHomeAddress['lat']) ? (float) $sharedHomeAddress['lat'] : null,
                 'home_lng'                    => isset($sharedHomeAddress['lng']) ? (float) $sharedHomeAddress['lng'] : null,
                 'home_address_id'             => $sharedHomeAddressId,
+                'pickup_time'                 => $resolvedPickupTime,
+                'dropoff_time'                => $resolvedDropoffTime,
             ]);
 
             // 3. ربط الأطفال بجدول الـ Pivot
@@ -1377,10 +1421,13 @@ class SubscriptionRequestService
 
     private function createActiveSubscriptions(SubscriptionRequest $req, ?\App\Models\Shared\Route $route = null): void
     {
-        $pickupTime  = $req->pickup_time  ?? '07:00:00';
-        $dropoffTime = $req->dropoff_time ?? '14:00:00';
+        $defaultPickupTime  = $req->pickup_time  ?? '07:00:00';
+        $defaultDropoffTime = $req->dropoff_time ?? '14:00:00';
 
         foreach ($req->children as $child) {
+            $childPickupTime  = $child->pickup_time  ?? $defaultPickupTime;
+            $childDropoffTime = $child->dropoff_time ?? $defaultDropoffTime;
+
             // لقطة العنوان (home_label/home_lat/home_lng) موجودة فقط على مستوى الطلب requests
             // الآن (واحدة لكل أطفال الطلب)، فهي المصدر الأول قبل العلاقة الحية بعنوان الطفل.
             $childAddress = $child->address ?? null;
@@ -1406,11 +1453,11 @@ class SubscriptionRequestService
                 'pickup_lat'              => $pickupLat,
                 'pickup_lng'              => $pickupLng,
                 'pickup_label'            => $pickupLbl,
-                'pickup_time'             => $pickupTime,
+                'pickup_time'             => $childPickupTime,
                 'dropoff_lat'             => $dropoffLat,
                 'dropoff_lng'             => $dropoffLng,
                 'dropoff_label'           => $dropoffLbl,
-                'dropoff_time'            => $dropoffTime,
+                'dropoff_time'            => $childDropoffTime,
             ]);
 
             // زيادة عداد المقاعد لكل (slot × date) خاصة بهذا الطفل

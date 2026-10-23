@@ -35,7 +35,7 @@ class DriverProfileResource extends JsonResource
             'phone_number'      => $user->phone_number ?? '',
             'alternative_phone' => $user->alternative_phone,
             'avatar_url'        => \App\Http\Controllers\Api\Shared\MediaController::urlFor($user->avatar_url ?? null),
-            'gender'            => $this->gender,
+            'gender'            => $user->gender ?? $this->gender,
             'account_status'    => $this->status, // Pending, Active, Incomplete, Rejected
             'is_active'         => $user->is_active ?? 0,
 

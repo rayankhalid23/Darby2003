@@ -65,8 +65,8 @@ trait BuildsSubscriptionPayload
             $activeSub = optional($req->activeSubscriptions)->firstWhere('child_id', $child->id);
         }
 
-        $pickupTime = $activeSub?->pickup_time ?? $req?->pickup_time;
-        $dropoffTime = $activeSub?->dropoff_time ?? $req?->dropoff_time;
+        $pickupTime = $activeSub?->pickup_time ?? $req?->pickup_time ?? $child->pickup_time;
+        $dropoffTime = $activeSub?->dropoff_time ?? $req?->dropoff_time ?? $child->dropoff_time;
 
         return [
             'child_id'      => $child->id,
@@ -145,6 +145,8 @@ trait BuildsSubscriptionPayload
             'start_date'         => $req->start_date?->format('Y-m-d') ?? $req->start_date,
             'end_date'           => $req->end_date?->format('Y-m-d') ?? $req->end_date,
             'working_days_count' => (int) ($req->working_days_count ?? 0),
+            'pickup_time'        => $req->pickup_time,
+            'dropoff_time'       => $req->dropoff_time,
         ];
     }
 

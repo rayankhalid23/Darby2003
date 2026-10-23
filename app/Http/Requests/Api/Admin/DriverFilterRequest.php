@@ -18,13 +18,35 @@ class DriverFilterRequest extends FormRequest
     }
 
     /**
+     * تجهيز المدخلات قبل التحقق لمعالجة حساسية حالة الأحرف
+     */
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('status') && is_string($this->status)) {
+            $statusMap = [
+                'pending'   => 'Pending',
+                'approved'  => 'Approved',
+                'suspended' => 'Suspended',
+                'rejected'  => 'Rejected',
+                'offline'   => 'Offline',
+                'on_trip'   => 'ON_TRIP',
+                'ontrip'    => 'ON_TRIP',
+            ];
+            $normalized = strtolower(trim($this->status));
+            if (isset($statusMap[$normalized])) {
+                $this->merge(['status' => $statusMap[$normalized]]);
+            }
+        }
+    }
+
+    /**
      * قواعد التحقق لفلترة السائقين
      */
     public function rules(): array
     {
         return [
-            // الفلترة حسب الحالات الست الموجودة في enum قاعدة البيانات — حساسة لحالة الأحرف
-            'status'   => ['nullable', 'string', 'in:Pending,Approved,Suspended,Rejected,Offline,ON_TRIP'],
+            // الفلترة حسب حالات السائقين في قاعدة البيانات مع دعم الأحرف الصغيرة والكبيرة
+            'status'   => ['nullable', 'string', 'in:Pending,Approved,Suspended,Rejected,Offline,ON_TRIP,pending,approved,suspended,rejected,offline,on_trip,ontrip'],
             'search'   => ['nullable', 'string', 'max:100'], // البحث باسم السائق أو بريده أو هاتفه
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'], // عدد النتائج لكل صفحة
         ];

@@ -62,10 +62,7 @@ class ComprehensiveUserLifecycleTest extends TestCase
             'is_active' => 1,
         ]);
 
-        $this->parentProfile = ParentModel::create([
-            'user_id' => $this->parentUser->id,
-            'is_trusted' => 1,
-        ]);
+        $this->parentProfile = ParentModel::find($this->parentUser->id);
 
         // إنشاء مدرسة للاختبار
         $this->testSchool = School::create([
@@ -74,12 +71,12 @@ class ComprehensiveUserLifecycleTest extends TestCase
             'lng' => 13.1950,
             'address' => 'طرابلس - شارع الجمهورية',
             'zone_id' => $this->testZone->id,
-            'status' => 'active',
+            'status' => 'Approved',
         ]);
 
         // إنشاء عنوان لولي الأمر
         $this->testAddress = Address::create([
-            'parent_id' => $this->parentUser->id,
+            'user_id' => $this->parentUser->id,
             'label' => 'المنزل الرئيسي ' . rand(100000, 999999),
             'lat' => 32.8910,
             'lng' => 13.1760,
@@ -356,7 +353,7 @@ class ComprehensiveUserLifecycleTest extends TestCase
         $resUpdate = $this->actingAs($this->adminUser, 'sanctum')->postJson("/api/admin/schools/{$schoolId}", [
             'name' => $updatedSchoolName,
             'address' => 'بن عاشور - المجمع التعليمي',
-            'status' => 'active',
+            'status' => 'Approved',
         ]);
 
         $resUpdate->assertStatus(200)

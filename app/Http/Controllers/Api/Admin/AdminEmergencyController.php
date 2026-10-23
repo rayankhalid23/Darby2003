@@ -120,6 +120,17 @@ class AdminEmergencyController extends Controller
                 'substituteDriver.vehicles',
             ])->find($dispatchId);
 
+            // دعم مرن: البحث بمعرّف الرحلة الأصلية إذا مرر الأدمن trip_id بدلاً من dispatch_id
+            if (!$dispatch) {
+                $dispatch = TripBreakdownDispatch::with([
+                    'trip.driver.user',
+                    'trip.driver.vehicles',
+                    'trip.route',
+                    'substituteDriver.user',
+                    'substituteDriver.vehicles',
+                ])->where('trip_id', $dispatchId)->latest('id')->first();
+            }
+
             if (!$dispatch) {
                 return response()->json([
                     'status'     => 'error',

@@ -130,7 +130,7 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
             'year'            => 2022,
             'color'           => 'أبيض',
             'type'            => 'van',
-            'plate_number'    => 'LY-1111',
+            'plate_number'    => 'LY-1-' . uniqid(),
             'capacity_manual' => 10,
             'has_ac'          => 1,
             'status'          => 'Active',
@@ -143,12 +143,14 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
 
         // 3. إنشاء سائقين بديلين مرشحين (سائق 1 وسائق 2)
         $this->substituteDriverUser1 = User::create([
-            'full_name'     => 'كابتن طارق البديل الأول',
-            'email'         => 'sub1.driver.' . uniqid() . '@darby.test',
-            'phone_number'  => '092' . rand(1000000, 9999999),
-            'password_hash' => Hash::make('password123'),
-            'role_id'       => 2,
-            'is_active'     => 1,
+            'full_name'         => 'كابتن طارق البديل الأول',
+            'email'             => 'sub1.driver.' . uniqid() . '@darby.test',
+            'phone_number'      => '092' . rand(1000000, 9999999),
+            'alternative_phone' => '0919876543',
+            'avatar_url'        => 'drivers/avatars/substitute_driver1.jpg',
+            'password_hash'     => Hash::make('password123'),
+            'role_id'           => 2,
+            'is_active'         => 1,
         ]);
 
         $this->substituteDriver1 = Driver::create([
@@ -167,17 +169,18 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         ]);
 
         $this->substituteVehicle1 = Vehicle::create([
-            'driver_id'       => $this->substituteDriver1->id,
-            'brand'           => 'نيسان',
-            'model'           => 'أورفان',
-            'year'            => 2023,
-            'color'           => 'فضي',
-            'type'            => 'van',
-            'plate_number'    => 'LY-2222',
-            'capacity_manual' => 12,
-            'has_ac'          => 1,
-            'status'          => 'Active',
-            'is_verified'     => 1,
+            'driver_id'         => $this->substituteDriver1->id,
+            'brand'             => 'نيسان',
+            'model'             => 'أورفان',
+            'year'              => 2023,
+            'color'             => 'فضي',
+            'type'              => 'van',
+            'plate_number'      => 'LY-2-' . uniqid(),
+            'capacity_manual'   => 12,
+            'has_ac'            => 1,
+            'status'            => 'Active',
+            'is_verified'       => 1,
+            'vehicle_image_url' => 'drivers/vehicles/substitute_van1.jpg',
         ]);
 
         DB::table('driver_zone')->insertOrIgnore([
@@ -223,7 +226,7 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
             'year'            => 2021,
             'color'           => 'أسود',
             'type'            => 'van',
-            'plate_number'    => 'LY-3333',
+            'plate_number'    => 'LY-3-' . uniqid(),
             'capacity_manual' => 10,
             'has_ac'          => 1,
             'status'          => 'Active',
@@ -520,6 +523,22 @@ class EmergencyBreakdownAndDriverSubstitutionTest extends TestCase
         $this->assertEquals((string) $this->trip->id, (string) ($notifData['payload']['original_trip_id'] ?? null));
         $this->assertEquals((string) $dispatch->substitute_trip_id, (string) ($notifData['payload']['substitute_trip_id'] ?? null));
         $this->assertEquals((string) $dispatchId, (string) ($notifData['payload']['dispatch_id'] ?? null));
+
+        // التحقق من بيانات السائق البديل المرفقة بالإشعار (الاسم، أرقام الهواتف، الصورة، وصورة السيارة)
+        $this->assertEquals('كابتن طارق البديل الأول', $notifData['payload']['substitute_driver_name']);
+        $this->assertEquals($this->substituteDriverUser1->phone_number, $notifData['payload']['substitute_phone']);
+        $this->assertEquals('0919876543', $notifData['payload']['substitute_alternative_phone']);
+        $this->assertContains($this->substituteDriverUser1->phone_number, $notifData['payload']['phone_numbers']);
+        $this->assertContains('0919876543', $notifData['payload']['phone_numbers']);
+        $this->assertNotNull($notifData['payload']['substitute_driver_photo']);
+        $this->assertStringContainsString('substitute_driver1.jpg', $notifData['payload']['substitute_driver_photo']);
+        $this->assertNotNull($notifData['payload']['substitute_vehicle_photo']);
+        $this->assertStringContainsString('substitute_van1.jpg', $notifData['payload']['substitute_vehicle_photo']);
+        $this->assertEquals($this->substituteVehicle1->plate_number, $notifData['payload']['substitute_vehicle_plate']);
+        $this->assertEquals('كابتن طارق البديل الأول', $notifData['payload']['driver']['name']);
+        $this->assertEquals($this->substituteVehicle1->plate_number, $notifData['payload']['driver']['vehicle']['plate_number']);
+        $this->assertStringContainsString('كابتن طارق البديل الأول', $notifData['message']);
+        $this->assertStringContainsString('0919876543', $notifData['message']);
 
         // 7. التحقق من شاشة الرحلات النشطة لولي الأمر GET /api/v1/parent/trips/active
         $activeResponse = $this->actingAs($this->parentUser, 'sanctum')

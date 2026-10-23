@@ -43,6 +43,41 @@ class StoreSubscriptionRequest extends FormRequest
                 default                => $timing,
             }]);
         }
+
+        // تطبيع وقت الاستلام والتسليم على مستوى الطلب المشترك
+        if ($this->filled('pickup_time')) {
+            try {
+                $this->merge(['pickup_time' => Carbon::parse($this->pickup_time)->format('H:i:s')]);
+            } catch (\Throwable $e) {}
+        }
+        if ($this->filled('dropoff_time')) {
+            try {
+                $this->merge(['dropoff_time' => Carbon::parse($this->dropoff_time)->format('H:i:s')]);
+            } catch (\Throwable $e) {}
+        }
+
+        // تطبيع وقت الاستلام والتسليم لكل طفل
+        if (is_array($this->children)) {
+            $children = $this->children;
+            $modified = false;
+            foreach ($children as $idx => $child) {
+                if (!empty($child['pickup_time'])) {
+                    try {
+                        $children[$idx]['pickup_time'] = Carbon::parse($child['pickup_time'])->format('H:i:s');
+                        $modified = true;
+                    } catch (\Throwable $e) {}
+                }
+                if (!empty($child['dropoff_time'])) {
+                    try {
+                        $children[$idx]['dropoff_time'] = Carbon::parse($child['dropoff_time'])->format('H:i:s');
+                        $modified = true;
+                    } catch (\Throwable $e) {}
+                }
+            }
+            if ($modified) {
+                $this->merge(['children' => $children]);
+            }
+        }
     }
 
     /**
@@ -86,6 +121,18 @@ class StoreSubscriptionRequest extends FormRequest
                 'nullable',
                 'string',
                 'in:MORNING,EVENING,BOTH',
+            ],
+
+            // وقت استلام وتسليم الأطفال (مشترك أو عام للطلب)
+            'pickup_time' => [
+                'nullable',
+                'string',
+                'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/',
+            ],
+            'dropoff_time' => [
+                'nullable',
+                'string',
+                'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/',
             ],
 
             // تاريخ البداية
@@ -154,6 +201,16 @@ class StoreSubscriptionRequest extends FormRequest
                         }
                     }
                 },
+            ],
+            'children.*.pickup_time' => [
+                'nullable',
+                'string',
+                'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/',
+            ],
+            'children.*.dropoff_time' => [
+                'nullable',
+                'string',
+                'regex:/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/',
             ],
 
             // ─── الحقول العامة الاختيارية ────────────────────────────────────────

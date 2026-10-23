@@ -22,7 +22,25 @@ class OtpRequest extends FormRequest
             $this->merge(['otp' => $this->input('code')]);
         }
         if ($this->has('email')) {
-            $this->merge(['email' => trim(mb_strtolower((string) $this->input('email')))]);
+            $email = trim(mb_strtolower((string) $this->input('email')));
+            $this->merge(['email' => $email]);
+
+            // استعادة بيانات التسجيل من الخطوة الأولى إن لم يُعد الفرونت إرسالها كاملة في verify-otp
+            $cachedRegData = \Illuminate\Support\Facades\Cache::get('driver_reg_data:' . $email);
+            if (is_array($cachedRegData)) {
+                $restore = [];
+                foreach (['full_name', 'phone_number', 'gender', 'password', 'alternative_phone', 'device_name', 'platform', 'fcm_token'] as $key) {
+                    if (!$this->filled($key) && !empty($cachedRegData[$key])) {
+                        $restore[$key] = $cachedRegData[$key];
+                    }
+                }
+                if (!empty($restore)) {
+                    $this->merge($restore);
+                }
+            }
+        }
+        if ($this->has('gender') && is_string($this->input('gender'))) {
+            $this->merge(['gender' => trim(mb_strtolower($this->input('gender')))]);
         }
     }
 
@@ -31,7 +49,7 @@ class OtpRequest extends FormRequest
      */
     public function rules(): array
     {
-        return [
+        $rules = [
             // 1. التحقق من البريد ورمز الـ OTP ومطابقة الحساب الفعلي
             'email'             => 'required|email|max:100|unique:users,email', // هنا الفحص الفعلي لعدم تكرار الإيميل
             'otp'               => 'required|numeric|digits:6', // تم تعديله ليتوافق مع $request->otp في الـ Controller
@@ -48,6 +66,15 @@ class OtpRequest extends FormRequest
             'platform'          => 'nullable|string',
             'fcm_token'         => 'nullable|string',
         ];
+
+        // 4. الصورة الشخصية في حال إرسالها أثناء التحقق وإنشاء الحساب (تدعم ملف صورة أو Base64/رابط)
+        foreach (['avatar', 'avatar_url', 'photo', 'driver_photo', 'personal_photo', 'image', 'profile_image'] as $field) {
+            $rules[$field] = $this->hasFile($field)
+                ? 'nullable|file|mimes:jpeg,png,jpg,webp,heic,heif|max:10240'
+                : 'nullable|string';
+        }
+
+        return $rules;
     }
 
     /**

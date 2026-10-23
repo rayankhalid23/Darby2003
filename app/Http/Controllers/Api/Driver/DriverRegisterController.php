@@ -11,15 +11,29 @@ use App\Http\Requests\Api\Shared\OtpRequest;
 use App\Services\Driver\DriverRegisterService;
 use App\Services\Shared\OtpService;
 use App\Http\Resources\Api\Driver\DriverResource;
+use App\Http\Controllers\Api\Shared\MediaController;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Exception;
 
 class DriverRegisterController extends Controller
 {
     protected DriverRegisterService $registerService;
     protected OtpService $otpService;
+
+    private const AVATAR_FIELDS = [
+        'avatar',
+        'avatar_url',
+        'photo',
+        'driver_photo',
+        'personal_photo',
+        'image',
+        'profile_image',
+    ];
 
     public function __construct(DriverRegisterService $registerService, OtpService $otpService)
     {
@@ -28,14 +42,81 @@ class DriverRegisterController extends Controller
     }
 
     /**
-     * الخطوة 1: طلب تسجيل الحساب وإرسال الـ OTP (دون الحفظ في قاعدة البيانات)
+     * استخراج وحفظ الصورة الشخصية للسائق من أي مسمى حقل مدعوم (ملف مرفوع أو Base64)
+     */
+    private function extractAndStoreAvatar(Request $request, ?string &$storedRelativePath = null): ?string
+    {
+        foreach (self::AVATAR_FIELDS as $field) {
+            $file = $request->file($field);
+            if ($file instanceof \Illuminate\Http\UploadedFile && $file->isValid()) {
+                $path = $file->store('drivers/avatars', 'public');
+                $storedRelativePath = $path;
+                return 'storage/' . $path;
+            }
+        }
+
+        foreach (self::AVATAR_FIELDS as $field) {
+            $val = $request->input($field);
+            if (!is_string($val) || trim($val) === '') {
+                continue;
+            }
+            $val = trim($val);
+
+            if (preg_match('/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/s', $val, $matches)) {
+                $ext = strtolower($matches[1]);
+                if ($ext === 'jpeg') {
+                    $ext = 'jpg';
+                }
+                $binary = base64_decode($matches[2], true);
+                if ($binary !== false && strlen($binary) > 0) {
+                    $path = 'drivers/avatars/' . Str::uuid() . '.' . $ext;
+                    Storage::disk('public')->put($path, $binary);
+                    $storedRelativePath = $path;
+                    return 'storage/' . $path;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * الخطوة 1: طلب تسجيل الحساب وإرسال الـ OTP (مع الاحتفاظ المؤقت بالصورة المرفوعة لحين تفعيل الـ OTP)
      */
     public function registerAccount(RegisterAccountRequest $request): JsonResponse
     {
+        $uploadedAvatarPath = null;
         try {
             $data = $request->validated();
-            
-            // استدعاء الدالة الجديدة لإرسال الـ OTP فقط لحماية النظام من البيانات الوهمية
+            $email = trim(mb_strtolower((string) ($data['email'] ?? $request->input('email'))));
+
+            // حفظ الصورة الشخصية مؤقتاً إذا أرسلها الفرونت في الخطوة الأولى (register)
+            $avatarUrl = $this->extractAndStoreAvatar($request, $uploadedAvatarPath);
+            if ($avatarUrl && $email !== '') {
+                $previousCachedAvatar = Cache::get('driver_reg_avatar:' . $email);
+                if ($previousCachedAvatar && is_string($previousCachedAvatar)) {
+                    $oldRel = preg_replace('#^storage/#', '', $previousCachedAvatar);
+                    if ($oldRel && $oldRel !== $uploadedAvatarPath) {
+                        Storage::disk('public')->delete($oldRel);
+                    }
+                }
+                Cache::put('driver_reg_avatar:' . $email, $avatarUrl, now()->addHours(2));
+            }
+
+            if ($email !== '') {
+                Cache::put('driver_reg_data:' . $email, [
+                    'full_name'         => $data['full_name'] ?? null,
+                    'phone_number'      => $data['phone_number'] ?? null,
+                    'gender'            => $data['gender'] ?? null,
+                    'password'          => $data['password'] ?? null,
+                    'alternative_phone' => $data['alternative_phone'] ?? null,
+                    'device_name'       => $data['device_name'] ?? null,
+                    'platform'          => $data['platform'] ?? null,
+                    'fcm_token'         => $data['fcm_token'] ?? null,
+                ], now()->addHours(2));
+            }
+
+            // استدعاء الدالة لإرسال الـ OTP لحماية النظام من البيانات الوهمية
             $this->registerService->sendVerificationOtp($data);
 
             return response()->json([
@@ -44,6 +125,9 @@ class DriverRegisterController extends Controller
             ], 200);
 
         } catch (Exception $e) {
+            if ($uploadedAvatarPath) {
+                Storage::disk('public')->delete($uploadedAvatarPath);
+            }
             Log::error("Account Registration OTP Error: " . $e->getMessage());
             return response()->json([
                 'status'  => false,
@@ -57,9 +141,12 @@ class DriverRegisterController extends Controller
      */
     public function verifyOtp(OtpRequest $request): JsonResponse
     {
+        $uploadedAvatarPath = null;
         try {
+            $email = trim(mb_strtolower((string) $request->email));
+
             // 1. التحقق من صحة الـ OTP
-            $result = $this->otpService->verify($request->email, $request->otp, 'REGISTER');
+            $result = $this->otpService->verify($email, $request->otp, 'REGISTER');
             
             if (!$result['success']) {
                 return response()->json([
@@ -68,22 +155,48 @@ class DriverRegisterController extends Controller
                 ], 400);
             }
 
+            $data = $request->all();
+
+            // رفع الصورة الشخصية للسائق إن أُرسلت أثناء التحقق، أو استعادتها من الخطوة الأولى (register)
+            $avatarUrl = $this->extractAndStoreAvatar($request, $uploadedAvatarPath);
+            if ($avatarUrl) {
+                $data['avatar_url'] = $avatarUrl;
+                $cachedFromStep1 = Cache::pull('driver_reg_avatar:' . $email);
+                if ($cachedFromStep1 && is_string($cachedFromStep1)) {
+                    $oldRel = preg_replace('#^storage/#', '', $cachedFromStep1);
+                    if ($oldRel && $oldRel !== $uploadedAvatarPath) {
+                        Storage::disk('public')->delete($oldRel);
+                    }
+                }
+            } else {
+                $cachedFromStep1 = Cache::pull('driver_reg_avatar:' . $email);
+                if ($cachedFromStep1 && is_string($cachedFromStep1)) {
+                    $data['avatar_url'] = $cachedFromStep1;
+                }
+            }
+
+            Cache::forget('driver_reg_data:' . $email);
+
             // 2. إذا كان الرمز صحيحاً، نقوم بإنشاء الحساب وتفعيله مباشرة
-            $user = $this->registerService->registerAccountAfterOtp($request->all());
+            $user = $this->registerService->registerAccountAfterOtp($data);
             $driver = $user->driver;
             
             // 3. إنشاء توكن الدخول المباشر للحساب الجديد المفعّل
             $token = $user->createToken('driver_token')->plainTextToken;
 
             return response()->json([
-                'status'    => true,
-                'message'   => 'تم تفعيل الحساب وإنشاؤه بنجاح.',
-                'user_id'   => $user->id,
-                'driver_id' => $driver?->id,
-                'token'     => $token
+                'status'     => true,
+                'message'    => 'تم تفعيل الحساب وإنشاؤه بنجاح.',
+                'user_id'    => $user->id,
+                'driver_id'  => $driver?->id,
+                'avatar_url' => MediaController::urlFor($user->avatar_url),
+                'token'      => $token
             ], 201);
 
         } catch (Exception $e) {
+            if ($uploadedAvatarPath) {
+                Storage::disk('public')->delete($uploadedAvatarPath);
+            }
             Log::error("OTP Verification & Creation Error: " . $e->getMessage());
             return response()->json([
                 'status'  => false,
@@ -95,9 +208,11 @@ class DriverRegisterController extends Controller
     /**
      * المرحلة الثانية: إكمال ملف السائق (المركبة + الوثائق) لأول مرة
      */
-    public function completeProfile(CompleteProfileRequest $request, int $userId): JsonResponse
+    public function completeProfile(CompleteProfileRequest $request, ?int $userId = null): JsonResponse
     {
         $authUser = $request->user();
+        $userId = $userId ?? ($authUser ? (int) $authUser->id : 0);
+
         if ($authUser && (int) $authUser->id !== (int) $userId) {
             return response()->json([
                 'status'  => false,
@@ -109,12 +224,14 @@ class DriverRegisterController extends Controller
         try {
             $data = $request->validated();
 
-            // رفع الصورة الشخصية للسائق إن أُرسلت
-            if ($request->hasFile('avatar')) {
-                $avatarFile = $request->file('avatar');
-                $path = $avatarFile->store('drivers/avatars', 'public');
-                $data['avatar_path'] = 'storage/' . $path;
-                $uploadedPaths[] = $path;
+            // رفع الصورة الشخصية للسائق إن أُرسلت (مع دعم المسميات البديلة أو Base64 من الفرونت)
+            $avatarStoredPath = null;
+            $avatarUrl = $this->extractAndStoreAvatar($request, $avatarStoredPath);
+            if ($avatarUrl) {
+                $data['avatar_path'] = $avatarUrl;
+                if ($avatarStoredPath) {
+                    $uploadedPaths[] = $avatarStoredPath;
+                }
             }
 
             // رفع صورة المركبة

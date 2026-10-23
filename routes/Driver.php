@@ -46,7 +46,7 @@ use App\Http\Controllers\Api\Driver\DriverStatisticsController;
 Route::middleware('auth:sanctum')->group(function () {
     
     // 3. المرحلة الثانية من التسجيل: رفع الوثائق وبيانات المركبة لإكمال الملف الشخصي
-    Route::post('complete-profile/{userId}', [DriverRegisterController::class, 'completeProfile'])
+    Route::post('complete-profile/{userId?}', [DriverRegisterController::class, 'completeProfile'])
         ->name('api.driver.complete-profile');
 
     // 4. إلغاء وحذف الحساب غير المكتمل بعد التحقق من الـ OTP (DELETE أو POST)
@@ -92,6 +92,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('{tripId}/live', [DriverTripController::class, 'live']);
         Route::get('{tripId}/stops', [DriverTripController::class, 'tripStops']);
         Route::post('{tripId}/location', [DriverTripController::class, 'updateLocation']);
+        Route::post('{tripId}/simulate-movement', [DriverTripController::class, 'simulateMovement']);
         Route::post('{tripId}/pickup', [DriverTripController::class, 'pickup']);
         Route::post('{tripId}/absent', [DriverTripController::class, 'absent']);
         Route::post('{tripId}/dropoff', [DriverTripController::class, 'dropoff']);
@@ -127,8 +128,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // تحديث البيانات الشخصية والمظهر
     Route::match(['post', 'put'], 'preferences', [DriverPreferenceController::class, 'update'])
     ->name('api.driver.preferences.update');
-    Route::match(['post', 'put'], 'profile', [ProfileController::class, 'update']);
-    Route::match(['post', 'put'], 'profile/update', [ProfileController::class, 'update']);
+    Route::match(['post', 'put', 'patch'], 'profile', [ProfileController::class, 'update']);
+    Route::match(['post', 'put', 'patch'], 'profile/update', [ProfileController::class, 'update']);
+    Route::match(['post', 'put', 'patch'], 'profile/avatar', [ProfileController::class, 'update']);
+    Route::match(['post', 'put', 'patch'], 'profile/photo', [ProfileController::class, 'update']);
+    Route::match(['post', 'put', 'patch'], 'avatar', [ProfileController::class, 'update']);
     Route::post('profile/change-password', [ProfileController::class, 'changePassword'])
         ->name('api.driver.profile.change-password');
     Route::get('profile/email-change/status', [ProfileController::class, 'checkEmailChangeStatus']);

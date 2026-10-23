@@ -337,9 +337,16 @@ class NotificationFormatter
                 break;
 
             case self::TYPE_EMERGENCY_SUBSTITUTE_ACCEPTED_PARENT:
-                $title = $customTitle ?? '🔄 تم تعيين سائق بديل للرحلة';
-                $subDriverName = $data['substitute_driver_name'] ?? $driverName;
-                $message = $customMessage ?? "توقفت الحافلة بسبب عطل طارئ، وتم تكليف السائق البديل ({$subDriverName}) لاستكمال نقل الأبناء بسلام.";
+                $title = $customTitle ?? '🔄 سائق بديل يستلم الرحلة';
+                $subDriverName = $data['substitute_driver_name'] ?? $data['driver_name'] ?? $driverName;
+                $subPhone = $data['substitute_phone'] ?? $data['substitute_phone_number'] ?? $data['driver_phone'] ?? $driverPhone;
+                $subAltPhone = $data['substitute_alternative_phone'] ?? $data['driver_alternative_phone'] ?? null;
+                $phoneText = $subPhone ? " - هاتف: {$subPhone}" : '';
+                if ($subAltPhone) {
+                    $phoneText .= " / {$subAltPhone}";
+                }
+                $vehInfo = !empty($data['vehicle_info']) ? " ({$data['vehicle_info']})" : (!empty($data['substitute_vehicle_info']) ? " ({$data['substitute_vehicle_info']})" : '');
+                $message = $customMessage ?? "توقفت الحافلة بسبب عطل طارئ، ويستلم السائق البديل ({$subDriverName}{$phoneText}) الرحلة الآن لاستكمال نقل الأبناء بسلام.{$vehInfo}";
                 $screen = 'TRIP_LIVE';
                 $entityType = 'trip';
                 $entityId = $tripId;

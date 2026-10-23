@@ -54,6 +54,31 @@ class PaymentMethod extends Model
         return $query->whereIn('target_audience', ['driver', 'both']);
     }
 
+    public function getIconUrlAttribute(?string $value): ?string
+    {
+        // 1. إذا وُجدت قيمة مخصصة محفوظة للوسيلة
+        if (!empty($value) && trim($value) !== '') {
+            $trimmed = trim($value);
+
+            // لو كان رابطاً خارجياً بحتاً (CDN خارجي لا يتبع storage أو api/media)
+            if ((str_starts_with($trimmed, 'http://') || str_starts_with($trimmed, 'https://'))
+                && !str_contains($trimmed, 'storage/')
+                && !str_contains($trimmed, 'api/media/')
+                && !str_contains($trimmed, 'payment_methods/')) {
+                return $trimmed;
+            }
+
+            return \App\Http\Controllers\Api\Shared\MediaController::urlFor($trimmed) ?: asset($trimmed);
+        }
+
+        // 2. إذا لم تُرفع أيقونة، نرجع الأيقونة الافتراضية المناسبة حسب رمز وسيلة الدفع (code)
+        $code = strtolower(trim((string) $this->code));
+        $availableIcons = ['sadad', 'mobicash', 'sahara_bank', 'aljumhouria_bank', 'tadawul', 'moamalat'];
+        $iconFile = in_array($code, $availableIcons, true) ? "{$code}.png" : 'default.png';
+
+        return url("api/media/payment_methods/icons/{$iconFile}");
+    }
+
     public function driverRecharges(): HasMany
     {
         return $this->hasMany(\App\Models\Driver\DriverRechargeRequest::class, 'payment_method_id');

@@ -120,7 +120,7 @@ class CreateDriverTripCommand extends Command
         }
 
         // 4. توليد الرحلة اليومية ومحطاتها عبر DailyTripGenerationService
-        $trip = $generationService->generateTripForRoute($route, $date);
+        $trip = $generationService->generateForRoute($route, Carbon::parse($date));
 
         if (!$trip) {
             // في حال تم حجبها بسبب تواريخ التغطية أو الغياب، ننشئها يدوياً لتسهيل الاختبار

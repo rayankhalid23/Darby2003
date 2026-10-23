@@ -121,11 +121,11 @@ return Application::configure(basePath: dirname(__DIR__))
                 }
 
                 // [الحالة 4]: طلب عنصر غير موجود (سجل محذوف، مدرسة ملغية، أو رابط خطأ)
-                if ($e instanceof NotFoundHttpException) {
+                if ($e instanceof NotFoundHttpException || $e instanceof \Illuminate\Database\Eloquent\ModelNotFoundException) {
                     $response = [
                         'status'     => false,
                         'error_code' => 'NOT_FOUND',
-                        'message'    => 'العنصر أو الرابط الذي تحاول الوصول إليه غير موجود أو تم حذفه.'
+                        'message'    => 'العنصر أو السجل الذي تحاول الوصول إليه غير موجود أو تم حذفه.'
                     ];
 
                     // إظهار تفاصيل التتبع الحساسة فقط إذا كان وضع التطوير نشطاً (حماية الإنتاج)

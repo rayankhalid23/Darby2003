@@ -218,13 +218,17 @@ class ParentTripService
                     ->latest('scanned_at')
                     ->first();
 
+                $subReq = $sub->subscriptionRequest ?? null;
+                $schedPickup = $sub->pickup_time ?? $childObj->pickup_time ?? $subReq?->pickup_time ?? '07:00:00';
+                $schedDropoff = $sub->dropoff_time ?? $childObj->dropoff_time ?? $subReq?->dropoff_time ?? '14:00:00';
+
                 $pickupTime = $pickupEvent 
                     ? Carbon::parse($pickupEvent->scanned_at)->format('h:i A') 
-                    : ($sub->pickup_time ? Carbon::parse($sub->pickup_time)->format('h:i A') : null);
+                    : ($schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null);
 
                 $dropoffTime = $dropoffEvent 
                     ? Carbon::parse($dropoffEvent->scanned_at)->format('h:i A') 
-                    : null;
+                    : ($schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null);
 
                 // بيانات منزل وسكن الطفل
                 $childAddress = $childObj->address;
@@ -393,13 +397,17 @@ class ParentTripService
                     ->latest('scanned_at')
                     ->first();
 
+                $subReq = $childSub?->subscriptionRequest ?? null;
+                $schedPickup = $childSub?->pickup_time ?? $childObj->pickup_time ?? $subReq?->pickup_time ?? '07:00:00';
+                $schedDropoff = $childSub?->dropoff_time ?? $childObj->dropoff_time ?? $subReq?->dropoff_time ?? '14:00:00';
+
                 $pickupTime = $pickupEvent 
                     ? Carbon::parse($pickupEvent->scanned_at)->format('h:i A') 
-                    : ($childSub?->pickup_time ? Carbon::parse($childSub->pickup_time)->format('h:i A') : null);
+                    : ($schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null);
 
                 $dropoffTime = $dropoffEvent 
                     ? Carbon::parse($dropoffEvent->scanned_at)->format('h:i A') 
-                    : null;
+                    : ($schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null);
 
                 $childAddress = $childObj->address;
                 $homeLat = $stop?->lat ?? $childAddress?->lat ?? $childSub?->pickup_lat;
@@ -463,7 +471,10 @@ class ParentTripService
                 'driver'           => [
                     'id'    => $subDriver?->id,
                     'name'  => $subDriverUser?->full_name ?? $subDriverUser?->name ?? null,
-                    'phone' => $subDriverUser?->phone_number ?? $subDriverUser?->phone ?? null,
+                    'phone'             => $subDriverUser?->phone_number ?? $subDriverUser?->phone ?? null,
+                    'phone_number'      => $subDriverUser?->phone_number ?? $subDriverUser?->phone ?? null,
+                    'alternative_phone' => $subDriverUser?->alternative_phone ?? null,
+                    'phone_numbers'     => array_values(array_filter([$subDriverUser?->phone_number ?? null, $subDriverUser?->alternative_phone ?? null])),
                     'photo' => $subDriverPhotoUrl,
                     'lat'   => $subDriver?->current_lat !== null ? (float)$subDriver->current_lat : null,
                     'lng'   => $subDriver?->current_lng !== null ? (float)$subDriver->current_lng : null,
@@ -471,7 +482,9 @@ class ParentTripService
                 'vehicle' => [
                     'info'         => $subVehicleInfo,
                     'plate_number' => $subVehicle?->plate_number ?? null,
-                    'capacity'     => $subVehicle?->capacity_manual ?? $subVehicle?->capacity ?? null,
+                    'capacity'          => $subVehicle?->capacity_manual ?? $subVehicle?->capacity ?? null,
+                    'photo'             => $subVehicle?->vehicle_image_url ? (str_starts_with($subVehicle->vehicle_image_url, 'http') ? $subVehicle->vehicle_image_url : Storage::url($subVehicle->vehicle_image_url)) : null,
+                    'vehicle_image_url' => $subVehicle?->vehicle_image_url ? (str_starts_with($subVehicle->vehicle_image_url, 'http') ? $subVehicle->vehicle_image_url : Storage::url($subVehicle->vehicle_image_url)) : null,
                 ],
                 'bus_occupancy' => [
                     'current_onboard_count' => $currentOnboardCount,
@@ -794,14 +807,21 @@ class ParentTripService
                         'lng'     => $schoolStop?->lng ?? $childSchool?->lng,
                     ];
 
+                    $schedPickup = $s->pickup_time ?? $c->pickup_time ?? $s->subscriptionRequest?->pickup_time ?? '07:00:00';
+                    $schedDropoff = $s->dropoff_time ?? $c->dropoff_time ?? $s->subscriptionRequest?->dropoff_time ?? '13:30:00';
+
                     $childrenArr[] = [
-                        'child_id'        => (int)$c->id,
-                        'child_name'      => $c->full_name ?? $c->name,
-                        'school_name'     => $schoolLocation['name'],
-                        'child_photo'     => $photoUrl,
-                        'cost_per_child'  => $hasCost ? number_format($costPerChildNum, 2, '.', '') : null,
-                        'home_location'   => $homeLocation,
-                        'school_location' => $schoolLocation,
+                        'child_id'               => (int)$c->id,
+                        'child_name'             => $c->full_name ?? $c->name,
+                        'school_name'            => $schoolLocation['name'],
+                        'child_photo'            => $photoUrl,
+                        'cost_per_child'         => $hasCost ? number_format($costPerChildNum, 2, '.', '') : null,
+                        'pickup_time'            => $schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null,
+                        'dropoff_time'           => $schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null,
+                        'scheduled_pickup_time'  => $schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null,
+                        'scheduled_dropoff_time' => $schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null,
+                        'home_location'          => $homeLocation,
+                        'school_location'        => $schoolLocation,
                     ];
                 }
 
@@ -998,13 +1018,16 @@ class ParentTripService
                 $pickupEvent = $childEvents->first(fn($ev) => in_array($ev->action_type, ['picked_up', 'boarded']));
                 $dropoffEvent = $childEvents->first(fn($ev) => in_array($ev->action_type, ['dropped_off', 'dropped_off_school', 'delivered_home']));
 
+                $schedPickup = $activeSub?->pickup_time ?? $childObj->pickup_time ?? $activeSub?->subscriptionRequest?->pickup_time;
+                $schedDropoff = $activeSub?->dropoff_time ?? $childObj->dropoff_time ?? $activeSub?->subscriptionRequest?->dropoff_time;
+
                 $pickupTime = $pickupEvent 
                     ? Carbon::parse($pickupEvent->scanned_at)->format('h:i A') 
-                    : ($activeSub?->pickup_time ? Carbon::parse($activeSub->pickup_time)->format('h:i A') : null);
+                    : ($schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null);
 
                 $dropoffTime = $dropoffEvent 
                     ? Carbon::parse($dropoffEvent->scanned_at)->format('h:i A') 
-                    : ($activeSub?->dropoff_time ? Carbon::parse($activeSub->dropoff_time)->format('h:i A') : null);
+                    : ($schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null);
 
                 $rawStatus = $stop?->status ?? ($dropoffEvent ? 'dropped_off' : ($pickupEvent ? 'picked_up' : 'completed'));
 
@@ -1029,9 +1052,13 @@ class ParentTripService
                     'trip_cost'       => $hasCost ? number_format($costPerChildNum, 2, '.', '') : null,
                     'cost_per_child'  => $hasCost ? number_format($costPerChildNum, 2, '.', '') : null,
                     'status'          => $childStatus,
-                    'pickup_time'     => $pickupTime,
-                    'dropoff_time'    => $dropoffTime,
-                    'home_location'   => $homeLocation,
+                    'pickup_time'            => $pickupTime,
+                    'dropoff_time'           => $dropoffTime,
+                    'scheduled_pickup_time'  => $schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null,
+                    'scheduled_dropoff_time' => $schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null,
+                    'actual_pickup_time'     => $pickupEvent ? Carbon::parse($pickupEvent->scanned_at)->format('h:i A') : null,
+                    'actual_dropoff_time'    => $dropoffEvent ? Carbon::parse($dropoffEvent->scanned_at)->format('h:i A') : null,
+                    'home_location'          => $homeLocation,
                     'school_location' => $schoolLocation,
                 ];
             }
@@ -1161,22 +1188,52 @@ class ParentTripService
             $parentUser = $c->parent ?? ($c->parent_id ? User::find($c->parent_id) : null);
             $parentPhone = $parentUser?->phone_number ?? $parentUser?->phone ?? $parentUser?->alternative_phone;
 
+            $pickupEvent = DB::table('trip_events')
+                ->where('trip_id', $trip->id)
+                ->where('child_id', $c->id)
+                ->whereIn('action_type', ['picked_up', 'pickup', 'boarded'])
+                ->latest('scanned_at')
+                ->first();
+
+            $dropoffEvent = DB::table('trip_events')
+                ->where('trip_id', $trip->id)
+                ->where('child_id', $c->id)
+                ->whereIn('action_type', ['dropped_off', 'dropoff', 'dropped_off_school', 'delivered_home'])
+                ->latest('scanned_at')
+                ->first();
+
+            $subReq = $sub->subscriptionRequest ?? null;
+            $schedPickup = $sub->pickup_time ?? $c->pickup_time ?? $subReq?->pickup_time ?? '07:00:00';
+            $schedDropoff = $sub->dropoff_time ?? $c->dropoff_time ?? $subReq?->dropoff_time ?? '14:00:00';
+
+            $actualPickup = $pickupEvent ? Carbon::parse($pickupEvent->scanned_at)->format('h:i A') : null;
+            $actualDropoff = $dropoffEvent ? Carbon::parse($dropoffEvent->scanned_at)->format('h:i A') : null;
+
+            $pickupTime = $actualPickup ?? ($schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null);
+            $dropoffTime = $actualDropoff ?? ($schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null);
+
             $childrenArray[] = [
-                'child_id'            => $c->id,
-                'child_name'          => $c->full_name ?? $c->name,
-                'child_photo'         => $photoUrl,
-                'child_status'        => $childStatus,
-                'school'              => $schoolLocation['name'],
-                'school_name'         => $schoolLocation['name'],
-                'school_id'           => $schoolLocation['id'],
-                'school_location'     => $schoolLocation,
-                'direction'           => $direction,
-                'home_location'       => $homeLocation,
-                'destination'         => $childDestination,
-                'parent_id'           => $parentUser?->id,
-                'parent_name'         => $parentUser?->full_name ?? $parentUser?->name,
-                'parent_phone'        => $parentPhone,
-                'parent_phone_number' => $parentPhone,
+                'child_id'               => $c->id,
+                'child_name'             => $c->full_name ?? $c->name,
+                'child_photo'            => $photoUrl,
+                'child_status'           => $childStatus,
+                'school'                 => $schoolLocation['name'],
+                'school_name'            => $schoolLocation['name'],
+                'school_id'              => $schoolLocation['id'],
+                'school_location'        => $schoolLocation,
+                'direction'              => $direction,
+                'home_location'          => $homeLocation,
+                'destination'            => $childDestination,
+                'pickup_time'            => $pickupTime,
+                'dropoff_time'           => $dropoffTime,
+                'scheduled_pickup_time'  => $schedPickup ? Carbon::parse($schedPickup)->format('h:i A') : null,
+                'scheduled_dropoff_time' => $schedDropoff ? Carbon::parse($schedDropoff)->format('h:i A') : null,
+                'actual_pickup_time'     => $actualPickup,
+                'actual_dropoff_time'    => $actualDropoff,
+                'parent_id'              => $parentUser?->id,
+                'parent_name'            => $parentUser?->full_name ?? $parentUser?->name,
+                'parent_phone'           => $parentPhone,
+                'parent_phone_number'    => $parentPhone,
             ];
 
             // نجمع الوجهات الفريدة بدل الاكتفاء بوجهة أول طفل فقط، لأن أطفال نفس الولي

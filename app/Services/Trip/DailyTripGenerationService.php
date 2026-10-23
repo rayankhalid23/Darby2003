@@ -192,7 +192,7 @@ class DailyTripGenerationService
 
     private function buildTripStops(Trip $trip, Route $route, string $dateString): void
     {
-        $routeStops = RouteStop::where('route_id', $route->id)->orderBy('sequence_order')->get();
+        $routeStops = RouteStop::where('route_id', $route->id)->with('child')->orderBy('sequence_order')->get();
         if ($routeStops->isEmpty()) {
             return;
         }
@@ -271,7 +271,7 @@ class DailyTripGenerationService
                 'route_stop_id'  => $stop->id,
                 'stop_type'      => $stop->stop_type,
                 'child_id'       => $stop->child_id,
-                'school_id'      => $stop->school_id,
+                'school_id'      => $stop->school_id ?? $stop->child?->school_id,
                 'lat'            => $lat,
                 'lng'            => $lng,
                 'label'          => $label,

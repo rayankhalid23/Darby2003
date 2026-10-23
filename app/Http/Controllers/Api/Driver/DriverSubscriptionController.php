@@ -329,12 +329,16 @@ class DriverSubscriptionController extends Controller
         // أول طفل كتمثيل معقول للرحلة الواحدة (حالة الوجهة المشتركة الأشيع).
         $school = $subscriptionRequest->children->first()?->school;
 
+        $firstChild = $subscriptionRequest->children->first();
+        $pickupTime = $subscriptionRequest->pickup_time ?? $firstChild?->pickup_time ?? '07:00:00';
+        $dropoffTime = $subscriptionRequest->dropoff_time ?? $firstChild?->dropoff_time ?? '14:00:00';
+
         $tripDetails = [
             'request_id'   => $subscriptionRequest->id,
             'status'       => $subscriptionRequest->status,
             'trip_type'    => $subscriptionRequest->trip_direction ?? 'two_way',
-            'pickup_time'  => $subscriptionRequest->pickup_time  ?? null,
-            'dropoff_time' => $subscriptionRequest->dropoff_time ?? null,
+            'pickup_time'  => $pickupTime,
+            'dropoff_time' => $dropoffTime,
             'parent'       => [
                 'name'  => $subscriptionRequest->parent?->user?->full_name ?? $subscriptionRequest->parent?->user?->name ?? 'غير محدد',
                 'phone' => $subscriptionRequest->parent?->user?->phone_number ?? $subscriptionRequest->parent?->user?->phone ?? null,
@@ -350,6 +354,8 @@ class DriverSubscriptionController extends Controller
                 'id'           => $child->id,
                 'name'         => $child->full_name ?? $child->name ?? 'طفل',
                 'gender'       => $child->gender ?? null,
+                'pickup_time'  => $child->pickup_time ?? $pickupTime,
+                'dropoff_time' => $child->dropoff_time ?? $dropoffTime,
                 'home_address' => $subscriptionRequest->home_label ?? $child->address?->label ?? $child->address?->address ?? 'العنوان غير محدد',
                 'latitude'     => (float) ($subscriptionRequest->home_lat  ?? $child->address?->lat  ?? $child->latitude  ?? 0),
                 'longitude'    => (float) ($subscriptionRequest->home_lng ?? $child->address?->lng ?? $child->longitude ?? 0),

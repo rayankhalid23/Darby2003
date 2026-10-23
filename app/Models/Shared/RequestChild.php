@@ -16,6 +16,8 @@ class RequestChild extends Model
 {
     protected $table = 'request_children';
 
+    protected $guarded = [];
+
     public function request(): BelongsTo
     {
         return $this->belongsTo(SubscriptionRequest::class, 'request_id');

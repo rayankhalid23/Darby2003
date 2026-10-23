@@ -13,25 +13,26 @@ class UpdateAddressRequest extends FormRequest
 
     public function rules(): array
     {
-        // التعديل جزئي وصارم بفضل الـ sometimes ويتم فحص التكرار المتقدم داخل الـ Service
         return [
-            'label'   => 'sometimes|required|string|max:100',
-            'lat'     => 'sometimes|required|numeric|between:-90,90',
-            'lng'     => 'sometimes|required|numeric|between:-180,180',
-            'zone_id' => 'sometimes|nullable|integer|exists:zones,id',
+            'label'      => 'sometimes|required|string|max:100',
+            'lat'        => 'sometimes|required|numeric|between:-90,90',
+            'lng'        => 'sometimes|required|numeric|between:-180,180',
+            'zone_id'    => 'sometimes|nullable|integer|exists:zones,id',
+            'is_default' => 'sometimes|nullable|boolean',
         ];
     }
 
     public function messages(): array
     {
         return [
-            'label.required'  => 'مسمى العنوان لا يمكن أن يكون فارغاً.',
-            'lat.required'    => 'إحداثيات خط العرض مطلوبة.',
-            'lng.required'    => 'إحداثيات خط الطول مطلوبة.',
-            'lat.between'     => 'إحداثيات خط العرض المرسلة غير صالحة جغرافياً.',
-            'lng.between'     => 'إحداثيات خط الطول المرسلة غير صالحة جغرافياً.',
-            'zone_id.integer' => 'معرف المنطقة يجب أن يكون رقماً صحيحاً.',
-            'zone_id.exists'  => 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.',
+            'label.required'     => 'مسمى العنوان لا يمكن أن يكون فارغاً.',
+            'lat.required'       => 'إحداثيات خط العرض مطلوبة.',
+            'lng.required'       => 'إحداثيات خط الطول مطلوبة.',
+            'lat.between'        => 'إحداثيات خط العرض المرسلة غير صالحة جغرافياً.',
+            'lng.between'        => 'إحداثيات خط الطول المرسلة غير صالحة جغرافياً.',
+            'zone_id.integer'    => 'معرف المنطقة يجب أن يكون رقماً صحيحاً.',
+            'zone_id.exists'     => 'المنطقة الجغرافية المختارة غير مسجلة بالنظام.',
+            'is_default.boolean' => 'حقل العنوان الافتراضي يجب أن يكون true أو false.',
         ];
     }
 }

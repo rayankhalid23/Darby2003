@@ -15,7 +15,7 @@ class StoreAddressRequest extends FormRequest
     public function rules(): array
     {
         // جلب معرف المستخدم السائق ديناميكياً من التوكن
-        $userId = auth()->id() ?? 1; 
+        $userId = auth('sanctum')->id() ?? auth()->id() ?? 1; 
 
         return [
             'label' => [

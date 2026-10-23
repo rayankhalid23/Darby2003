@@ -423,7 +423,7 @@ class BaseSystemSeeder extends Seeder
             PaymentMethod::create([
                 'name_ar'         => $m['name_ar'],
                 'code'            => $m['code'],
-                'target_audience' => 'parent',
+                'target_audience' => 'both',
                 'processing_type' => 'instant_simulation',
                 'min_amount'      => $m['min_amount'],
                 'max_amount'      => $m['max_amount'],

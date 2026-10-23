@@ -42,16 +42,27 @@ class DriverProfileService
             $userUpdateData = [];
 
             // هندسة معالجة ورفع ملف الصورة الشخصية فوراً إن وُجدت
-            if (!empty($data['avatar_url'])) {
+            if (!empty($data['avatar_url']) && is_string($data['avatar_url'])) {
                 $userUpdateData['avatar_url'] = $data['avatar_url'];
-            } elseif (request()->hasFile('avatar_url') || request()->hasFile('avatar') || request()->hasFile('photo')) {
-                $file = request()->file('avatar_url') ?? request()->file('avatar') ?? request()->file('photo');
-                if (!empty($user->avatar_url)) {
-                    $oldPath = str_replace('storage/', '', $user->avatar_url);
-                    \Illuminate\Support\Facades\Storage::disk('public')->delete($oldPath);
+            } else {
+                $file = null;
+                foreach (['avatar', 'avatar_url', 'photo', 'driver_photo', 'personal_photo', 'image', 'profile_image'] as $field) {
+                    $candidate = ($data[$field] ?? null) instanceof \Illuminate\Http\UploadedFile
+                        ? $data[$field]
+                        : request()->file($field);
+                    if ($candidate instanceof \Illuminate\Http\UploadedFile && $candidate->isValid()) {
+                        $file = $candidate;
+                        break;
+                    }
                 }
-                $path = $file->store('drivers/avatars', 'public');
-                $userUpdateData['avatar_url'] = 'storage/' . $path;
+                if ($file) {
+                    if (!empty($user->avatar_url)) {
+                        $oldPath = str_replace('storage/', '', $user->avatar_url);
+                        \Illuminate\Support\Facades\Storage::disk('public')->delete($oldPath);
+                    }
+                    $path = $file->store('drivers/avatars', 'public');
+                    $userUpdateData['avatar_url'] = 'storage/' . $path;
+                }
             }
 
             if (array_key_exists('alternative_phone', $data)) {

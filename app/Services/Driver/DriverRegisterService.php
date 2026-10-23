@@ -80,7 +80,7 @@ class DriverRegisterService
             }
 
             // 1. إنشاء المستخدم وتفعيله مباشرة لأن الـ OTP تم التحقق منه
-            $user = User::create([
+            $userData = [
                 'full_name'         => $data['full_name'],
                 'email'             => $data['email'],
                 'phone_number'      => $data['phone_number'],
@@ -89,7 +89,11 @@ class DriverRegisterService
                 'gender'            => $data['gender'] ?? null,
                 'role_id'           => $driverRoleId,
                 'is_active'         => 0, // معلّق — يتفعل فقط عند موافقة الأدمن
-            ]);
+            ];
+            if (!empty($data['avatar_url'])) {
+                $userData['avatar_url'] = $data['avatar_url'];
+            }
+            $user = User::create($userData);
 
             // 2. إنشاء ملف السائق الأساسي
             Driver::create([

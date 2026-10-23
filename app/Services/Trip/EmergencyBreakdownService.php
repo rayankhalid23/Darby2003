@@ -2,6 +2,7 @@
 
 namespace App\Services\Trip;
 
+use App\Http\Controllers\Api\Shared\MediaController;
 use App\Models\Driver\Driver;
 use App\Models\Driver\DriverSeatSlot;
 use App\Models\Parent\Child;
@@ -50,7 +51,7 @@ class EmergencyBreakdownService
         ?float $breakdownLat = null,
         ?float $breakdownLng = null,
         ?string $reason = null,
-        int $timeoutMinutes = 10
+        int $timeoutMinutes = 60
     ): array {
         return DB::transaction(function () use ($trip, $breakdownLat, $breakdownLng, $reason, $timeoutMinutes) {
             // 1. تحديد موقع العطل
@@ -361,7 +362,12 @@ class EmergencyBreakdownService
                 })
                 ->exists();
 
-            if ($hasTripAtTime || $hasActiveTrip) {
+            if ($hasActiveTrip) {
+                $hasCapacity = $this->checkDriverSeatCapacity($substituteDriver, (int) $dispatch->stranded_children_count, $shiftSlot ?? 'morning_go');
+                if (!$hasCapacity) {
+                    throw new Exception('لا يمكنك قبول هذه المهمة الطارئة لأن لديك رحلة أخرى ولا توجد مقاعد كافية.', 422);
+                }
+            } elseif ($hasTripAtTime) {
                 throw new Exception('لا يمكنك قبول هذه المهمة الطارئة لأن لديك رحلة أخرى في هذا التوقيت.', 422);
             }
 
@@ -492,6 +498,7 @@ class EmergencyBreakdownService
         $boardedChildIds = TripStop::where('trip_id', $originalTrip->id)
             ->whereIn('child_id', $strandedChildIds)
             ->where('status', TripStop::STATUS_BOARDED)
+            ->orderBy('child_id')
             ->pluck('child_id')
             ->unique()
             ->values()
@@ -829,7 +836,7 @@ class EmergencyBreakdownService
     }
 
     /**
-     * إرسال إشعار لأولياء الأمور بتعيين سائق بديل مع كامل بياناته
+     * إرسال إشعار لأولياء الأمور بتعيين سائق بديل مع كامل بياناته (الاسم، الصورة، أرقام الهواتف، وصورة السيارة)
      */
     protected function notifyParentsSubstituteAssigned(
         TripBreakdownDispatch $dispatch,
@@ -837,6 +844,15 @@ class EmergencyBreakdownService
         Trip $originalTrip
     ): void {
         $strandedChildIds = $dispatch->stranded_children_ids ?? [];
+        if (empty($strandedChildIds)) {
+            $strandedChildIds = TripStop::where('trip_id', $originalTrip->id)
+                ->whereNotNull('child_id')
+                ->pluck('child_id')
+                ->unique()
+                ->values()
+                ->all();
+        }
+
         if (empty($strandedChildIds)) {
             return;
         }
@@ -851,24 +867,118 @@ class EmergencyBreakdownService
             return;
         }
 
-        $subVehicle = $substituteDriver->vehicles->where('status', 'Active')->first() ?? $substituteDriver->vehicles->first();
-        $subDriverName = $substituteDriver->user?->full_name ?? 'السائق البديل';
-        $subDriverPhone = $substituteDriver->user?->phone_number ?? '';
-        $vehicleInfo = $subVehicle ? "مركبة: {$subVehicle->make} {$subVehicle->model} (لوحة: {$subVehicle->plate_number})" : '';
+        // المركبة النشطة للسائق البديل
+        $subVehicle = $substituteDriver->vehicles->first(function ($v) {
+            return in_array(strtolower($v->status ?? ''), ['active', 'approved']);
+        }) ?? $substituteDriver->vehicles->first();
+
+        $subUser = $substituteDriver->user;
+        $subDriverName = $subUser?->full_name ?? 'السائق البديل';
+        $subDriverPhone = $subUser?->phone_number ?? '';
+        $subDriverAltPhone = $subUser?->alternative_phone ?? '';
+
+        // صورة السائق البديل
+        $rawAvatar = $subUser?->avatar_url ?? $subUser?->photo_url ?? null;
+        $subDriverAvatar = MediaController::urlFor($rawAvatar);
+        if (!$subDriverAvatar && !empty($rawAvatar)) {
+            $subDriverAvatar = str_starts_with($rawAvatar, 'http') ? $rawAvatar : url($rawAvatar);
+        }
+
+        // صورة سيارة السائق البديل
+        $rawVehicleImage = $subVehicle?->vehicle_image_url ?? $subVehicle?->vehicle_image ?? $subVehicle?->vehicle_photo ?? null;
+        $vehiclePhoto = MediaController::urlFor($rawVehicleImage);
+        if (!$vehiclePhoto && !empty($rawVehicleImage)) {
+            $vehiclePhoto = str_starts_with($rawVehicleImage, 'http') ? $rawVehicleImage : url($rawVehicleImage);
+        }
+
+        $vehicleBrand = $subVehicle?->brand ?? $subVehicle?->make ?? '';
+        $vehicleModel = $subVehicle?->model ?? '';
+        $vehiclePlate = $subVehicle?->plate_number ?? '';
+        $vehicleColor = $subVehicle?->color ?? '';
+
+        $vehicleInfoParts = array_filter([
+            $vehicleBrand ? "مركبة: {$vehicleBrand} {$vehicleModel}" : null,
+            $vehiclePlate ? "(لوحة: {$vehiclePlate}" : null,
+            $vehicleColor ? "- لون: {$vehicleColor})" : ($vehiclePlate ? ")" : null),
+        ]);
+        $vehicleInfo = $subVehicle ? implode(' ', $vehicleInfoParts) : '';
+
+        // أرقام هواتف السائق البديل
+        $phoneText = $subDriverPhone ? " - هاتف: {$subDriverPhone}" : '';
+        if (!empty($subDriverAltPhone)) {
+            $phoneText .= " / {$subDriverAltPhone}";
+        }
 
         $substituteTripId = $dispatch->substitute_trip_id ?? $originalTrip->id;
 
+        $phonesList = array_values(array_filter([$subDriverPhone, $subDriverAltPhone]));
+
+        $driverData = [
+            'id'                => $substituteDriver->id,
+            'name'              => $subDriverName,
+            'photo'             => $subDriverAvatar,
+            'avatar_url'        => $subDriverAvatar,
+            'phone'             => $subDriverPhone,
+            'phone_number'      => $subDriverPhone,
+            'alternative_phone' => $subDriverAltPhone ?: null,
+            'phone_numbers'     => $phonesList,
+            'phones'            => $phonesList,
+            'vehicle'           => [
+                'brand'             => $vehicleBrand,
+                'model'             => $vehicleModel,
+                'plate_number'      => $vehiclePlate,
+                'color'             => $vehicleColor,
+                'info'              => $vehicleInfo,
+                'photo'             => $vehiclePhoto,
+                'image_url'         => $vehiclePhoto,
+                'vehicle_image_url' => $vehiclePhoto,
+            ],
+        ];
+
         $this->notificationService->sendToUsers($users, NotificationFormatter::TYPE_EMERGENCY_SUBSTITUTE_ACCEPTED_PARENT, [
-            'title'                  => '🔄 تم تعيين سائق بديل للرحلة',
-            'substitute_driver_name' => $subDriverName,
-            'substitute_phone'       => $subDriverPhone,
-            'vehicle_info'           => $vehicleInfo,
-            'trip_id'                => (string) $substituteTripId,
-            'entity_id'              => (string) $substituteTripId,
-            'original_trip_id'       => (string) $originalTrip->id,
-            'substitute_trip_id'     => (string) $substituteTripId,
-            'dispatch_id'            => (string) $dispatch->id,
-            'message'                => "توقفت الحافلة بسبب عطل طارئ، وتم تكليف السائق البديل ({$subDriverName} - {$subDriverPhone}) لاستكمال نقل الأبناء بسلام. {$vehicleInfo}",
+            'title'                               => '🔄 سائق بديل يستلم الرحلة',
+            // بيانات وهوية السائق البديل
+            'substitute_driver_name'              => $subDriverName,
+            'substitute_driver_photo'             => $subDriverAvatar,
+            'substitute_avatar_url'               => $subDriverAvatar,
+            'substitute_driver_avatar'            => $subDriverAvatar,
+            'substitute_phone'                    => $subDriverPhone,
+            'substitute_phone_number'             => $subDriverPhone,
+            'substitute_alternative_phone'        => $subDriverAltPhone ?: null,
+            'substitute_driver_alternative_phone' => $subDriverAltPhone ?: null,
+            'substitute_phones'                   => $phonesList,
+            'substitute_driver_phones'            => $phonesList,
+            'driver_name'                         => $subDriverName,
+            'driver_photo'                        => $subDriverAvatar,
+            'driver_avatar'                       => $subDriverAvatar,
+            'driver_phone'                        => $subDriverPhone,
+            'driver_alternative_phone'            => $subDriverAltPhone ?: null,
+            'driver_phones'                       => $phonesList,
+            'phone_numbers'                       => $phonesList,
+            // بيانات وصورة المركبة
+            'substitute_vehicle_photo'            => $vehiclePhoto,
+            'substitute_vehicle_image'            => $vehiclePhoto,
+            'substitute_vehicle_image_url'        => $vehiclePhoto,
+            'vehicle_photo'                       => $vehiclePhoto,
+            'vehicle_image'                       => $vehiclePhoto,
+            'vehicle_image_url'                   => $vehiclePhoto,
+            'substitute_vehicle_plate'            => $vehiclePlate,
+            'substitute_vehicle_brand'            => $vehicleBrand,
+            'substitute_vehicle_model'            => $vehicleModel,
+            'substitute_vehicle_color'            => $vehicleColor,
+            'substitute_vehicle_info'             => $vehicleInfo,
+            'vehicle_info'                        => $vehicleInfo,
+            // كائنات هيكلية مهيأة للمنصات والتطبيقات
+            'driver'                              => $driverData,
+            'substitute_driver'                   => $driverData,
+            'substitute_vehicle'                  => $driverData['vehicle'],
+            // معرّفات الربط والتوجيه المباشر
+            'trip_id'                             => (string) $substituteTripId,
+            'entity_id'                           => (string) $substituteTripId,
+            'original_trip_id'                    => (string) $originalTrip->id,
+            'substitute_trip_id'                  => (string) $substituteTripId,
+            'dispatch_id'                         => (string) $dispatch->id,
+            'message'                             => "توقفت الحافلة بسبب عطل طارئ، ويستلم الكابتن البديل ({$subDriverName}{$phoneText}) الرحلة الآن لاستكمال نقل الأبناء بسلام." . ($vehicleInfo ? " {$vehicleInfo}" : ''),
         ]);
     }
 
@@ -1233,8 +1343,8 @@ class EmergencyBreakdownService
      */
     protected function notifyAdminsBreakdown(Trip $trip, TripBreakdownDispatch $dispatch, int $strandedCount): void
     {
-        $admins = User::where('role_id', 1)
-            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin']))
+        $admins = User::whereIn('role_id', [1, 2])
+            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin', 'super_admin', 'operations_supervisor']))
             ->get();
 
         if ($admins->isNotEmpty()) {
@@ -1255,8 +1365,8 @@ class EmergencyBreakdownService
      */
     protected function notifyAdminsUnresolved(Trip $trip, TripBreakdownDispatch $dispatch, int $strandedCount): void
     {
-        $admins = User::where('role_id', 1)
-            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin']))
+        $admins = User::whereIn('role_id', [1, 2])
+            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin', 'super_admin', 'operations_supervisor']))
             ->get();
 
         if ($admins->isNotEmpty()) {
@@ -1277,8 +1387,8 @@ class EmergencyBreakdownService
      */
     protected function notifyAdminsSubstituteAccepted(Trip $trip, TripBreakdownDispatch $dispatch, Driver $substituteDriver): void
     {
-        $admins = User::where('role_id', 1)
-            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin']))
+        $admins = User::whereIn('role_id', [1, 2])
+            ->orWhereHas('role', fn($r) => $r->whereIn('name', ['Admin', 'SuperAdmin', 'admin', 'super_admin', 'operations_supervisor']))
             ->get();
 
         if ($admins->isNotEmpty()) {

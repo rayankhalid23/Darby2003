@@ -22,22 +22,43 @@ class ProfileUpdateRequest extends FormRequest
             || $user->role?->name === 'driver';
     }
 
+    private const AVATAR_ALIASES = [
+        'avatar_url',
+        'photo',
+        'driver_photo',
+        'personal_photo',
+        'image',
+        'profile_image',
+    ];
+
     public function validationData(): array
     {
         $data = parent::validationData();
 
-        if ($this->hasFile('avatar_url') && empty($data['avatar'])) {
-            $data['avatar'] = $this->file('avatar_url');
+        foreach (self::AVATAR_ALIASES as $alias) {
+            if ($this->hasFile($alias) && empty($data['avatar'])) {
+                $data['avatar'] = $this->file($alias);
+                break;
+            }
         }
-        if ($this->hasFile('photo') && empty($data['avatar'])) {
-            $data['avatar'] = $this->file('photo');
+
+        // تجاهل الحقول النصية الفارغة المرسلة ضمن multipart/form-data عند تحديث الصورة الشخصية فقط
+        foreach (['full_name', 'email', 'phone_number', 'gender', 'password'] as $optionalField) {
+            if (array_key_exists($optionalField, $data) && (is_null($data[$optionalField]) || trim((string) $data[$optionalField]) === '' || strtolower(trim((string) $data[$optionalField])) === 'null')) {
+                unset($data[$optionalField]);
+            }
+        }
+
+        if (!empty($data['gender']) && is_string($data['gender'])) {
+            $data['gender'] = trim(mb_strtolower($data['gender']));
         }
 
         if (!empty($data['phone_number']) && is_string($data['phone_number'])) {
             $data['phone_number'] = $this->sanitizeDigits($data['phone_number']);
         }
         if (!empty($data['alternative_phone']) && is_string($data['alternative_phone'])) {
-            $data['alternative_phone'] = $this->sanitizeDigits($data['alternative_phone']);
+            $sanitizedAlt = $this->sanitizeDigits($data['alternative_phone']);
+            $data['alternative_phone'] = $sanitizedAlt !== '' ? $sanitizedAlt : null;
         }
 
         return $data;
@@ -45,19 +66,32 @@ class ProfileUpdateRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->hasFile('avatar_url') && !$this->hasFile('avatar')) {
-            $this->files->set('avatar', $this->file('avatar_url'));
+        foreach (self::AVATAR_ALIASES as $alias) {
+            if ($this->files->has($alias) && !$this->files->has('avatar')) {
+                $this->files->set('avatar', $this->files->get($alias));
+                break;
+            }
         }
-        if ($this->hasFile('photo') && !$this->hasFile('avatar')) {
-            $this->files->set('avatar', $this->file('photo'));
+
+        foreach (['full_name', 'email', 'phone_number', 'gender', 'password'] as $optionalField) {
+            if ($this->request->has($optionalField)) {
+                $val = $this->request->get($optionalField);
+                if ($val === null || trim((string) $val) === '' || strtolower(trim((string) $val)) === 'null') {
+                    $this->request->remove($optionalField);
+                }
+            }
         }
 
         $merge = [];
+        if ($this->filled('gender') && is_string($this->input('gender'))) {
+            $merge['gender'] = trim(mb_strtolower($this->input('gender')));
+        }
         if ($this->filled('phone_number')) {
             $merge['phone_number'] = $this->sanitizeDigits((string) $this->input('phone_number'));
         }
         if ($this->filled('alternative_phone')) {
-            $merge['alternative_phone'] = $this->sanitizeDigits((string) $this->input('alternative_phone'));
+            $sanitizedAlt = $this->sanitizeDigits((string) $this->input('alternative_phone'));
+            $merge['alternative_phone'] = $sanitizedAlt !== '' ? $sanitizedAlt : null;
         }
 
         if (!empty($merge)) {
@@ -77,8 +111,9 @@ class ProfileUpdateRequest extends FormRequest
     public function rules(): array
     {
         $userId = auth()->id();
+        $data = $this->validationData();
 
-        return [
+        $rules = [
             'full_name' => [
                 'sometimes', 'string', 'min:10', 'max:100', 'regex:/^[\p{L} ]+/u',
                 function ($attribute, $value, $fail) {
@@ -105,8 +140,16 @@ class ProfileUpdateRequest extends FormRequest
                 'nullable', 'string', 'min:6', 'regex:/^(?=.*[a-zA-Z])(?=.*\d).+$/'
             ],
             'gender' => ['sometimes', 'in:male,female'],
-            'avatar' => ['sometimes', 'nullable', 'file', 'mimes:jpeg,png,jpg,webp,heic,heif', 'max:10240']
         ];
+
+        foreach (array_merge(['avatar'], self::AVATAR_ALIASES) as $field) {
+            $isFile = $this->hasFile($field) || (($data[$field] ?? null) instanceof \Illuminate\Http\UploadedFile);
+            $rules[$field] = $isFile
+                ? ['sometimes', 'nullable', 'file', 'mimes:jpeg,png,jpg,webp,heic,heif', 'max:10240']
+                : ['sometimes', 'nullable', 'string'];
+        }
+
+        return $rules;
     }
 
     public function messages(): array

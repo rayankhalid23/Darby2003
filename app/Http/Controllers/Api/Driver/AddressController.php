@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\Driver\StoreAddressRequest;
 use App\Http\Requests\Api\Driver\UpdateAddressRequest;
 use App\Http\Resources\Api\Driver\AddressResource;
-use App\Models\Driver\Address; // تأكد من مطابقة مسار موديل العنوان لديك
+use App\Models\Driver\Address;
 use App\Services\Driver\AddressService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
@@ -15,16 +15,20 @@ class AddressController extends Controller
 {
     protected AddressService $addressService;
 
-    // حقن الخدمة داخل الكنترولر هندسياً
     public function __construct(AddressService $addressService)
     {
         $this->addressService = $addressService;
     }
 
+    private function getUserId(): int
+    {
+        return auth('sanctum')->id() ?? auth()->id() ?? 1;
+    }
+
     public function index(): JsonResponse
     {
-        $driverId = auth()->id() ?? 1; 
-        $addresses = $this->addressService->getDriverAddresses($driverId);
+        $userId = $this->getUserId(); 
+        $addresses = $this->addressService->getDriverAddresses($userId);
 
         return response()->json([
             'success' => true,
@@ -35,8 +39,8 @@ class AddressController extends Controller
 
     public function store(StoreAddressRequest $request): JsonResponse
     {
-        $driverId = auth()->id() ?? 1; 
-        $address = $this->addressService->createAddress($driverId, $request->validated());
+        $userId = $this->getUserId(); 
+        $address = $this->addressService->createAddress($userId, $request->validated());
 
         return response()->json([
             'success' => true,
@@ -47,8 +51,8 @@ class AddressController extends Controller
 
     public function update(UpdateAddressRequest $request, Address $address): JsonResponse
     {
-        $driverId = auth()->id() ?? 1; 
-        $updatedAddress = $this->addressService->updateAddress($address, $driverId, $request->validated());
+        $userId = $this->getUserId(); 
+        $updatedAddress = $this->addressService->updateAddress($address, $userId, $request->validated());
 
         return response()->json([
             'success' => true,

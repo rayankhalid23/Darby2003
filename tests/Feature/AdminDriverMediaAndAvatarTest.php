@@ -186,6 +186,22 @@ class AdminDriverMediaAndAvatarTest extends TestCase
         // التأكد من وجود الملف على القرص
         $storedPath = str_replace('storage/', '', $this->driverUser->avatar_url);
         Storage::disk('public')->assertExists($storedPath);
+
+        // اختبار الرفع باسم الحقل البديل avatar_url كملف مرفوع أو photo
+        foreach (['avatar_url', 'photo'] as $alias) {
+            $aliasFile = UploadedFile::fake()->image("admin_{$alias}.jpg");
+            $aliasRes = $this->actingAs($this->adminUser)
+                ->postJson("/api/admin/drivers/{$this->driver->id}", [
+                    $alias => $aliasFile,
+                ]);
+            $aliasRes->assertStatus(200);
+            $aliasRes->assertJsonPath('success', true);
+
+            $this->driverUser->refresh();
+            $this->assertNotNull($this->driverUser->avatar_url);
+            $aliasStoredPath = str_replace('storage/', '', $this->driverUser->avatar_url);
+            Storage::disk('public')->assertExists($aliasStoredPath);
+        }
     }
 
     /**
@@ -217,7 +233,7 @@ class AdminDriverMediaAndAvatarTest extends TestCase
         $docInspection = UploadedFile::fake()->image('inspection.jpg');
 
         $payload = [
-            'national_id'                 => '123456789012',
+            'national_id'                 => (string) rand(100000000000, 999999999999),
             'license_number'              => 'LIC' . rand(100000, 999999),
             'license_expiry'              => now()->addYears(2)->format('Y-m-d'),
             'insurance_expiry'            => now()->addYears(1)->format('Y-m-d'),

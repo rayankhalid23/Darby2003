@@ -32,7 +32,7 @@ class CompleteProfileRequest extends FormRequest
         if ($this->hasFile('insurance_photo') && empty($data['doc_insurance'])) {
             $data['doc_insurance'] = $this->file('insurance_photo');
         }
-        foreach (['avatar_url', 'photo', 'driver_photo', 'personal_photo'] as $alias) {
+        foreach (['avatar_url', 'photo', 'driver_photo', 'personal_photo', 'image', 'profile_image'] as $alias) {
             if ($this->hasFile($alias) && empty($data['avatar'])) {
                 $data['avatar'] = $this->file($alias);
             }
@@ -65,21 +65,21 @@ class CompleteProfileRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        if ($this->hasFile('vehicle_photo') && !$this->hasFile('vehicle_image')) {
-            $this->files->set('vehicle_image', $this->file('vehicle_photo'));
+        if ($this->files->has('vehicle_photo') && !$this->files->has('vehicle_image')) {
+            $this->files->set('vehicle_image', $this->files->get('vehicle_photo'));
         }
-        if ($this->hasFile('license_photo') && !$this->hasFile('doc_license')) {
-            $this->files->set('doc_license', $this->file('license_photo'));
+        if ($this->files->has('license_photo') && !$this->files->has('doc_license')) {
+            $this->files->set('doc_license', $this->files->get('license_photo'));
         }
-        if ($this->hasFile('logbook_photo') && !$this->hasFile('doc_logbook')) {
-            $this->files->set('doc_logbook', $this->file('logbook_photo'));
+        if ($this->files->has('logbook_photo') && !$this->files->has('doc_logbook')) {
+            $this->files->set('doc_logbook', $this->files->get('logbook_photo'));
         }
-        if ($this->hasFile('insurance_photo') && !$this->hasFile('doc_insurance')) {
-            $this->files->set('doc_insurance', $this->file('insurance_photo'));
+        if ($this->files->has('insurance_photo') && !$this->files->has('doc_insurance')) {
+            $this->files->set('doc_insurance', $this->files->get('insurance_photo'));
         }
-        foreach (['avatar_url', 'photo', 'driver_photo', 'personal_photo'] as $alias) {
-            if ($this->hasFile($alias) && !$this->hasFile('avatar')) {
-                $this->files->set('avatar', $this->file($alias));
+        foreach (['avatar_url', 'photo', 'driver_photo', 'personal_photo', 'image', 'profile_image'] as $alias) {
+            if ($this->files->has($alias) && !$this->files->has('avatar')) {
+                $this->files->set('avatar', $this->files->get($alias));
             }
         }
 

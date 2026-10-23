@@ -40,6 +40,15 @@ class AdminDriverService
     {
         // القيم الصحيحة للـ enum في قاعدة البيانات
         $validStatuses = ['Pending', 'Approved', 'Suspended', 'Rejected', 'Offline', 'ON_TRIP'];
+        $statusMap = [
+            'pending'   => 'Pending',
+            'approved'  => 'Approved',
+            'suspended' => 'Suspended',
+            'rejected'  => 'Rejected',
+            'offline'   => 'Offline',
+            'on_trip'   => 'ON_TRIP',
+            'ontrip'    => 'ON_TRIP',
+        ];
 
         // 1. بدء الاستعلام مع كسر حجب جدول المستخدمين (Users) المرتبطين بالسائقين
         $query = Driver::with(['user' => function($q) {
@@ -47,8 +56,12 @@ class AdminDriverService
         }]);
 
         // 2. ✅ فلترة الحالة: إذا أرسل الأدمن status يُطبَّق، وإلا يُجلب جميع السائقين
-        if (!empty($filters['status']) && in_array($filters['status'], $validStatuses, true)) {
-            $query->where('status', $filters['status']);
+        if (!empty($filters['status'])) {
+            $rawStatus = strtolower(trim((string) $filters['status']));
+            $targetStatus = $statusMap[$rawStatus] ?? $filters['status'];
+            if (in_array($targetStatus, $validStatuses, true)) {
+                $query->where('status', $targetStatus);
+            }
         }
         // ملاحظة: لا يوجد where افتراضي — الأدمن يرى الكل بدون فلتر
 

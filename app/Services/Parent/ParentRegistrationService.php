@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Exception;
 
@@ -167,10 +168,16 @@ class ParentRegistrationService
                 // 1. جلب بيانات المستخدم
                 $user = User::findOrFail($userId); // نطاق المسار محمي لولي الأمر بالفعل (لا نعتمد على role_id الثابت)
                 if (!empty($data['avatar_url'])) {
-    if (!empty($user->avatar_url) && file_exists(public_path($user->avatar_url))) {
-        @unlink(public_path($user->avatar_url));
-    }
-}
+                    if (!empty($user->avatar_url)) {
+                        $storagePath = str_replace('storage/', '', $user->avatar_url);
+                        if (Storage::disk('public')->exists($storagePath)) {
+                            Storage::disk('public')->delete($storagePath);
+                        }
+                        if (file_exists(public_path($user->avatar_url))) {
+                            @unlink(public_path($user->avatar_url));
+                        }
+                    }
+                }
 
                 // 2. تحديث البيانات الأساسية (باستثناء البريد وكلمة المرور وحالة الموثوقية)
                 $updateData = collect($data)->except(['email', 'password', 'is_trusted'])->toArray();
