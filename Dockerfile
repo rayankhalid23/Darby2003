@@ -14,7 +14,7 @@ RUN install-php-extensions \
     bcmath \
     opcache
 
-RUN a2enmod rewrite
+RUN a2enmod rewrite headers
 
 ENV APACHE_DOCUMENT_ROOT /var/www/html/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf

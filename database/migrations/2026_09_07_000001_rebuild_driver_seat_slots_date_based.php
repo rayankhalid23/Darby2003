@@ -2,20 +2,35 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('driver_seat_slots', function (Blueprint $table) {
-            // أولاً: أسقط الفهارس القديمة والـ unique constraint
-            $table->dropIndex('idx_driver_slot_seats');
-            $table->dropUnique('uq_driver_slot');
+        if (Schema::hasColumn('driver_seat_slots', 'date') && Schema::hasColumn('driver_seat_slots', 'booked')) {
+            return;
+        }
 
-            // أضف عمود التاريخ
-            $table->date('date')->after('slot')->nullable();
-        });
+        try {
+            Schema::table('driver_seat_slots', function (Blueprint $table) {
+                $table->dropIndex('idx_driver_slot_seats');
+            });
+        } catch (\Throwable $e) {}
+
+        try {
+            Schema::table('driver_seat_slots', function (Blueprint $table) {
+                $table->dropUnique('uq_driver_slot');
+            });
+        } catch (\Throwable $e) {}
+
+        if (!Schema::hasColumn('driver_seat_slots', 'date')) {
+            Schema::table('driver_seat_slots', function (Blueprint $table) {
+                // أضف عمود التاريخ
+                $table->date('date')->after('slot')->nullable();
+            });
+        }
 
         // احذف كل الصفوف القديمة (reserved_seats نموذج لا يتوافق مع الجديد)
         DB::table('driver_seat_slots')->truncate();
@@ -25,10 +40,21 @@ return new class extends Migration
             $table->date('date')->nullable(false)->change();
 
             // احذف الأعمدة القديمة
-            $table->dropColumn(['total_seats', 'reserved_seats']);
+            $columnsToDrop = [];
+            if (Schema::hasColumn('driver_seat_slots', 'total_seats')) {
+                $columnsToDrop[] = 'total_seats';
+            }
+            if (Schema::hasColumn('driver_seat_slots', 'reserved_seats')) {
+                $columnsToDrop[] = 'reserved_seats';
+            }
+            if (!empty($columnsToDrop)) {
+                $table->dropColumn($columnsToDrop);
+            }
 
             // أضف عمود booked
-            $table->unsignedTinyInteger('booked')->default(0)->comment('مقاعد محجوزة في هذا اليوم لهذا الـ slot');
+            if (!Schema::hasColumn('driver_seat_slots', 'booked')) {
+                $table->unsignedTinyInteger('booked')->default(0)->comment('مقاعد محجوزة في هذا اليوم لهذا الـ slot');
+            }
 
             // unique جديد
             $table->unique(['driver_id', 'slot', 'date'], 'uq_driver_slot_date');

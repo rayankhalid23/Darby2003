@@ -10,6 +10,17 @@ if [ ! -f /var/www/html/storage/oauth-private.key ] && [ -z "$APP_KEY" ]; then
     echo "تحذير: APP_KEY غير مضبوط في متغيرات البيئة."
 fi
 
+# ضمان وجود المجلدات قبل أوامر الكاش والترحيل
+mkdir -p /var/www/html/storage/logs \
+         /var/www/html/storage/framework/cache/data \
+         /var/www/html/storage/framework/sessions \
+         /var/www/html/storage/framework/views \
+         /var/www/html/storage/app/public/parents/avatars \
+         /var/www/html/storage/app/public/drivers/avatars \
+         /var/www/html/storage/app/public/payment_methods/icons \
+         /var/www/html/bootstrap/cache
+touch /var/www/html/storage/logs/laravel.log || true
+
 php artisan config:clear >/dev/null 2>&1 || true
 php artisan route:clear >/dev/null 2>&1 || true
 
@@ -20,21 +31,12 @@ fi
 php artisan storage:link 2>/dev/null || true
 
 if [ "$APP_ENV" = "production" ]; then
-    php artisan config:cache
-    php artisan route:cache
-    php artisan view:cache
+    php artisan config:cache || true
+    php artisan route:cache || php artisan route:clear || true
+    php artisan view:cache || true
 fi
 
-# ضمان صلاحيات المجلدات لـ www-data في كل تشغيل للحاوية
-mkdir -p /var/www/html/storage/logs \
-         /var/www/html/storage/framework/cache/data \
-         /var/www/html/storage/framework/sessions \
-         /var/www/html/storage/framework/views \
-         /var/www/html/storage/app/public/parents/avatars \
-         /var/www/html/storage/app/public/drivers/avatars \
-         /var/www/html/storage/app/public/payment_methods/icons \
-         /var/www/html/bootstrap/cache
-touch /var/www/html/storage/logs/laravel.log || true
+# ضمان صلاحيات المجلدات لـ www-data بعد توليد ملفات الكاش والسجلات
 chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 

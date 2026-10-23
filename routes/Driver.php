@@ -127,7 +127,7 @@ Route::middleware('auth:sanctum')->group(function () {
     
     // تحديث البيانات الشخصية والمظهر
     Route::match(['post', 'put'], 'preferences', [DriverPreferenceController::class, 'update'])
-    ->name('api.driver.preferences.update');
+    ->name('api.driver.preferences.save');
     Route::match(['post', 'put', 'patch'], 'profile', [ProfileController::class, 'update']);
     Route::match(['post', 'put', 'patch'], 'profile/update', [ProfileController::class, 'update']);
     Route::match(['post', 'put', 'patch'], 'profile/avatar', [ProfileController::class, 'update']);

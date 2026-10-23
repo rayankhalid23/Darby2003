@@ -28,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             Route::middleware('api')
                 ->prefix('api/v1/parent')
+                ->name('v1.')
                 ->group(base_path('routes/Parent.php'));
 
             // 2. تسجيل مسارات السائقين (Drivers Module)
@@ -37,6 +38,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             Route::middleware('api')
                 ->prefix('api/driver')
+                ->name('legacy.')
                 ->group(base_path('routes/Driver.php'));
                 
 
@@ -47,6 +49,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
             Route::middleware('api')
                 ->prefix('api/v1/admin')
+                ->name('v1.')
                 ->group(base_path('routes/Admin.php'));    
             
             // 4. تسجيل مسارات طلبات الاشتراكات الموحدة (Requests Module)

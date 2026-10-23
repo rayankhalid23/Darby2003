@@ -32,9 +32,15 @@ return new class extends Migration
 
         // 2. إضافة عمود timing إلى جدول request_children (أو الجدول المسمى لديك)
         // ملاحظة: تأكد من اسم الجدول في قاعدة البيانات إذا كان request_children أو غيره
-        Schema::table('request_children', function (Blueprint $table) {
-            $table->string('timing', 50)->nullable()->after('trip_direction');
-        });
+        if (!Schema::hasColumn('request_children', 'timing')) {
+            Schema::table('request_children', function (Blueprint $table) {
+                if (Schema::hasColumn('request_children', 'trip_direction')) {
+                    $table->string('timing', 50)->nullable()->after('trip_direction');
+                } else {
+                    $table->string('timing', 50)->nullable();
+                }
+            });
+        }
     }
 
     /**
